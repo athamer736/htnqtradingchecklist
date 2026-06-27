@@ -1,0 +1,32 @@
+appId: com.htnq.tradingchecklist
+productName: HTNQ Trading Checklist
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc,.prettierrc,tsconfig.json,tsconfig.*.json}'
+  - '!{tailwind.config.js,postcss.config.js}'
+asarUnpack:
+  - resources/**
+  - '**/node_modules/better-sqlite3/**'
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: HTNQ Trading Checklist
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
