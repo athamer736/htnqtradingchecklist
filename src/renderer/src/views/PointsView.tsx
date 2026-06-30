@@ -11,6 +11,7 @@ import {
   type ConfluenceType,
   type PointEntry
 } from '../strategy/points'
+import { uid } from '../util/id'
 
 type SideId = 'highs' | 'lows'
 
@@ -199,7 +200,7 @@ export default function PointsView(): JSX.Element {
         ? list.map((e) => (e.id === existing.id ? { ...e, qty: e.qty + 1 } : e))
         : [
             ...list,
-            { id: crypto.randomUUID(), type, timeframe: tf, qty: 1, stopped: false }
+            { id: uid(), type, timeframe: tf, qty: 1, stopped: false }
           ]
       return { ...b, [side]: next }
     })
@@ -293,7 +294,7 @@ export default function PointsView(): JSX.Element {
         </div>
 
         {/* Columns */}
-        <div className="flex min-h-[320px] flex-1 gap-4">
+        <div className="flex min-h-[320px] flex-1 flex-col gap-4 md:flex-row">
           <SideColumn
             side="highs"
             entries={board.highs}

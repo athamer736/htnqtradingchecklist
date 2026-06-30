@@ -1,0 +1,202 @@
+import { useState } from 'react'
+import type {
+  DataColumn,
+  DataEntry,
+  DataImage,
+  DataTag,
+  DataValue
+} from '../../../../shared/dataCollection'
+import TagPicker from './TagPicker'
+import ImageUploader from './ImageUploader'
+
+interface EntryEditorProps {
+  entry: DataEntry
+  columns: DataColumn[]
+  tags: DataTag[]
+  isNew: boolean
+  onSave: (entry: DataEntry) => void
+  onDelete: (id: string) => void
+  onClose: () => void
+  onCreateTag: (columnId: string, label: string, color: string) => Promise<string>
+}
+
+export default function EntryEditor({
+  entry,
+  columns,
+  tags,
+  isNew,
+  onSave,
+  onDelete,
+  onClose,
+  onCreateTag
+}: EntryEditorProps): JSX.Element {
+  const [draft, setDraft] = useState<DataEntry>({
+    ...entry,
+    columnImages: entry.columnImages ?? {}
+  })
+  const [shotsOpen, setShotsOpen] = useState<Record<string, boolean>>({})
+
+  const setValue = (columnId: string, value: DataValue): void => {
+    setDraft((d) => ({ ...d, values: { ...d.values, [columnId]: value } }))
+  }
+  const setImages = (images: DataImage[]): void => setDraft((d) => ({ ...d, images }))
+  const setComments = (comments: string): void => setDraft((d) => ({ ...d, comments }))
+  const colImages = (columnId: string): DataImage[] => draft.columnImages[columnId] ?? []
+  const setColImages = (columnId: string, images: DataImage[]): void => {
+    setDraft((d) => ({ ...d, columnImages: { ...d.columnImages, [columnId]: images } }))
+  }
+
+  const save = (): void => {
+    onSave({ ...draft, updatedAt: new Date().toISOString() })
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end">
+      <div className="absolute inset-0 animate-fadeIn bg-black/50" onClick={onClose} />
+      <div className="relative z-10 flex h-full w-full max-w-xl animate-slideInRight flex-col border-l border-line bg-bg-card">
+        <header className="flex items-center justify-between border-b border-line px-5 py-4">
+          <h2 className="text-sm font-semibold text-slate-100">
+            {isNew ? 'New entry' : 'Edit entry'}
+          </h2>
+          <button onClick={onClose} className="text-muted hover:text-slate-200" aria-label="Close">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+            </svg>
+          </button>
+        </header>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+          {columns.map((col) => {
+            const count = colImages(col.id).length
+            const open = !!shotsOpen[col.id]
+            const inlineShots = col.type === 'images' || col.type === 'textimages'
+            return (
+              <div key={col.id}>
+                <div className="flex items-center justify-between">
+                  <label className="label mb-0">{col.name}</label>
+                  {!inlineShots && (
+                    <button
+                      type="button"
+                      onClick={() => setShotsOpen((s) => ({ ...s, [col.id]: !s[col.id] }))}
+                      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] transition ${
+                        open || count > 0
+                          ? 'text-accent'
+                          : 'text-muted hover:text-slate-200'
+                      }`}
+                      title="Attach screenshots"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6">
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <circle cx="8.5" cy="10" r="1.5" />
+                        <path d="M21 17l-5-5L5 19" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {count > 0 ? count : 'Add'}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-1.5">
+                  {(col.type === 'text' || col.type === 'textimages') && (
+                    <input
+                      className="field"
+                      value={(draft.values[col.id] as string) ?? ''}
+                      onChange={(e) => setValue(col.id, e.target.value)}
+                    />
+                  )}
+                  {col.type === 'date' && (
+                    <input
+                      type="date"
+                      className="field"
+                      value={(draft.values[col.id] as string) ?? ''}
+                      onChange={(e) => setValue(col.id, e.target.value)}
+                    />
+                  )}
+                  {col.type === 'checkbox' && (
+                    <button
+                      type="button"
+                      onClick={() => setValue(col.id, !(draft.values[col.id] as boolean))}
+                      className={`flex h-6 w-11 items-center rounded-full border border-line p-0.5 transition ${
+                        draft.values[col.id] ? 'bg-accent' : 'bg-bg-soft'
+                      }`}
+                    >
+                      <span
+                        className={`h-4 w-4 rounded-full bg-white transition ${
+                          draft.values[col.id] ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  )}
+                  {(col.type === 'select' || col.type === 'multiselect') && (
+                    <TagPicker
+                      columnId={col.id}
+                      tags={tags}
+                      multiple={col.type === 'multiselect'}
+                      value={
+                        col.type === 'multiselect'
+                          ? ((draft.values[col.id] as string[]) ?? [])
+                          : ((draft.values[col.id] as string) ?? null)
+                      }
+                      onChange={(v) => setValue(col.id, v)}
+                      onCreateTag={onCreateTag}
+                    />
+                  )}
+                  {inlineShots && (
+                    <div className={col.type === 'textimages' ? 'mt-2' : ''}>
+                      <ImageUploader
+                        images={colImages(col.id)}
+                        onChange={(imgs) => setColImages(col.id, imgs)}
+                      />
+                    </div>
+                  )}
+                  {!inlineShots && open && (
+                    <div className="mt-2">
+                      <ImageUploader
+                        images={colImages(col.id)}
+                        onChange={(imgs) => setColImages(col.id, imgs)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          <div>
+            <label className="label">Additional screenshots</label>
+            <ImageUploader images={draft.images} onChange={setImages} />
+          </div>
+
+          <div>
+            <label className="label">Comments</label>
+            <textarea
+              className="field min-h-[120px] resize-y"
+              value={draft.comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder="Notes, observations, anything worth remembering..."
+            />
+          </div>
+        </div>
+
+        <footer className="flex items-center justify-between gap-2 border-t border-line px-5 py-4">
+          {!isNew ? (
+            <button
+              className="btn border border-line bg-bg-soft text-rose-400 hover:bg-bg-hover"
+              onClick={() => onDelete(draft.id)}
+            >
+              Delete
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button className="btn-primary" onClick={save}>
+              Save entry
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  )
+}

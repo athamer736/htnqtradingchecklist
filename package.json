@@ -1,6 +1,6 @@
 {
   "name": "htnq-trading-checklist",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "ICT + Quarterly Theory confluence and trade-logging tool",
   "main": "./out/main/index.js",
   "author": "HTNQ",
@@ -11,10 +11,13 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json --composite false",
     "dist": "electron-vite build && electron-builder",
-    "dist:portable": "electron-vite build && electron-builder --win portable"
+    "dist:portable": "electron-vite build && electron-builder --win portable",
+    "release": "electron-vite build && electron-builder --publish always",
+    "build:web": "vite build --config vite.web.config.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0"
+    "better-sqlite3": "^12.10.0",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -34,6 +37,7 @@
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.3.3",
     "zustand": "^5.0.1"
   }
 }

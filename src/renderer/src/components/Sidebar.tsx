@@ -1,4 +1,9 @@
-export type ViewId = 'start' | 'points' | 'reference' | 'journal'
+import { useTrades } from '../store/useTrades'
+import { useDataCollection } from '../store/useDataCollection'
+import { useConfirm } from './ConfirmProvider'
+import logo from '../assets/htnq-logo.png'
+
+export type ViewId = 'start' | 'points' | 'reference' | 'journal' | 'data'
 
 interface NavItem {
   id: ViewId
@@ -20,7 +25,7 @@ const items: NavItem[] = [
   },
   {
     id: 'points',
-    label: 'Points',
+    label: 'Points Theory',
     hint: 'Bias calculator',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
@@ -32,7 +37,7 @@ const items: NavItem[] = [
   {
     id: 'reference',
     label: 'Reference',
-    hint: 'Confluence tables',
+    hint: 'Confluence Tables',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
         <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -42,12 +47,24 @@ const items: NavItem[] = [
   },
   {
     id: 'journal',
-    label: 'Journal',
-    hint: 'Log & stats',
+    label: 'Trade Journal',
+    hint: 'Log & Stats',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
         <path d="M5 4h11l3 3v13H5z" strokeLinejoin="round" />
         <path d="M8 9h8M8 13h8M8 17h5" strokeLinecap="round" />
+      </svg>
+    )
+  },
+  {
+    id: 'data',
+    label: 'Data Collection',
+    hint: 'Research Center',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
+        <ellipse cx="12" cy="6" rx="7" ry="3" />
+        <path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6" strokeLinecap="round" />
+        <path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6" strokeLinecap="round" />
       </svg>
     )
   }
@@ -55,22 +72,67 @@ const items: NavItem[] = [
 
 export default function Sidebar({
   active,
-  onChange
+  onChange,
+  open,
+  onClose
 }: {
   active: ViewId
   onChange: (v: ViewId) => void
+  open: boolean
+  onClose: () => void
 }): JSX.Element {
+  const clearTrades = useTrades((s) => s.clear)
+  const resetData = useDataCollection((s) => s.reset)
+  const confirm = useConfirm()
+
+  const handleReset = async (): Promise<void> => {
+    const ok = await confirm({
+      title: 'Delete ALL data?',
+      message:
+        'This permanently removes every trade journal entry and all data collection entries (columns reset to defaults). This cannot be undone.',
+      confirmLabel: 'Delete everything',
+      danger: true
+    })
+    if (!ok) return
+    await Promise.all([clearTrades(), resetData()])
+  }
+
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-bg-soft">
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent font-bold text-white">
-          H
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+          onClick={onClose}
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-line bg-bg-soft transition-all duration-200 ease-out md:static ${
+          open
+            ? 'translate-x-0 md:ml-0'
+            : '-translate-x-full md:translate-x-0 md:-ml-60'
+        }`}
+      >
+        <div className="flex items-center gap-3 px-5 py-5">
+          <img
+            src={logo}
+            alt="HTNQ"
+            className="h-9 w-9 rounded-lg bg-white object-contain p-0.5"
+          />
+          <div className="leading-tight">
+            <div className="text-sm font-semibold text-slate-100">HTNQ</div>
+            <div className="text-xs text-muted">Trading Checklist</div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Hide sidebar"
+            title="Hide sidebar"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-bg-hover hover:text-slate-200"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M14 7l-5 5 5 5M19 7l-5 5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
-        <div className="leading-tight">
-          <div className="text-sm font-semibold text-slate-100">HTNQ</div>
-          <div className="text-xs text-muted">Trading Checklist</div>
-        </div>
-      </div>
 
       <nav className="mt-2 flex flex-col gap-1 px-3">
         {items.map((item) => {
@@ -109,7 +171,17 @@ export default function Sidebar({
           </svg>
           Discord
         </button>
+        <button
+          onClick={handleReset}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-card px-2.5 py-1.5 text-[11px] font-medium text-rose-300/90 transition-colors hover:bg-bg-hover hover:text-rose-300"
+        >
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M5 7h14M9 7V5h6v2M7 7l1 12h8l1-12" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Reset all data
+        </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

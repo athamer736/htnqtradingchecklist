@@ -1,5 +1,9 @@
 appId: com.htnq.tradingchecklist
 productName: HTNQ Trading Checklist
+publish:
+  provider: github
+  owner: athamer736
+  repo: htnqtradingchecklist
 directories:
   buildResources: build
   output: dist
@@ -13,6 +17,7 @@ asarUnpack:
   - resources/**
   - '**/node_modules/better-sqlite3/**'
 win:
+  icon: build/icon.png
   target:
     - target: nsis
       arch:

@@ -7,6 +7,7 @@ interface TradesState {
   load: () => Promise<void>
   save: (trade: TradeRecord) => Promise<void>
   remove: (id: string) => Promise<void>
+  clear: () => Promise<void>
 }
 
 export const useTrades = create<TradesState>((set) => ({
@@ -22,6 +23,10 @@ export const useTrades = create<TradesState>((set) => ({
   },
   remove: async (id) => {
     const trades = await window.htnq.trades.delete(id)
+    set({ trades })
+  },
+  clear: async () => {
+    const trades = await window.htnq.trades.clear()
     set({ trades })
   }
 }))

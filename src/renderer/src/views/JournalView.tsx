@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useTrades } from '../store/useTrades'
 import { STARTING_TIMEFRAMES, TIMEFRAME_ORDER } from '../strategy/strategy'
 import { verdict } from '../strategy/points'
+import { uid } from '../util/id'
 import type { TradeRecord } from '../types'
 
 const RESULTS: TradeRecord['result'][] = ['win', 'loss', 'be']
@@ -36,7 +37,7 @@ const CME_CONTRACTS = [
 
 function emptyTrade(): TradeRecord {
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     createdAt: new Date().toISOString(),
     startSetup: 'Weekly FVG',
     entryTimeframe: 'M1',
@@ -264,7 +265,7 @@ export default function JournalView(): JSX.Element {
           </button>
         </header>
 
-        <div className="mb-5 flex gap-3">
+        <div className="mb-5 flex flex-wrap gap-3">
           <Stat label="Trades" value={String(stats.count)} />
           <Stat label="Win rate" value={`${stats.winRate}%`} sub="excludes break-even" />
           <Stat label="Avg R" value={stats.avgR.toFixed(2)} />
@@ -372,7 +373,7 @@ export default function JournalView(): JSX.Element {
 
       {draft && (
         <div
-          className={`flex w-[380px] shrink-0 flex-col overflow-y-auto border-l border-line bg-bg-soft p-5 ${
+          className={`fixed inset-y-0 right-0 z-30 flex w-full flex-col overflow-y-auto border-l border-line bg-bg-soft p-5 md:static md:z-auto md:w-[380px] md:shrink-0 ${
             closing ? 'animate-slideOutRight' : 'animate-slideInRight'
           }`}
         >

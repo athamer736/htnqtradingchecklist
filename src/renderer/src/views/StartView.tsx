@@ -30,7 +30,7 @@ function GuidedPanel({
   const entries = collectEntries(root)
 
   return (
-    <div className="flex h-full w-[340px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-line bg-bg-soft p-5">
+    <div className="flex w-full shrink-0 flex-col gap-4 overflow-y-auto border-t border-line bg-bg-soft p-5 md:h-full md:w-[340px] md:border-l md:border-t-0">
       <div key={focused.id} className="flex flex-col gap-4 animate-fadeIn">
       <div>
         <div className="text-xs uppercase tracking-wide text-muted">Focused</div>
@@ -155,8 +155,8 @@ export default function StartView(): JSX.Element {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div key={startTf} className="min-w-0 flex-1 animate-fadeIn">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+        <div key={startTf} className="min-h-[320px] min-w-0 flex-1 animate-fadeIn md:min-h-0">
           <TreeGraph root={tree} focusedId={focused.id} onNodeClick={setFocusedId} />
         </div>
         <GuidedPanel root={tree} focused={focused} onFocus={setFocusedId} />

@@ -4,7 +4,26 @@ const api = {
   trades: {
     list: () => ipcRenderer.invoke('trades:list'),
     save: (trade: unknown) => ipcRenderer.invoke('trades:save', trade),
-    delete: (id: string) => ipcRenderer.invoke('trades:delete', id)
+    delete: (id: string) => ipcRenderer.invoke('trades:delete', id),
+    clear: () => ipcRenderer.invoke('trades:clear')
+  },
+  data: {
+    list: () => ipcRenderer.invoke('data:list'),
+    saveSection: (s: unknown) => ipcRenderer.invoke('data:saveSection', s),
+    saveColumn: (c: unknown) => ipcRenderer.invoke('data:saveColumn', c),
+    reorderColumns: (ids: string[]) => ipcRenderer.invoke('data:reorderColumns', ids),
+    saveTag: (t: unknown) => ipcRenderer.invoke('data:saveTag', t),
+    saveEntry: (e: unknown) => ipcRenderer.invoke('data:saveEntry', e),
+    deleteSection: (id: string) => ipcRenderer.invoke('data:deleteSection', id),
+    deleteColumn: (id: string) => ipcRenderer.invoke('data:deleteColumn', id),
+    deleteTag: (id: string) => ipcRenderer.invoke('data:deleteTag', id),
+    deleteEntry: (id: string) => ipcRenderer.invoke('data:deleteEntry', id),
+    reset: () => ipcRenderer.invoke('data:reset'),
+    importData: (payload: unknown, mode: string) =>
+      ipcRenderer.invoke('data:importData', payload, mode),
+    exportFile: (json: string, defaultName: string) =>
+      ipcRenderer.invoke('data:exportFile', json, defaultName),
+    importFile: () => ipcRenderer.invoke('data:importFile')
   },
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
 }
