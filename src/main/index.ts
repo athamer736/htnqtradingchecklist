@@ -42,7 +42,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0b0d12',
-    title: 'HTNQ Trading Checklist',
+    title: `HTNQ Trading Checklist Verion ${app.getVersion()} Beta`,
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -54,6 +54,9 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
+
+  // Keep our versioned title instead of the renderer's document <title>.
+  mainWindow.on('page-title-updated', (e) => e.preventDefault())
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
