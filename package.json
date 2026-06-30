@@ -1,6 +1,6 @@
 {
   "name": "htnq-trading-checklist",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "ICT + Quarterly Theory confluence and trade-logging tool",
   "main": "./out/main/index.js",
   "author": "HTNQ",
