@@ -1,6 +1,6 @@
 {
   "name": "htnq-trading-checklist",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "ICT + Quarterly Theory confluence and trade-logging tool",
   "main": "./out/main/index.js",
   "author": "HTNQ",
@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
