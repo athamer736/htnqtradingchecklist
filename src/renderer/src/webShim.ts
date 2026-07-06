@@ -13,7 +13,6 @@ import {
   DC_SCHEMA_VERSION,
   DEFAULT_SECTIONS,
   buildDefaults,
-  isDataExport,
   prepareImport,
   type DataColumn,
   type DataEntry,
@@ -193,9 +192,9 @@ async function snapshot(db: IDBDatabase): Promise<DataSnapshot> {
   }
 }
 
-// Triggers a browser download of the given JSON text.
-function downloadJson(json: string, name: string): void {
-  const blob = new Blob([json], { type: 'application/json' })
+// Triggers a browser download of the given bytes.
+function downloadBytes(bytes: Uint8Array, name: string): void {
+  const blob = new Blob([bytes as unknown as BlobPart], { type: 'application/zip' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -207,15 +206,16 @@ function downloadJson(json: string, name: string): void {
 }
 
 type ImportFileResult =
-  | { ok: true; payload: DataExport }
+  | { ok: true; bytes: ArrayBuffer }
   | { ok: false; reason: 'cancel' | 'invalid' }
 
-// Opens a file picker and resolves with the parsed/validated export.
-function pickJsonFile(): Promise<ImportFileResult> {
+// Opens a file picker and resolves with the chosen file's raw bytes. Parsing and
+// validation happen in the renderer (dcZip.unpackImport).
+function pickImportFile(): Promise<ImportFileResult> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'application/json,.json'
+    input.accept = '.zip,.json,application/zip,application/json'
     let settled = false
     const done = (value: ImportFileResult): void => {
       if (settled) return
@@ -226,16 +226,9 @@ function pickJsonFile(): Promise<ImportFileResult> {
       const file = input.files?.[0]
       if (!file) return done({ ok: false, reason: 'cancel' })
       const reader = new FileReader()
-      reader.onload = () => {
-        try {
-          const parsed = JSON.parse(String(reader.result))
-          done(isDataExport(parsed) ? { ok: true, payload: parsed } : { ok: false, reason: 'invalid' })
-        } catch {
-          done({ ok: false, reason: 'invalid' })
-        }
-      }
+      reader.onload = () => done({ ok: true, bytes: reader.result as ArrayBuffer })
       reader.onerror = () => done({ ok: false, reason: 'invalid' })
-      reader.readAsText(file)
+      reader.readAsArrayBuffer(file)
     }
     // Fallback for browsers that don't fire change on cancel.
     input.oncancel = () => done({ ok: false, reason: 'cancel' })
@@ -331,11 +324,11 @@ if (!window.htnq) {
         await seedDefaults(db)
         return snapshot(db)
       },
-      exportFile: async (json: string, defaultName: string) => {
-        downloadJson(json, defaultName)
+      exportFile: async (bytes: Uint8Array, defaultName: string) => {
+        downloadBytes(bytes, defaultName)
         return { saved: true }
       },
-      importFile: async () => pickJsonFile(),
+      importFile: async () => pickImportFile(),
       importData: async (payload: DataExport, mode: ImportMode) => {
         const db = await getDb()
         const existing = await snapshot(db)

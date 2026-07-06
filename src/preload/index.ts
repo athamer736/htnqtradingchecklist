@@ -21,8 +21,8 @@ const api = {
     reset: () => ipcRenderer.invoke('data:reset'),
     importData: (payload: unknown, mode: string) =>
       ipcRenderer.invoke('data:importData', payload, mode),
-    exportFile: (json: string, defaultName: string) =>
-      ipcRenderer.invoke('data:exportFile', json, defaultName),
+    exportFile: (bytes: Uint8Array, defaultName: string) =>
+      ipcRenderer.invoke('data:exportFile', bytes, defaultName),
     importFile: () => ipcRenderer.invoke('data:importFile')
   },
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)

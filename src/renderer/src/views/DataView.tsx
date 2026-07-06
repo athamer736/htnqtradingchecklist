@@ -7,6 +7,8 @@ import EntryEditor from '../components/data/EntryEditor'
 import EntryViewer from '../components/data/EntryViewer'
 import ColumnManager from '../components/data/ColumnManager'
 import ImportDialog from '../components/data/ImportDialog'
+import ExportDialog from '../components/data/ExportDialog'
+import { unpackImport } from '../util/dcZip'
 import type {
   DataColumn,
   DataEntry,
@@ -45,16 +47,18 @@ export default function DataView(): JSX.Element {
   const [exportOpen, setExportOpen] = useState(false)
   const [importPayload, setImportPayload] = useState<DataExport | null>(null)
 
-  const doExport = (sectionId?: string): void => {
+  const doExport = (scope: 'all' | 'section', includeEntries: boolean): void => {
     setExportOpen(false)
-    void exportData(sectionId)
+    void exportData(scope === 'section' ? activeId : undefined, includeEntries)
   }
 
   const startImport = async (): Promise<void> => {
     const res = await window.htnq.data.importFile()
-    if (res.ok) {
-      setImportPayload(res.payload)
-    } else if (res.reason === 'invalid') {
+    if (!res.ok) return
+    const payload = await unpackImport(res.bytes)
+    if (payload) {
+      setImportPayload(payload)
+    } else {
       await confirm({
         title: 'Could not import file',
         message: 'That file is not a valid HTNQ Data Collection export.',
@@ -63,9 +67,10 @@ export default function DataView(): JSX.Element {
     }
   }
 
-  const runImport = async (mode: ImportMode): Promise<void> => {
+  const runImport = async (mode: ImportMode, includeEntries: boolean): Promise<void> => {
     if (!importPayload) return
-    await importData(importPayload, mode)
+    const payload = includeEntries ? importPayload : { ...importPayload, entries: [] }
+    await importData(payload, mode)
     setImportPayload(null)
   }
 
@@ -223,31 +228,9 @@ export default function DataView(): JSX.Element {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="relative">
-              <button className="btn-ghost" onClick={() => setExportOpen((v) => !v)}>
-                Export
-              </button>
-              {exportOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
-                  <div className="absolute right-0 z-20 mt-1 w-56 animate-scaleIn overflow-hidden rounded-lg border border-line bg-bg-card shadow-card">
-                    <button
-                      className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-bg-hover"
-                      onClick={() => doExport()}
-                    >
-                      All sections
-                    </button>
-                    <button
-                      className="block w-full border-t border-line px-3 py-2 text-left text-sm text-slate-200 hover:bg-bg-hover disabled:opacity-50"
-                      disabled={!activeSection}
-                      onClick={() => doExport(activeId)}
-                    >
-                      Current section{activeSection ? ` (${activeSection.name})` : ''}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <button className="btn-ghost" onClick={() => setExportOpen(true)}>
+              Export
+            </button>
             <button className="btn-ghost" onClick={() => void startImport()}>
               Import
             </button>
@@ -467,10 +450,18 @@ export default function DataView(): JSX.Element {
         />
       )}
 
+      {exportOpen && (
+        <ExportDialog
+          sectionName={activeSection?.name}
+          onExport={doExport}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
+
       {importPayload && (
         <ImportDialog
           payload={importPayload}
-          onImport={(mode) => void runImport(mode)}
+          onImport={(mode, includeEntries) => void runImport(mode, includeEntries)}
           onClose={() => setImportPayload(null)}
         />
       )}

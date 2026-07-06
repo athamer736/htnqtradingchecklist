@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type {
   DataColumn,
   DataEntry,
@@ -8,6 +8,17 @@ import type {
 } from '../../../../shared/dataCollection'
 import TagPicker from './TagPicker'
 import ImageUploader from './ImageUploader'
+
+// A short signature of the user-entered content (ignores id / timestamps) so we
+// can tell whether a draft actually has unsaved work worth caching or restoring.
+function contentSig(e: DataEntry): string {
+  return JSON.stringify({
+    values: e.values,
+    columnImages: e.columnImages ?? {},
+    images: e.images,
+    comments: e.comments
+  })
+}
 
 interface EntryEditorProps {
   entry: DataEntry
@@ -30,11 +41,55 @@ export default function EntryEditor({
   onClose,
   onCreateTag
 }: EntryEditorProps): JSX.Element {
-  const [draft, setDraft] = useState<DataEntry>({
-    ...entry,
-    columnImages: entry.columnImages ?? {}
+  // New entries are cached per-section (their id is regenerated each time you
+  // click "Add entry"); existing entries are cached per-entry id.
+  const cacheKey = isNew ? `htnq-dc-draft-new-${entry.sectionId}` : `htnq-dc-draft-${entry.id}`
+  const baseSig = contentSig(entry)
+
+  const [restored, setRestored] = useState(false)
+  const [draft, setDraft] = useState<DataEntry>(() => {
+    const base: DataEntry = { ...entry, columnImages: entry.columnImages ?? {} }
+    try {
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const parsed = JSON.parse(cached) as DataEntry
+        if (contentSig(parsed) !== baseSig) {
+          setRestored(true)
+          return { ...parsed, columnImages: parsed.columnImages ?? {} }
+        }
+      }
+    } catch {
+      /* ignore malformed cache */
+    }
+    return base
   })
   const [shotsOpen, setShotsOpen] = useState<Record<string, boolean>>({})
+
+  // Persist the draft to local cache whenever it changes so an accidental close
+  // (backdrop click, X, Cancel) never loses work. Clears the cache once the
+  // draft matches the saved entry again (i.e. nothing left to restore).
+  useEffect(() => {
+    try {
+      if (contentSig(draft) === baseSig) localStorage.removeItem(cacheKey)
+      else localStorage.setItem(cacheKey, JSON.stringify(draft))
+    } catch {
+      /* storage may be unavailable; ignore */
+    }
+  }, [draft, cacheKey, baseSig])
+
+  const clearCache = (): void => {
+    try {
+      localStorage.removeItem(cacheKey)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const discardDraft = (): void => {
+    setDraft({ ...entry, columnImages: entry.columnImages ?? {} })
+    setRestored(false)
+    clearCache()
+  }
 
   const setValue = (columnId: string, value: DataValue): void => {
     setDraft((d) => ({ ...d, values: { ...d.values, [columnId]: value } }))
@@ -47,7 +102,13 @@ export default function EntryEditor({
   }
 
   const save = (): void => {
+    clearCache()
     onSave({ ...draft, updatedAt: new Date().toISOString() })
+  }
+
+  const remove = (): void => {
+    clearCache()
+    onDelete(draft.id)
   }
 
   return (
@@ -64,6 +125,20 @@ export default function EntryEditor({
             </svg>
           </button>
         </header>
+
+        {restored && (
+          <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2.5">
+            <span className="text-xs text-amber-200">
+              Restored an unsaved draft from a previous session.
+            </span>
+            <button
+              onClick={discardDraft}
+              className="shrink-0 rounded-md border border-amber-500/40 px-2 py-1 text-[11px] text-amber-100 transition hover:bg-amber-500/20"
+            >
+              Discard draft
+            </button>
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
           {columns.map((col) => {
@@ -180,7 +255,7 @@ export default function EntryEditor({
           {!isNew ? (
             <button
               className="btn border border-line bg-bg-soft text-rose-400 hover:bg-bg-hover"
-              onClick={() => onDelete(draft.id)}
+              onClick={remove}
             >
               Delete
             </button>

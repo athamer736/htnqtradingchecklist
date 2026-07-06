@@ -9,6 +9,7 @@ import {
   type DataTag,
   type ImportMode
 } from '../../../shared/dataCollection'
+import { packExport } from '../util/dcZip'
 
 interface DataState {
   sections: DataSection[]
@@ -27,7 +28,7 @@ interface DataState {
   deleteTag: (id: string) => Promise<void>
   deleteEntry: (id: string) => Promise<void>
   reset: () => Promise<void>
-  exportData: (sectionId?: string) => Promise<{ saved: boolean }>
+  exportData: (sectionId?: string, includeEntries?: boolean) => Promise<{ saved: boolean }>
   importData: (payload: DataExport, mode: ImportMode) => Promise<void>
 }
 
@@ -69,14 +70,15 @@ export const useDataCollection = create<DataState>((set, get) => ({
   deleteTag: async (id) => apply(set, await window.htnq.data.deleteTag(id)),
   deleteEntry: async (id) => apply(set, await window.htnq.data.deleteEntry(id)),
   reset: async () => apply(set, await window.htnq.data.reset()),
-  exportData: async (sectionId) => {
+  exportData: async (sectionId, includeEntries = true) => {
     const { sections, columns, tags, entries } = get()
-    const payload = buildExport({ sections, columns, tags, entries }, sectionId)
+    const payload = buildExport({ sections, columns, tags, entries }, sectionId, includeEntries)
     const date = new Date().toISOString().slice(0, 10)
-    const name = sectionId
-      ? `htnq-${slug(sections.find((s) => s.id === sectionId)?.name ?? 'section')}-${date}.json`
-      : `htnq-data-collection-${date}.json`
-    return window.htnq.data.exportFile(JSON.stringify(payload, null, 2), name)
+    const scope = sectionId ? slug(sections.find((s) => s.id === sectionId)?.name ?? 'section') : 'data-collection'
+    const kind = includeEntries ? '' : '-template'
+    const name = `htnq-${scope}${kind}-${date}.zip`
+    const bytes = await packExport(payload)
+    return window.htnq.data.exportFile(bytes, name)
   },
   importData: async (payload, mode) =>
     apply(set, await window.htnq.data.importData(payload, mode))

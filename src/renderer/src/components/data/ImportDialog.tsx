@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { useConfirm } from '../ConfirmProvider'
 import type { DataExport, ImportMode } from '../../../../shared/dataCollection'
 
 interface ImportDialogProps {
   payload: DataExport
-  onImport: (mode: ImportMode) => void
+  onImport: (mode: ImportMode, includeEntries: boolean) => void
   onClose: () => void
 }
 
@@ -35,6 +36,10 @@ const OPTIONS: ModeOption[] = [
 
 export default function ImportDialog({ payload, onImport, onClose }: ImportDialogProps): JSX.Element {
   const confirm = useConfirm()
+  const hasEntries = payload.entries.length > 0
+  // Default to including entries when the file has any; a template file (no
+  // entries) is inherently structure-only.
+  const [includeEntries, setIncludeEntries] = useState(hasEntries)
 
   const choose = async (opt: ModeOption): Promise<void> => {
     if (opt.danger) {
@@ -47,7 +52,7 @@ export default function ImportDialog({ payload, onImport, onClose }: ImportDialo
       })
       if (!ok) return
     }
-    onImport(opt.mode)
+    onImport(opt.mode, hasEntries && includeEntries)
   }
 
   return (
@@ -71,7 +76,39 @@ export default function ImportDialog({ payload, onImport, onClose }: ImportDialo
         </header>
 
         <div className="flex flex-col gap-2 p-5">
-          <div className="label">How should this be imported?</div>
+          <div className="label">What should this import?</div>
+          <div className="flex overflow-hidden rounded-lg border border-line">
+            <button
+              type="button"
+              onClick={() => setIncludeEntries(true)}
+              disabled={!hasEntries}
+              className={`flex-1 px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                hasEntries && includeEntries
+                  ? 'bg-accent/15 text-white'
+                  : 'bg-bg-soft text-muted hover:bg-bg-hover'
+              }`}
+            >
+              <span className="block font-medium">Template + data</span>
+              <span className="block text-[11px]">Structure and all entries</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIncludeEntries(false)}
+              className={`flex-1 border-l border-line px-3 py-2 text-left text-xs transition ${
+                !hasEntries || !includeEntries
+                  ? 'bg-accent/15 text-white'
+                  : 'bg-bg-soft text-muted hover:bg-bg-hover'
+              }`}
+            >
+              <span className="block font-medium">Template only</span>
+              <span className="block text-[11px]">Structure &amp; columns, no entries</span>
+            </button>
+          </div>
+          {!hasEntries && (
+            <p className="text-[11px] text-muted">This file is a template (no entries).</p>
+          )}
+
+          <div className="label mt-2">How should this be imported?</div>
           {OPTIONS.map((opt) => (
             <button
               key={opt.mode}

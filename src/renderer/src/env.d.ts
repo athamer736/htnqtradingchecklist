@@ -12,7 +12,7 @@ import type {
 } from '../../shared/dataCollection'
 
 export type ImportFileResult =
-  | { ok: true; payload: DataExport }
+  | { ok: true; bytes: ArrayBuffer }
   | { ok: false; reason: 'cancel' | 'invalid' }
 
 interface HtnqApi {
@@ -35,7 +35,7 @@ interface HtnqApi {
     deleteEntry: (id: string) => Promise<DataSnapshot>
     reset: () => Promise<DataSnapshot>
     importData: (payload: DataExport, mode: ImportMode) => Promise<DataSnapshot>
-    exportFile: (json: string, defaultName: string) => Promise<{ saved: boolean }>
+    exportFile: (bytes: Uint8Array, defaultName: string) => Promise<{ saved: boolean }>
     importFile: () => Promise<ImportFileResult>
   }
   openExternal: (url: string) => Promise<void>

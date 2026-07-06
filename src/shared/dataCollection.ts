@@ -226,8 +226,14 @@ function genId(): string {
 }
 
 // Builds the file payload from the current snapshot. With a sectionId, narrows to
-// that section, its columns, those columns' tags, and its entries.
-export function buildExport(snapshot: DataSnapshot, sectionId?: string): DataExport {
+// that section, its columns, those columns' tags, and its entries. With
+// includeEntries=false the entries are omitted, producing a reusable template
+// (sections + columns + tags only).
+export function buildExport(
+  snapshot: DataSnapshot,
+  sectionId?: string,
+  includeEntries = true
+): DataExport {
   const sections = sectionId
     ? snapshot.sections.filter((s) => s.id === sectionId)
     : snapshot.sections
@@ -235,7 +241,9 @@ export function buildExport(snapshot: DataSnapshot, sectionId?: string): DataExp
   const columns = snapshot.columns.filter((c) => sectionIds.has(c.sectionId))
   const columnIds = new Set(columns.map((c) => c.id))
   const tags = snapshot.tags.filter((t) => columnIds.has(t.columnId))
-  const entries = snapshot.entries.filter((e) => sectionIds.has(e.sectionId))
+  const entries = includeEntries
+    ? snapshot.entries.filter((e) => sectionIds.has(e.sectionId))
+    : []
   return {
     app: DATA_EXPORT_APP,
     kind: DATA_EXPORT_KIND,
