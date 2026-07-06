@@ -25,7 +25,15 @@ const api = {
       ipcRenderer.invoke('data:exportFile', bytes, defaultName),
     importFile: () => ipcRenderer.invoke('data:importFile')
   },
-  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  updates: {
+    getStatus: () => ipcRenderer.invoke('update:getStatus'),
+    subscribe: (cb: (status: unknown) => void) => {
+      const listener = (_e: unknown, status: unknown): void => cb(status)
+      ipcRenderer.on('update:status', listener)
+      return () => ipcRenderer.removeListener('update:status', listener)
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('htnq', api)

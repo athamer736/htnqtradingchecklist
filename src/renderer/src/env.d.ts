@@ -15,6 +15,12 @@ export type ImportFileResult =
   | { ok: true; bytes: ArrayBuffer }
   | { ok: false; reason: 'cancel' | 'invalid' }
 
+export type UpdateStatus =
+  | { phase: 'available'; version: string }
+  | { phase: 'progress'; percent: number; version: string }
+  | { phase: 'downloaded'; version: string }
+  | { phase: 'error'; message: string }
+
 interface HtnqApi {
   trades: {
     list: () => Promise<TradeRecord[]>
@@ -39,6 +45,10 @@ interface HtnqApi {
     importFile: () => Promise<ImportFileResult>
   }
   openExternal: (url: string) => Promise<void>
+  updates?: {
+    getStatus: () => Promise<UpdateStatus | null>
+    subscribe: (cb: (status: UpdateStatus) => void) => () => void
+  }
 }
 
 declare global {

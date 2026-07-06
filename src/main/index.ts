@@ -2,7 +2,7 @@ import { app, shell, dialog, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import icon from '../../resources/icon.png?asset'
-import { initAutoUpdate } from './updater'
+import { initAutoUpdate, getUpdateStatus } from './updater'
 import {
   initDb,
   listTrades,
@@ -127,6 +127,8 @@ ipcMain.handle('data:importFile', async (e) => {
     return { ok: false, reason: 'invalid' }
   }
 })
+
+ipcMain.handle('update:getStatus', () => getUpdateStatus())
 
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) {
