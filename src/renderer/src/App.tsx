@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import Sidebar, { type ViewId } from './components/Sidebar'
+import UpdateGate from './components/UpdateGate'
 import StartView from './views/StartView'
+import LearnView from './views/LearnView'
 import PointsView from './views/PointsView'
 import ReferenceView from './views/ReferenceView'
 import JournalView from './views/JournalView'
@@ -29,6 +31,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
+      <UpdateGate />
       <Sidebar
         active={view}
         onChange={handleChange}
@@ -50,6 +53,7 @@ export default function App(): JSX.Element {
         )}
         <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pl-12'}`}>
           {view === 'start' && <StartView />}
+          {view === 'learn' && <LearnView />}
           {view === 'points' && <PointsView />}
           {view === 'reference' && <ReferenceView />}
           {view === 'journal' && <JournalView />}

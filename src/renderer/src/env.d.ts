@@ -12,8 +12,14 @@ import type {
 } from '../../shared/dataCollection'
 
 export type ImportFileResult =
-  | { ok: true; payload: DataExport }
+  | { ok: true; bytes: ArrayBuffer }
   | { ok: false; reason: 'cancel' | 'invalid' }
+
+export type UpdateStatus =
+  | { phase: 'available'; version: string }
+  | { phase: 'progress'; percent: number; version: string }
+  | { phase: 'downloaded'; version: string }
+  | { phase: 'error'; message: string }
 
 interface HtnqApi {
   trades: {
@@ -35,10 +41,14 @@ interface HtnqApi {
     deleteEntry: (id: string) => Promise<DataSnapshot>
     reset: () => Promise<DataSnapshot>
     importData: (payload: DataExport, mode: ImportMode) => Promise<DataSnapshot>
-    exportFile: (json: string, defaultName: string) => Promise<{ saved: boolean }>
+    exportFile: (bytes: Uint8Array, defaultName: string) => Promise<{ saved: boolean }>
     importFile: () => Promise<ImportFileResult>
   }
   openExternal: (url: string) => Promise<void>
+  updates?: {
+    getStatus: () => Promise<UpdateStatus | null>
+    subscribe: (cb: (status: UpdateStatus) => void) => () => void
+  }
 }
 
 declare global {

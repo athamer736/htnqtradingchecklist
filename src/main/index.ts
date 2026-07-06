@@ -2,7 +2,7 @@ import { app, shell, dialog, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import icon from '../../resources/icon.png?asset'
-import { initAutoUpdate } from './updater'
+import { initAutoUpdate, getUpdateStatus } from './updater'
 import {
   initDb,
   listTrades,
@@ -24,7 +24,6 @@ import {
   type TradeRecord
 } from './db'
 import {
-  isDataExport,
   type DataColumn,
   type DataEntry,
   type DataExport,
@@ -93,18 +92,18 @@ ipcMain.handle('data:importData', (_e, payload: DataExport, mode: ImportMode) =>
   importData(payload, mode)
 )
 
-ipcMain.handle('data:exportFile', async (e, json: string, defaultName: string) => {
+ipcMain.handle('data:exportFile', async (e, bytes: Uint8Array, defaultName: string) => {
   const win = BrowserWindow.fromWebContents(e.sender)
   const opts = {
     title: 'Export Data Collection',
     defaultPath: defaultName,
-    filters: [{ name: 'JSON', extensions: ['json'] }]
+    filters: [{ name: 'HTNQ export', extensions: ['zip'] }]
   }
   const { canceled, filePath } = win
     ? await dialog.showSaveDialog(win, opts)
     : await dialog.showSaveDialog(opts)
   if (canceled || !filePath) return { saved: false }
-  await writeFile(filePath, json, 'utf-8')
+  await writeFile(filePath, Buffer.from(bytes))
   return { saved: true }
 })
 
@@ -113,20 +112,23 @@ ipcMain.handle('data:importFile', async (e) => {
   const opts = {
     title: 'Import Data Collection',
     properties: ['openFile' as const],
-    filters: [{ name: 'JSON', extensions: ['json'] }]
+    filters: [{ name: 'HTNQ export', extensions: ['zip', 'json'] }]
   }
   const { canceled, filePaths } = win
     ? await dialog.showOpenDialog(win, opts)
     : await dialog.showOpenDialog(opts)
   if (canceled || filePaths.length === 0) return { ok: false, reason: 'cancel' }
   try {
-    const parsed = JSON.parse(await readFile(filePaths[0], 'utf-8'))
-    if (!isDataExport(parsed)) return { ok: false, reason: 'invalid' }
-    return { ok: true, payload: parsed }
+    const buf = await readFile(filePaths[0])
+    // Return a plain ArrayBuffer slice so it survives structured clone over IPC.
+    const arrayBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+    return { ok: true, bytes: arrayBuffer }
   } catch {
     return { ok: false, reason: 'invalid' }
   }
 })
+
+ipcMain.handle('update:getStatus', () => getUpdateStatus())
 
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) {
