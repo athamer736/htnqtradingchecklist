@@ -28,22 +28,33 @@ export default function EntryViewer({
 
   const colImages = (columnId: string): DataImage[] => entry.columnImages?.[columnId] ?? []
 
+  const isFullField = (col: DataColumn): boolean =>
+    col.type === 'images' || col.type === 'textimages'
+
   const Empty = (): JSX.Element => <span className="text-sm text-muted">Not set</span>
 
-  const Gallery = ({ images }: { images: DataImage[] }): JSX.Element => (
-    <div className="mt-1.5 grid grid-cols-3 gap-2 sm:grid-cols-4">
-      {images.map((img) => (
-        <button
-          key={img.id}
-          type="button"
-          onClick={() => setPreview(img)}
-          className="block overflow-hidden rounded-lg border border-line transition hover:border-accent/60"
-        >
-          <img src={img.dataUrl} alt={img.name} className="h-24 w-full object-cover" />
-        </button>
-      ))}
-    </div>
-  )
+  const Gallery = ({ images }: { images: DataImage[] }): JSX.Element => {
+    const single = images.length === 1
+    const cols = single ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
+    return (
+      <div className={`mt-1.5 grid gap-2 ${cols}`}>
+        {images.map((img) => (
+          <button
+            key={img.id}
+            type="button"
+            onClick={() => setPreview(img)}
+            className="block overflow-hidden rounded-lg border border-line bg-black/20 transition hover:border-accent/60"
+          >
+            <img
+              src={img.dataUrl}
+              alt={img.name}
+              className={single ? 'max-h-80 w-full object-contain' : 'h-28 w-full object-cover'}
+            />
+          </button>
+        ))}
+      </div>
+    )
+  }
 
   const renderValue = (col: DataColumn): JSX.Element => {
     const value = entry.values[col.id]
@@ -104,11 +115,11 @@ export default function EntryViewer({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-6">
-      <div className="absolute inset-0 animate-fadeIn bg-black/60" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[85vh] w-full max-w-2xl animate-scaleIn flex-col rounded-xl border border-line bg-bg-card shadow-card">
-        <header className="flex items-center justify-between border-b border-line px-5 py-4">
+      <div className="absolute inset-0 animate-fadeIn bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[92vh] w-full max-w-5xl animate-scaleIn flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#1a2130] to-[#12151d] shadow-[0_30px_80px_-30px_rgba(0,0,0,0.85)]">
+        <header className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-6 py-4">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100">Entry details</h2>
+            <h2 className="text-base font-semibold text-slate-50">Entry details</h2>
             <p className="text-xs text-muted">
               Updated {new Date(entry.updatedAt).toLocaleString()}
             </p>
@@ -120,30 +131,38 @@ export default function EntryViewer({
           </button>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
-          {columns.map((col) => (
-            <div key={col.id}>
-              <div className="label mb-1">{col.name}</div>
-              {renderValue(col)}
-            </div>
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+            {columns.map((col) => {
+              const spanClass = isFullField(col) ? 'sm:col-span-2' : ''
+              return (
+                <div
+                  key={col.id}
+                  className={`rounded-xl border border-white/10 bg-white/[0.03] p-3.5 ${spanClass}`}
+                >
+                  <div className="label mb-1.5 text-sky-400/80">{col.name}</div>
+                  {renderValue(col)}
+                </div>
+              )
+            })}
 
-          {entry.images.length > 0 && (
-            <div>
-              <div className="label mb-1">Additional screenshots</div>
-              <Gallery images={entry.images} />
-            </div>
-          )}
+            {entry.images.length > 0 && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 sm:col-span-2">
+                <div className="label mb-1.5 text-sky-400/80">Additional screenshots</div>
+                <Gallery images={entry.images} />
+              </div>
+            )}
 
-          {entry.comments.trim() && (
-            <div>
-              <div className="label mb-1">Comments</div>
-              <p className="whitespace-pre-line text-sm text-slate-200">{entry.comments}</p>
-            </div>
-          )}
+            {entry.comments.trim() && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 sm:col-span-2">
+                <div className="label mb-1.5 text-sky-400/80">Comments</div>
+                <p className="whitespace-pre-line text-sm text-slate-200">{entry.comments}</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-line px-5 py-4">
+        <footer className="flex items-center justify-end gap-2 border-t border-white/10 bg-white/[0.02] px-6 py-4">
           <button className="btn-ghost" onClick={onClose}>
             Close
           </button>

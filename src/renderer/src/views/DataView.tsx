@@ -217,6 +217,46 @@ export default function DataView(): JSX.Element {
     return text ? <span className="text-slate-200">{text}</span> : <span className="text-muted">-</span>
   }
 
+  // Small image/comment badges shown in a card header. Renders nothing when the
+  // entry has neither, keeping empty cards tidy.
+  const renderMedia = (entry: DataEntry): JSX.Element | null => {
+    const imgs = imageCount(entry)
+    const hasComment = !!entry.comments.trim()
+    if (imgs === 0 && !hasComment) return null
+    return (
+      <div className="flex items-center gap-2 text-muted">
+        {imgs > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <circle cx="8.5" cy="10" r="1.5" />
+              <path d="M21 17l-5-5L5 19" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {imgs}
+          </span>
+        )}
+        {hasComment && (
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l.8-5.5A8 8 0 1 1 21 12z" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+    )
+  }
+
+  // True when the entry has meaningful content for this column, so empty
+  // fields can be hidden to keep each card clean.
+  const hasValue = (col: DataColumn, entry: DataEntry): boolean => {
+    const v = entry.values[col.id]
+    const imgs = entry.columnImages?.[col.id]?.length ?? 0
+    if (col.type === 'images') return imgs > 0
+    if (col.type === 'textimages') return imgs > 0 || (!!v && String(v).trim() !== '')
+    if (col.type === 'checkbox') return v === true
+    if (col.type === 'multiselect') return Array.isArray(v) && v.length > 0
+    if (col.type === 'select') return !!v
+    return v != null && String(v).trim() !== ''
+  }
+
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-line px-6 py-4">
@@ -330,7 +370,7 @@ export default function DataView(): JSX.Element {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted">
             {activeSection?.name} - {sectionEntries.length}{' '}
             {sectionEntries.length === 1 ? 'entry' : 'entries'}
@@ -350,58 +390,59 @@ export default function DataView(): JSX.Element {
             </div>
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-line">
-            <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-bg-soft">
-                <tr>
-                  {sectionColumns.map((col) => (
-                    <th
-                      key={col.id}
-                      className="whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-muted"
-                    >
-                      {col.name}
-                    </th>
-                  ))}
-                  <th className="border-b border-line px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-muted">
-                    Media
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sectionEntries.map((entry) => (
-                  <tr
+          <div className="min-h-0 flex-1 overflow-auto">
+            <div className="grid w-full grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {sectionEntries.map((entry, i) => {
+                const filled = sectionColumns.filter((c) => hasValue(c, entry))
+                return (
+                  <button
                     key={entry.id}
                     onClick={() => setViewing(entry)}
-                    className="cursor-pointer border-b border-line/60 transition hover:bg-bg-hover"
+                    className="animate-fadeInUp group flex flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-[#1c2333] via-[#171d29] to-[#141824] p-5 text-left shadow-[0_10px_30px_-18px_rgba(0,0,0,0.8)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-accent/60 hover:shadow-[0_16px_40px_-14px_rgba(56,130,246,0.45)] active:scale-[0.99]"
                   >
-                    {sectionColumns.map((col) => (
-                      <td key={col.id} className="px-3 py-2.5 align-top">
-                        {renderCell(col, entry)}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2.5 align-top">
-                      <div className="flex items-center gap-2 text-muted">
-                        {imageCount(entry) > 0 && (
-                          <span className="inline-flex items-center gap-1 text-xs">
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
-                              <rect x="3" y="5" width="18" height="14" rx="2" />
-                              <circle cx="8.5" cy="10" r="1.5" />
-                              <path d="M21 17l-5-5L5 19" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            {imageCount(entry)}
-                          </span>
-                        )}
-                        {entry.comments.trim() && (
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
-                            <path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l.8-5.5A8 8 0 1 1 21 12z" strokeLinejoin="round" />
-                          </svg>
-                        )}
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-sky-300 ring-1 ring-inset ring-accent/25">
+                        Entry {i + 1}
+                      </span>
+                      {renderMedia(entry)}
+                    </div>
+
+                    {filled.length === 0 ? (
+                      <p className="text-sm text-slate-400">No details yet - click to edit.</p>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {filled.map((col) => (
+                          <div key={col.id} className="flex flex-col gap-1">
+                            <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-sky-400/70">
+                              {col.name}
+                            </span>
+                            <div className="text-sm text-slate-100">{renderCell(col, entry)}</div>
+                          </div>
+                        ))}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    )}
+
+                    {entry.comments.trim() && (
+                      <p className="mt-4 line-clamp-2 border-t border-white/10 pt-2.5 text-xs text-slate-400">
+                        {entry.comments.trim()}
+                      </p>
+                    )}
+                  </button>
+                )
+              })}
+
+              <button
+                onClick={newEntry}
+                className="flex min-h-[8rem] items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-sm font-medium text-slate-400 transition-all duration-200 hover:-translate-y-1 hover:border-accent/60 hover:bg-accent/10 hover:text-sky-200 active:scale-[0.99]"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                  </svg>
+                  Add entry
+                </span>
+              </button>
+            </div>
           </div>
         )}
       </div>
