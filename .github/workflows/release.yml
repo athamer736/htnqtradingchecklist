@@ -37,11 +37,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # build/icon.png is JPEG-encoded despite its extension, which breaks icns
-      # generation. Re-encode it as a real PNG so electron-builder can convert
-      # it to a macOS .icns on its own.
-      - name: Normalize app icon to PNG
-        run: sips -s format png build/icon.png --out build/icon.png
+      # build/icon.png is a 256x256 JPEG-encoded file despite its extension.
+      # macOS requires the icon source to be at least 512x512, so re-encode it
+      # as a true PNG and upscale to 1024x1024 for electron-builder's icns
+      # generation. (Windows tolerated the smaller source; macOS does not.)
+      - name: Normalize + upscale app icon
+        run: sips -s format png -z 1024 1024 build/icon.png --out build/icon.png
 
       - name: Build renderer + main
         run: npm run build
