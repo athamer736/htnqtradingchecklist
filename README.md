@@ -30,6 +30,37 @@ npm run dist:portable # portable .exe only
 Output appears in the `dist/` folder. Without a code-signing certificate, Windows SmartScreen will
 show a "More info -> Run anyway" prompt on first launch for other users.
 
+## macOS build
+
+The macOS app (`.dmg` for Apple Silicon `arm64` and Intel `x64`) is built by a GitHub Actions
+runner rather than locally, because the native `better-sqlite3` module must be compiled on macOS.
+
+To cut a Mac release from Windows, push a version tag:
+
+```bash
+git tag v<version>
+git push --tags
+```
+
+The [`Release macOS`](.github/workflows/release.yml) workflow builds on `macos-latest` and attaches
+the `.dmg` files to the GitHub release. You can also trigger it manually from the Actions tab
+(`workflow_dispatch`). To build locally on a Mac instead, run `npm run dist:mac`.
+
+### Installing on macOS (unsigned)
+
+The Mac build is not code-signed or notarized, so Gatekeeper blocks it on first launch. Users open it
+once with either method:
+
+- Right-click (or Control-click) the app in `Applications` and choose **Open**, then confirm.
+- Or clear the quarantine flag in Terminal:
+
+  ```bash
+  xattr -cr "/Applications/HTNQ Trading Checklist.app"
+  ```
+
+Because the build is unsigned, macOS auto-update is disabled: Mac users update by downloading the
+latest `.dmg`. (Windows auto-update is unaffected.)
+
 ## Auto-update (installed app)
 
 The installed (NSIS) build checks GitHub Releases on
