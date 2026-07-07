@@ -22,6 +22,18 @@ jobs:
           node-version: 20
           cache: npm
 
+      # better-sqlite3's bundled node-gyp still imports Python's distutils,
+      # which was removed from the stdlib in Python 3.12+. macos-latest ships a
+      # newer Python, so pin 3.11 (which still has distutils) for the native
+      # compile. setuptools is installed as a belt-and-braces distutils shim.
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tooling for native modules
+        run: python -m pip install --upgrade pip setuptools
+
       - name: Install dependencies
         run: npm ci
 
