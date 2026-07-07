@@ -112,11 +112,11 @@ export default function EntryEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
-      <div className="absolute inset-0 animate-fadeIn bg-black/50" onClick={onClose} />
-      <div className="relative z-10 flex h-full w-full max-w-xl animate-slideInRight flex-col border-l border-line bg-bg-card">
-        <header className="flex items-center justify-between border-b border-line px-5 py-4">
-          <h2 className="text-sm font-semibold text-slate-100">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 animate-fadeIn bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[90vh] w-full max-w-4xl animate-scaleIn flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#1a2130] to-[#12151d] shadow-[0_30px_80px_-30px_rgba(0,0,0,0.85)]">
+        <header className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-6 py-4">
+          <h2 className="text-base font-semibold text-slate-50">
             {isNew ? 'New entry' : 'Edit entry'}
           </h2>
           <button onClick={onClose} className="text-muted hover:text-slate-200" aria-label="Close">
@@ -140,22 +140,30 @@ export default function EntryEditor({
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 items-start gap-x-5 gap-y-4 sm:grid-cols-2">
           {columns.map((col) => {
             const count = colImages(col.id).length
             const open = !!shotsOpen[col.id]
             const inlineShots = col.type === 'images' || col.type === 'textimages'
+            // Image-bearing fields (and any field whose screenshot panel is open)
+            // need the full width to lay out their gallery comfortably.
+            const fullWidth = inlineShots || open
+            const spanClass = fullWidth ? 'sm:col-span-2' : ''
             return (
-              <div key={col.id}>
+              <div
+                key={col.id}
+                className={`rounded-xl border border-white/10 bg-white/[0.03] p-3.5 transition-colors hover:border-white/20 ${spanClass}`}
+              >
                 <div className="flex items-center justify-between">
-                  <label className="label mb-0">{col.name}</label>
+                  <label className="label mb-0 text-sky-400/80">{col.name}</label>
                   {!inlineShots && (
                     <button
                       type="button"
                       onClick={() => setShotsOpen((s) => ({ ...s, [col.id]: !s[col.id] }))}
                       className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] transition ${
                         open || count > 0
-                          ? 'text-accent'
+                          ? 'text-sky-300'
                           : 'text-muted hover:text-slate-200'
                       }`}
                       title="Attach screenshots"
@@ -235,13 +243,13 @@ export default function EntryEditor({
             )
           })}
 
-          <div>
-            <label className="label">Additional screenshots</label>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 sm:col-span-2">
+            <label className="label text-sky-400/80">Additional screenshots</label>
             <ImageUploader images={draft.images} onChange={setImages} />
           </div>
 
-          <div>
-            <label className="label">Comments</label>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 sm:col-span-2">
+            <label className="label text-sky-400/80">Comments</label>
             <textarea
               className="field min-h-[120px] resize-y"
               value={draft.comments}
@@ -249,9 +257,10 @@ export default function EntryEditor({
               placeholder="Notes, observations, anything worth remembering..."
             />
           </div>
+          </div>
         </div>
 
-        <footer className="flex items-center justify-between gap-2 border-t border-line px-5 py-4">
+        <footer className="flex items-center justify-between gap-2 border-t border-white/10 bg-white/[0.02] px-6 py-4">
           {!isNew ? (
             <button
               className="btn border border-line bg-bg-soft text-rose-400 hover:bg-bg-hover"
