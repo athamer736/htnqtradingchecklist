@@ -1,0 +1,58 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # electron-builder can convert build/icon.png to .icns on its own, but
+      # generate an explicit build/icon.icns as a fallback in case conversion
+      # fails on the runner. Only runs when the .icns is missing.
+      - name: Ensure macOS icon (.icns)
+        run: |
+          if [ ! -f build/icon.icns ] && [ -f build/icon.png ]; then
+            set -e
+            ICONSET="build/icon.iconset"
+            mkdir -p "$ICONSET"
+            for size in 16 32 64 128 256 512; do
+              sips -z $size $size build/icon.png --out "$ICONSET/icon_${size}x${size}.png"
+              double=$((size * 2))
+              sips -z $double $double build/icon.png --out "$ICONSET/icon_${size}x${size}@2x.png"
+            done
+            iconutil -c icns "$ICONSET" -o build/icon.icns
+            rm -rf "$ICONSET"
+            echo "Generated build/icon.icns"
+          else
+            echo "Skipping: build/icon.icns already exists or build/icon.png missing"
+          fi
+
+      - name: Build renderer + main
+        run: npm run build
+
+      - name: Build and publish macOS app
+        run: npx electron-builder --mac --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned build: stop electron-builder from trying to sign with any
+          # certificate that happens to be on the runner.
+          CSC_IDENTITY_AUTO_DISCOVERY: false

@@ -34,6 +34,10 @@ function broadcast(status: UpdateStatus): void {
 export function initAutoUpdate(): void {
   if (!app.isPackaged) return
   if (process.env.PORTABLE_EXECUTABLE_DIR) return
+  // The macOS build is unsigned, and Squirrel.Mac refuses to apply unsigned
+  // updates. Skip auto-update entirely on macOS so we don't surface a spurious
+  // error; Mac users update by downloading the latest .dmg.
+  if (process.platform === 'darwin') return
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true

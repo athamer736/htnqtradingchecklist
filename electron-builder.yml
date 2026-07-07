@@ -35,3 +35,20 @@ nsis:
   shortcutName: HTNQ Trading Checklist
 portable:
   artifactName: ${productName}-${version}-portable.${ext}
+mac:
+  icon: build/icon.png
+  category: public.app-category.finance
+  # Unsigned build: skip code signing / notarization. Mac users bypass
+  # Gatekeeper once (right-click > Open). Mac auto-update stays disabled.
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
