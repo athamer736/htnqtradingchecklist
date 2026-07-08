@@ -179,8 +179,9 @@ export default function EntryEditor({
                 </div>
                 <div className="mt-1.5">
                   {(col.type === 'text' || col.type === 'textimages') && (
-                    <input
-                      className="field"
+                    <textarea
+                      className="field min-h-[42px] resize-y"
+                      rows={2}
                       value={(draft.values[col.id] as string) ?? ''}
                       onChange={(e) => setValue(col.id, e.target.value)}
                     />

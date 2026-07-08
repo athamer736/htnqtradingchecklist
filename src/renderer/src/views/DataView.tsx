@@ -173,7 +173,7 @@ export default function DataView(): JSX.Element {
       if (!text && n === 0) return <span className="text-muted">-</span>
       return (
         <div className="flex flex-col gap-1">
-          {text && <span className="text-slate-200">{text}</span>}
+          {text && <span className="whitespace-pre-line text-slate-200">{text}</span>}
           {n > 0 && (
             <span className="inline-flex items-center gap-1 text-xs text-muted">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -214,7 +214,11 @@ export default function DataView(): JSX.Element {
       )
     }
     const text = (value as DataValue) ? String(value) : ''
-    return text ? <span className="text-slate-200">{text}</span> : <span className="text-muted">-</span>
+    return text ? (
+      <span className="whitespace-pre-line text-slate-200">{text}</span>
+    ) : (
+      <span className="text-muted">-</span>
+    )
   }
 
   // Small image/comment badges shown in a card header. Renders nothing when the
