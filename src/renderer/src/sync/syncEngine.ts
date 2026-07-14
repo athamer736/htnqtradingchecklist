@@ -19,6 +19,10 @@ const PAGE = 500
 const PUSH_CHUNK = 100
 const UPLOADED_KEY = 'htnq-uploaded-images'
 const CLOUD_PREF_KEY = 'htnq-cloud-sync'
+// Points-theory board is a single localStorage blob synced as one app_state row.
+const POINTS_KEY = 'htnq-points'
+const POINTS_SYNC_KEY = 'htnq-points-sync'
+const POINTS_STATE_ID = 'points-board'
 // Sync on a slow, fixed cadence to keep server load minimal. Local edits are
 // captured as "dirty" rows immediately and pushed on the next cycle.
 const POLL_MS = 5 * 60 * 1000
@@ -99,6 +103,70 @@ function entryImages(data: Record<string, unknown>): DataImage[] {
   return out
 }
 
+// --- app_state (Points board) ------------------------------------------------
+
+interface PointsMeta {
+  updatedAt: string
+  dirty: boolean
+}
+
+function readPointsMeta(): PointsMeta {
+  try {
+    const r = JSON.parse(localStorage.getItem(POINTS_SYNC_KEY) ?? '') as PointsMeta
+    if (r && typeof r.updatedAt === 'string') return { updatedAt: r.updatedAt, dirty: !!r.dirty }
+  } catch {
+    /* none yet */
+  }
+  return { updatedAt: '', dirty: false }
+}
+
+function writePointsMeta(m: PointsMeta): void {
+  localStorage.setItem(POINTS_SYNC_KEY, JSON.stringify(m))
+}
+
+// Called by the Points view when the board changes, flagging it for the next push.
+export function markPointsDirty(): void {
+  writePointsMeta({ updatedAt: new Date().toISOString(), dirty: true })
+}
+
+async function pushAppState(uid: string): Promise<void> {
+  if (!supabase) return
+  const meta = readPointsMeta()
+  if (!meta.dirty) return
+  const board = localStorage.getItem(POINTS_KEY) ?? ''
+  const { error } = await supabase.from(SYNC_TABLE).upsert(
+    [
+      {
+        user_id: uid,
+        kind: 'app_state',
+        id: POINTS_STATE_ID,
+        data: { board },
+        updated_at: meta.updatedAt || SYNC_EPOCH,
+        deleted_at: null
+      }
+    ],
+    { onConflict: 'user_id,kind,id' }
+  )
+  if (error) {
+    logError('push app_state failed:', error)
+    throw error
+  }
+  writePointsMeta({ updatedAt: meta.updatedAt, dirty: false })
+}
+
+// Applies an incoming Points board (last-write-wins) and notifies a mounted view.
+function applyAppState(id: string, data: unknown, updatedAt: string): void {
+  if (id !== POINTS_STATE_ID) return
+  const local = readPointsMeta()
+  if (local.updatedAt && local.updatedAt >= updatedAt) return
+  const board = (data as { board?: string } | null)?.board
+  if (typeof board === 'string' && board) {
+    localStorage.setItem(POINTS_KEY, board)
+    writePointsMeta({ updatedAt, dirty: false })
+    window.dispatchEvent(new Event('htnq-points-remote'))
+  }
+}
+
 // --- push --------------------------------------------------------------------
 
 // Uploads any not-yet-uploaded screenshots for an entry and strips base64 from
@@ -136,7 +204,8 @@ async function push(): Promise<void> {
   if (!supabase || !uid) return
   const outbox = await window.htnq.sync.collectOutbox()
   if (outbox.length === 0) {
-    logInfo('push: nothing to send')
+    logInfo('push: no data-store changes')
+    await pushAppState(uid)
     return
   }
   logInfo(`push: sending ${outbox.length} row(s)`)
@@ -164,6 +233,7 @@ async function push(): Promise<void> {
     const acks: SyncAck[] = chunk.map((r) => ({ kind: r.kind, id: r.id, updatedAt: r.updatedAt }))
     await window.htnq.sync.clearOutbox(acks)
   }
+  await pushAppState(uid)
   logInfo('push: done')
 }
 
@@ -227,7 +297,8 @@ async function pull(): Promise<void> {
 
     const rows: SyncRow[] = []
     for (const r of serverRows) {
-      if (r.kind === 'entry') rows.push(await hydrateEntry(r, cache))
+      if (r.kind === 'app_state') applyAppState(r.id, r.data, r.updated_at)
+      else if (r.kind === 'entry') rows.push(await hydrateEntry(r, cache))
       else rows.push({ kind: r.kind, id: r.id, data: r.data, updatedAt: r.updated_at, deletedAt: r.deleted_at })
     }
     await window.htnq.sync.applyRemote(rows)
