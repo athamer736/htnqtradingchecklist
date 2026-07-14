@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Sidebar, { type ViewId } from './components/Sidebar'
 import UpdateGate from './components/UpdateGate'
 import LoginGate from './components/LoginGate'
-import LogConsole from './components/LogConsole'
+// import LogConsole from './components/LogConsole' // dev-only log popup; hidden in release
 import { installGlobalLogCapture } from './lib/logger'
 import StartView from './views/StartView'
 import LearnView from './views/LearnView'
@@ -79,7 +79,7 @@ export default function App(): JSX.Element {
           {view === 'data' && <DataView />}
         </div>
       </main>
-      <LogConsole />
+      {/* <LogConsole /> */}
     </div>
     </LoginGate>
   )

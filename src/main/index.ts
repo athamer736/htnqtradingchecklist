@@ -50,7 +50,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0b0d12',
-    title: `HTNQ Trading Checklist Verion ${app.getVersion()} Beta`,
+    title: `HTNQ Trading Checklist Version ${app.getVersion()} Release`,
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -73,8 +73,6 @@ function createWindow(): void {
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    // In dev, open DevTools so renderer/sync logs are visible immediately.
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }

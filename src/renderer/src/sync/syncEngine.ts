@@ -19,8 +19,9 @@ const PAGE = 500
 const PUSH_CHUNK = 100
 const UPLOADED_KEY = 'htnq-uploaded-images'
 const CLOUD_PREF_KEY = 'htnq-cloud-sync'
-const POLL_MS = 20000
-const DEBOUNCE_MS = 1500
+// Sync on a slow, fixed cadence to keep server load minimal. Local edits are
+// captured as "dirty" rows immediately and pushed on the next cycle.
+const POLL_MS = 5 * 60 * 1000
 // Fallback for legacy rows that predate sync and have no valid timestamp.
 const SYNC_EPOCH = '2024-01-01T00:00:00.000Z'
 
@@ -47,7 +48,6 @@ let userId: string | null = null
 let running = false
 let pending = false
 let poll: ReturnType<typeof setInterval> | null = null
-let debounce: ReturnType<typeof setTimeout> | null = null
 
 // --- image helpers -----------------------------------------------------------
 
@@ -272,17 +272,14 @@ async function runSync(): Promise<void> {
   }
 }
 
-// Debounced trigger used after local edits.
+// Called after local edits. Sync runs on a fixed 5-minute cadence to minimise
+// server load, so this is a no-op: the edit is already persisted locally and
+// flagged dirty, and will be pushed on the next scheduled cycle.
 export function requestSync(): void {
-  if (!supabase || !userId) return
-  if (debounce) clearTimeout(debounce)
-  debounce = setTimeout(() => void runSync(), DEBOUNCE_MS)
+  /* intentionally does not trigger an immediate sync */
 }
 
 function onOnline(): void {
-  void runSync()
-}
-function onFocus(): void {
   void runSync()
 }
 
@@ -309,7 +306,6 @@ export async function startSync(uid: string): Promise<void> {
   await runSync()
   if (!poll) poll = setInterval(() => void runSync(), POLL_MS)
   window.addEventListener('online', onOnline)
-  window.addEventListener('focus', onFocus)
 }
 
 // Called on sign-out.
@@ -319,11 +315,6 @@ export function stopSync(): void {
     clearInterval(poll)
     poll = null
   }
-  if (debounce) {
-    clearTimeout(debounce)
-    debounce = null
-  }
   window.removeEventListener('online', onOnline)
-  window.removeEventListener('focus', onFocus)
   useSync.getState().setStatus('disabled')
 }
