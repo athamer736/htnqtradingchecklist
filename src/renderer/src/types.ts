@@ -18,4 +18,7 @@ export interface TradeRecord {
   rMultiple: number | null
   session: string
   notes: string
+  // Sync metadata (stamped by the local store on write).
+  updatedAt?: string
+  deletedAt?: string | null
 }

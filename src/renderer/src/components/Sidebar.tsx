@@ -1,6 +1,7 @@
 import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { useConfirm } from './ConfirmProvider'
+import SyncStatus from './SyncStatus'
 import logo from '../assets/htnq-logo.png'
 
 export type ViewId = 'start' | 'learn' | 'points' | 'reference' | 'journal' | 'data'
@@ -171,6 +172,7 @@ export default function Sidebar({
       </nav>
 
       <div className="mt-auto px-5 py-4 text-[11px] leading-relaxed text-muted/70">
+        <SyncStatus />
         <div className="font-medium text-muted">HTNQ Ltd</div>
         <div className="mt-0.5">Coded by TH55MER</div>
         <button

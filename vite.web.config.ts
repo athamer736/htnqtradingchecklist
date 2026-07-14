@@ -22,6 +22,8 @@ function stripCsp(): PluginOption {
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   base: './',
+  // Load VITE_* vars (Supabase keys) from the project root .env.
+  envDir: resolve(__dirname),
   resolve: {
     alias: {
       '@renderer': resolve(__dirname, 'src/renderer/src')

@@ -10,6 +10,7 @@ import type {
   DataTag,
   ImportMode
 } from '../../shared/dataCollection'
+import type { SyncAck, SyncMeta, SyncRow } from '../../shared/sync'
 
 export type ImportFileResult =
   | { ok: true; bytes: ArrayBuffer }
@@ -43,6 +44,16 @@ interface HtnqApi {
     importData: (payload: DataExport, mode: ImportMode) => Promise<DataSnapshot>
     exportFile: (bytes: Uint8Array, defaultName: string) => Promise<{ saved: boolean }>
     importFile: () => Promise<ImportFileResult>
+  }
+  sync: {
+    getMeta: () => Promise<SyncMeta>
+    setCursor: (cursor: string) => Promise<void>
+    setOwner: (owner: string) => Promise<void>
+    claimAll: () => Promise<void>
+    wipeForNewOwner: () => Promise<void>
+    collectOutbox: () => Promise<SyncRow[]>
+    clearOutbox: (acks: SyncAck[]) => Promise<void>
+    applyRemote: (rows: SyncRow[]) => Promise<void>
   }
   openExternal: (url: string) => Promise<void>
   updates?: {

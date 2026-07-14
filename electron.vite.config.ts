@@ -10,6 +10,8 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
+    // Load VITE_* vars (Supabase keys) from the project root .env.
+    envDir: resolve(__dirname),
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src')

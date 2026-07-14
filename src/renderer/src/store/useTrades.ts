@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { TradeRecord } from '../types'
+import { requestSync } from '../sync/syncEngine'
 
 interface TradesState {
   trades: TradeRecord[]
@@ -20,13 +21,16 @@ export const useTrades = create<TradesState>((set) => ({
   save: async (trade) => {
     const trades = await window.htnq.trades.save(trade)
     set({ trades })
+    requestSync()
   },
   remove: async (id) => {
     const trades = await window.htnq.trades.delete(id)
     set({ trades })
+    requestSync()
   },
   clear: async () => {
     const trades = await window.htnq.trades.clear()
     set({ trades })
+    requestSync()
   }
 }))

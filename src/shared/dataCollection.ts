@@ -20,7 +20,15 @@ export const DC_SCHEMA_VERSION = 8
 // with no built-in columns; columns are created from imported files.
 export const IMPORTED_SECTION_ID = 'sec-imported'
 
-export interface DataSection {
+// Sync metadata carried by every syncable record. Optional so existing code
+// that constructs these objects keeps compiling; the local stores stamp them
+// on write. `updatedAt` drives last-write-wins; `deletedAt` is a tombstone.
+export interface SyncFields {
+  updatedAt?: string
+  deletedAt?: string | null
+}
+
+export interface DataSection extends SyncFields {
   id: string
   name: string
   ord: number
@@ -28,7 +36,7 @@ export interface DataSection {
   createdAt: string
 }
 
-export interface DataColumn {
+export interface DataColumn extends SyncFields {
   id: string
   sectionId: string
   name: string
@@ -37,7 +45,7 @@ export interface DataColumn {
   createdAt: string
 }
 
-export interface DataTag {
+export interface DataTag extends SyncFields {
   id: string
   columnId: string
   label: string
@@ -48,12 +56,17 @@ export interface DataTag {
 export interface DataImage {
   id: string
   name: string
+  // Base64 data URL - the local cache of the image bytes. May be empty on a
+  // record pulled from the server before the image has been downloaded.
   dataUrl: string
+  // Path within the Supabase `screenshots` bucket once uploaded, e.g.
+  // "<userId>/<imageId>". Absent until the image has been synced.
+  storagePath?: string
 }
 
 export type DataValue = string | string[] | boolean | null
 
-export interface DataEntry {
+export interface DataEntry extends SyncFields {
   id: string
   sectionId: string
   values: Record<string, DataValue>

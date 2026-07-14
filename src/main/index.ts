@@ -21,6 +21,14 @@ import {
   deleteEntry,
   resetData,
   importData,
+  getSyncMeta,
+  setSyncCursor,
+  setSyncOwner,
+  claimAllForSync,
+  wipeAllForNewOwner,
+  collectOutbox,
+  clearOutbox,
+  applyRemote,
   type TradeRecord
 } from './db'
 import {
@@ -31,6 +39,7 @@ import {
   type DataTag,
   type ImportMode
 } from '../shared/dataCollection'
+import type { SyncAck, SyncRow } from '../shared/sync'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -64,6 +73,8 @@ function createWindow(): void {
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    // In dev, open DevTools so renderer/sync logs are visible immediately.
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -127,6 +138,15 @@ ipcMain.handle('data:importFile', async (e) => {
     return { ok: false, reason: 'invalid' }
   }
 })
+
+ipcMain.handle('sync:getMeta', () => getSyncMeta())
+ipcMain.handle('sync:setCursor', (_e, cursor: string) => setSyncCursor(cursor))
+ipcMain.handle('sync:setOwner', (_e, owner: string) => setSyncOwner(owner))
+ipcMain.handle('sync:claimAll', () => claimAllForSync())
+ipcMain.handle('sync:wipeForNewOwner', () => wipeAllForNewOwner())
+ipcMain.handle('sync:collectOutbox', () => collectOutbox())
+ipcMain.handle('sync:clearOutbox', (_e, acks: SyncAck[]) => clearOutbox(acks))
+ipcMain.handle('sync:applyRemote', (_e, rows: SyncRow[]) => applyRemote(rows))
 
 ipcMain.handle('update:getStatus', () => getUpdateStatus())
 

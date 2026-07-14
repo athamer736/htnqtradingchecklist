@@ -10,6 +10,7 @@ import {
   type ImportMode
 } from '../../../shared/dataCollection'
 import { packExport } from '../util/dcZip'
+import { requestSync } from '../sync/syncEngine'
 
 interface DataState {
   sections: DataSection[]
@@ -51,6 +52,12 @@ function apply(set: (s: Partial<DataState>) => void, snap: DataSnapshot): void {
   })
 }
 
+// Applies a snapshot and schedules a background sync (used after mutations).
+function applyAndSync(set: (s: Partial<DataState>) => void, snap: DataSnapshot): void {
+  apply(set, snap)
+  requestSync()
+}
+
 export const useDataCollection = create<DataState>((set, get) => ({
   sections: [],
   columns: [],
@@ -60,16 +67,16 @@ export const useDataCollection = create<DataState>((set, get) => ({
   load: async () => {
     apply(set, await window.htnq.data.list())
   },
-  saveSection: async (s) => apply(set, await window.htnq.data.saveSection(s)),
-  saveColumn: async (c) => apply(set, await window.htnq.data.saveColumn(c)),
-  reorderColumns: async (ids) => apply(set, await window.htnq.data.reorderColumns(ids)),
-  saveTag: async (t) => apply(set, await window.htnq.data.saveTag(t)),
-  saveEntry: async (e) => apply(set, await window.htnq.data.saveEntry(e)),
-  deleteSection: async (id) => apply(set, await window.htnq.data.deleteSection(id)),
-  deleteColumn: async (id) => apply(set, await window.htnq.data.deleteColumn(id)),
-  deleteTag: async (id) => apply(set, await window.htnq.data.deleteTag(id)),
-  deleteEntry: async (id) => apply(set, await window.htnq.data.deleteEntry(id)),
-  reset: async () => apply(set, await window.htnq.data.reset()),
+  saveSection: async (s) => applyAndSync(set, await window.htnq.data.saveSection(s)),
+  saveColumn: async (c) => applyAndSync(set, await window.htnq.data.saveColumn(c)),
+  reorderColumns: async (ids) => applyAndSync(set, await window.htnq.data.reorderColumns(ids)),
+  saveTag: async (t) => applyAndSync(set, await window.htnq.data.saveTag(t)),
+  saveEntry: async (e) => applyAndSync(set, await window.htnq.data.saveEntry(e)),
+  deleteSection: async (id) => applyAndSync(set, await window.htnq.data.deleteSection(id)),
+  deleteColumn: async (id) => applyAndSync(set, await window.htnq.data.deleteColumn(id)),
+  deleteTag: async (id) => applyAndSync(set, await window.htnq.data.deleteTag(id)),
+  deleteEntry: async (id) => applyAndSync(set, await window.htnq.data.deleteEntry(id)),
+  reset: async () => applyAndSync(set, await window.htnq.data.reset()),
   exportData: async (sectionId, includeEntries = true) => {
     const { sections, columns, tags, entries } = get()
     const payload = buildExport({ sections, columns, tags, entries }, sectionId, includeEntries)
@@ -81,5 +88,5 @@ export const useDataCollection = create<DataState>((set, get) => ({
     return window.htnq.data.exportFile(bytes, name)
   },
   importData: async (payload, mode) =>
-    apply(set, await window.htnq.data.importData(payload, mode))
+    applyAndSync(set, await window.htnq.data.importData(payload, mode))
 }))
