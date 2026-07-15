@@ -1,5 +1,12 @@
 import { useRef, useState } from 'react'
 import { uid } from '../../util/id'
+import { logWarn } from '../../lib/logger'
+import {
+  MAX_IMAGE_BYTES,
+  MAX_IMAGES_PER_FIELD,
+  sanitizeFileName,
+  validateImageDataUrl
+} from '../../../../shared/security'
 import type { DataImage } from '../../../../shared/dataCollection'
 
 interface ImageUploaderProps {
@@ -7,12 +14,25 @@ interface ImageUploaderProps {
   onChange: (images: DataImage[]) => void
 }
 
-function readFile(file: File): Promise<DataImage> {
-  return new Promise((resolve, reject) => {
+// Reads a file and returns a validated DataImage, or null when the file isn't a
+// genuine, allowed image (checked by magic bytes, not the browser-reported type)
+// or exceeds the size cap.
+function readFile(file: File): Promise<DataImage | null> {
+  return new Promise((resolve) => {
+    if (file.size > MAX_IMAGE_BYTES) {
+      resolve(null)
+      return
+    }
     const reader = new FileReader()
-    reader.onload = () =>
-      resolve({ id: uid(), name: file.name || 'screenshot', dataUrl: String(reader.result) })
-    reader.onerror = () => reject(reader.error)
+    reader.onload = () => {
+      const validated = validateImageDataUrl(String(reader.result))
+      if (!validated) {
+        resolve(null)
+        return
+      }
+      resolve({ id: uid(), name: sanitizeFileName(file.name), dataUrl: validated.dataUrl })
+    }
+    reader.onerror = () => resolve(null)
     reader.readAsDataURL(file)
   })
 }
@@ -21,12 +41,28 @@ export default function ImageUploader({ images, onChange }: ImageUploaderProps):
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [preview, setPreview] = useState<DataImage | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const addFiles = async (files: FileList | File[]): Promise<void> => {
-    const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'))
-    if (imgs.length === 0) return
-    const read = await Promise.all(imgs.map(readFile))
-    onChange([...images, ...read])
+    setError(null)
+    const picked = Array.from(files)
+    if (picked.length === 0) return
+    const room = MAX_IMAGES_PER_FIELD - images.length
+    if (room <= 0) {
+      setError(`You can attach at most ${MAX_IMAGES_PER_FIELD} images here.`)
+      return
+    }
+    const read = await Promise.all(picked.slice(0, room).map(readFile))
+    const valid = read.filter((img): img is DataImage => img !== null)
+    const rejected = read.length - valid.length
+    if (rejected > 0) {
+      const msg = `${rejected} file${rejected === 1 ? ' was' : 's were'} skipped (only PNG, JPEG, WebP or GIF up to ${Math.round(
+        MAX_IMAGE_BYTES / (1024 * 1024)
+      )} MB are allowed).`
+      logWarn('ImageUploader:', msg)
+      setError(msg)
+    }
+    if (valid.length) onChange([...images, ...valid])
   }
 
   const remove = (id: string): void => onChange(images.filter((i) => i.id !== id))
@@ -76,6 +112,8 @@ export default function ImageUploader({ images, onChange }: ImageUploaderProps):
           }}
         />
       </div>
+
+      {error && <p className="mt-2 text-xs text-rose-400">{error}</p>}
 
       {images.length > 0 && (
         <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">

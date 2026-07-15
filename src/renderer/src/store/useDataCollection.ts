@@ -7,8 +7,17 @@ import {
   type DataSection,
   type DataSnapshot,
   type DataTag,
+  type DataValue,
   type ImportMode
 } from '../../../shared/dataCollection'
+import {
+  MAX_NAME_LEN,
+  MAX_VALUE_ARRAY,
+  sanitizeColor,
+  sanitizeFileName,
+  sanitizeName,
+  sanitizeText
+} from '../../../shared/security'
 import { packExport } from '../util/dcZip'
 import { requestSync } from '../sync/syncEngine'
 
@@ -31,6 +40,29 @@ interface DataState {
   reset: () => Promise<void>
   exportData: (sectionId?: string, includeEntries?: boolean) => Promise<{ saved: boolean }>
   importData: (payload: DataExport, mode: ImportMode) => Promise<void>
+}
+
+// Sanitizes a single stored value: caps text length and strips control chars.
+function cleanValue(value: DataValue): DataValue {
+  if (typeof value === 'string') return sanitizeText(value)
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, MAX_VALUE_ARRAY)
+      .map((v) => sanitizeText(v, { maxLen: MAX_NAME_LEN, allowNewlines: false }))
+  }
+  return value
+}
+
+// Normalizes all user-entered text on an entry before it is persisted.
+function cleanEntry(entry: DataEntry): DataEntry {
+  const values: Record<string, DataValue> = {}
+  for (const [col, val] of Object.entries(entry.values ?? {})) values[col] = cleanValue(val)
+  const images = (entry.images ?? []).map((img) => ({ ...img, name: sanitizeFileName(img.name) }))
+  const columnImages: Record<string, DataEntry['images']> = {}
+  for (const [col, imgs] of Object.entries(entry.columnImages ?? {})) {
+    columnImages[col] = imgs.map((img) => ({ ...img, name: sanitizeFileName(img.name) }))
+  }
+  return { ...entry, values, images, columnImages, comments: sanitizeText(entry.comments) }
 }
 
 function slug(name: string): string {
@@ -67,11 +99,17 @@ export const useDataCollection = create<DataState>((set, get) => ({
   load: async () => {
     apply(set, await window.htnq.data.list())
   },
-  saveSection: async (s) => applyAndSync(set, await window.htnq.data.saveSection(s)),
-  saveColumn: async (c) => applyAndSync(set, await window.htnq.data.saveColumn(c)),
+  saveSection: async (s) =>
+    applyAndSync(set, await window.htnq.data.saveSection({ ...s, name: sanitizeName(s.name) })),
+  saveColumn: async (c) =>
+    applyAndSync(set, await window.htnq.data.saveColumn({ ...c, name: sanitizeName(c.name) })),
   reorderColumns: async (ids) => applyAndSync(set, await window.htnq.data.reorderColumns(ids)),
-  saveTag: async (t) => applyAndSync(set, await window.htnq.data.saveTag(t)),
-  saveEntry: async (e) => applyAndSync(set, await window.htnq.data.saveEntry(e)),
+  saveTag: async (t) =>
+    applyAndSync(
+      set,
+      await window.htnq.data.saveTag({ ...t, label: sanitizeName(t.label), color: sanitizeColor(t.color) })
+    ),
+  saveEntry: async (e) => applyAndSync(set, await window.htnq.data.saveEntry(cleanEntry(e))),
   deleteSection: async (id) => applyAndSync(set, await window.htnq.data.deleteSection(id)),
   deleteColumn: async (id) => applyAndSync(set, await window.htnq.data.deleteColumn(id)),
   deleteTag: async (id) => applyAndSync(set, await window.htnq.data.deleteTag(id)),

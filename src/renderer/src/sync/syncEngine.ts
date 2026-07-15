@@ -10,6 +10,7 @@
 import { supabase, SYNC_TABLE, SCREENSHOTS_BUCKET } from '../lib/supabase'
 import type { SyncAck, SyncRow } from '../../../shared/sync'
 import type { DataImage } from '../../../shared/dataCollection'
+import { sanitizeStorageSegment, validateImageDataUrl } from '../../../shared/security'
 import { useSync } from '../store/useSync'
 import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
@@ -70,18 +71,24 @@ function rememberUploaded(ids: string[]): void {
   localStorage.setItem(UPLOADED_KEY, JSON.stringify([...set]))
 }
 
-function storagePathFor(uid: string, imageId: string): string {
-  return `${uid}/${imageId}`
+// Builds the Storage key, sanitizing the image id into a single safe segment so
+// a crafted id can never traverse out of the user's own prefix. Returns null
+// when nothing safe remains.
+function storagePathFor(uid: string, imageId: string): string | null {
+  const seg = sanitizeStorageSegment(imageId)
+  return seg ? `${uid}/${seg}` : null
 }
 
+// Decodes an image data URL to bytes only after confirming it's a genuine,
+// allowed image (magic-byte checked); returns the canonical content type.
 function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; mime: string } | null {
-  const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl)
-  if (!m) return null
-  const mime = m[1]
-  const binary = atob(m[2])
+  const validated = validateImageDataUrl(dataUrl)
+  if (!validated) return null
+  const base64 = validated.dataUrl.slice(validated.dataUrl.indexOf(',') + 1)
+  const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return { bytes, mime }
+  return { bytes, mime: validated.mime }
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -181,6 +188,11 @@ async function prepareEntryForPush(row: SyncRow): Promise<SyncRow> {
 
   for (const img of images) {
     const path = storagePathFor(uid, img.id)
+    if (!path) {
+      // Unusable id; drop the local base64 rather than sync a bad reference.
+      img.dataUrl = ''
+      continue
+    }
     img.storagePath = path
     if (img.dataUrl && !uploaded.has(img.id)) {
       const parsed = dataUrlToBytes(img.dataUrl)
@@ -190,6 +202,8 @@ async function prepareEntryForPush(row: SyncRow): Promise<SyncRow> {
           .upload(path, parsed.bytes, { contentType: parsed.mime, upsert: true })
         if (error) logWarn('image upload failed', path, error)
         else newlyUploaded.push(img.id)
+      } else {
+        logWarn('image upload skipped: not a valid image', img.id)
       }
     }
     // Keep the reference, drop the heavy base64 from the synced payload.
@@ -265,7 +279,7 @@ async function hydrateEntry(row: ServerRow, cache: Map<string, string>): Promise
   const images = entryImages(data)
   for (const img of images) {
     if (img.dataUrl) continue
-    const path = img.storagePath ?? (userId ? storagePathFor(userId, img.id) : '')
+    const path = img.storagePath ?? (userId ? storagePathFor(userId, img.id) : null)
     if (!path) continue
     const cached = cache.get(img.id)
     img.dataUrl = cached ?? (await downloadImage(path))

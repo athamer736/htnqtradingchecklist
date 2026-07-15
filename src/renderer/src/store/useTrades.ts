@@ -1,6 +1,19 @@
 import { create } from 'zustand'
 import type { TradeRecord } from '../types'
+import { sanitizeName, sanitizeText } from '../../../shared/security'
 import { requestSync } from '../sync/syncEngine'
+
+// Normalizes user-entered text fields before a trade is persisted.
+function cleanTrade(trade: TradeRecord): TradeRecord {
+  return {
+    ...trade,
+    startSetup: sanitizeName(trade.startSetup),
+    entryTimeframe: sanitizeName(trade.entryTimeframe),
+    contract: sanitizeName(trade.contract),
+    session: sanitizeName(trade.session),
+    notes: sanitizeText(trade.notes)
+  }
+}
 
 interface TradesState {
   trades: TradeRecord[]
@@ -19,7 +32,7 @@ export const useTrades = create<TradesState>((set) => ({
     set({ trades, loaded: true })
   },
   save: async (trade) => {
-    const trades = await window.htnq.trades.save(trade)
+    const trades = await window.htnq.trades.save(cleanTrade(trade))
     set({ trades })
     requestSync()
   },
