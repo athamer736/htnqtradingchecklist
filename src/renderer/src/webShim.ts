@@ -541,6 +541,11 @@ if (!window.htnq) {
     },
     openExternal: async (url: string) => {
       window.open(url, '_blank', 'noopener,noreferrer')
+    },
+    // Web uses Supabase's normal redirect flow, so the desktop loopback is never
+    // invoked here; provide a stub to satisfy the shared preload API shape.
+    auth: {
+      startDiscord: async () => ({ error: 'not-supported-on-web' })
     }
   }
 }

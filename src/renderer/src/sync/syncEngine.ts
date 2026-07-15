@@ -368,17 +368,61 @@ function onOnline(): void {
   void runSync()
 }
 
-// Resolves which account owns the local store (single account per install),
-// claiming fresh local data or wiping data that belonged to a different user.
-async function resolveOwner(uid: string): Promise<void> {
+// Resolves which account owns this install's local store (one account per
+// install) and reconciles it with the account signing in now. This decision is
+// data-loss-sensitive, so the three cases are kept explicit and the destructive
+// path is self-guarded rather than relying on branch ordering:
+//
+//   A. No local owner recorded yet -> FIRST login on this device. Adopt
+//      ("claim") whatever is already here: mark every local row dirty so the
+//      normal push uploads it, then stamp the owner. NEVER wipe — a missing
+//      owner is not an account switch, and wiping would destroy local data that
+//      has never been backed up. The subsequent pull+push (last-write-wins)
+//      merges against any existing server data without discarding local rows.
+//   B. Local owner already equals this user -> normal sync; no claim, no wipe.
+//   C. Local owner is a real, different previous user -> a genuine account
+//      switch. This is data-loss-sensitive, so we NEVER decide for the user:
+//      pause and ask via a modal. The user's choice maps to one of three
+//      destructive-ness levels — claim (merge, deletes nothing), wipe (discard
+//      local, load the account's data), or cancel (touch nothing, don't sync).
+//
+// Returns 'proceed' when the caller should continue into a normal pull+push, or
+// 'cancel' when the user declined the switch (leave local data untouched).
+async function resolveOwner(uid: string): Promise<'proceed' | 'cancel'> {
   const { owner } = await window.htnq.sync.getMeta()
   if (!owner) {
+    // Case A: first login on this device — claim local data, never wipe.
     await window.htnq.sync.claimAll()
     await window.htnq.sync.setOwner(uid)
-  } else if (owner !== uid) {
+    return 'proceed'
+  }
+  if (owner === uid) {
+    // Case B: same account as before — nothing to reconcile.
+    return 'proceed'
+  }
+  // Case C: genuine account switch — ask the user instead of auto-wiping.
+  const decision = await useSync.getState().requestAccountSwitch({
+    previousOwner: owner,
+    nextOwner: uid
+  })
+  if (decision === 'claim') {
+    // Keep local data & merge it into this account: adopt the local rows into
+    // the new account so pull (last-write-wins) + push reconciles them. Nothing
+    // is deleted.
+    await window.htnq.sync.claimAll()
+    await window.htnq.sync.setOwner(uid)
+    return 'proceed'
+  }
+  if (decision === 'wipe') {
+    // Discard local data & load this account's data: the explicit, user-chosen
+    // form of the old auto-wipe behaviour.
     await window.htnq.sync.wipeForNewOwner()
     await window.htnq.sync.setOwner(uid)
+    return 'proceed'
   }
+  // Cancel/dismiss: the safest outcome — leave local data and ownership exactly
+  // as they are and skip syncing for this session.
+  return 'cancel'
 }
 
 // Called when a user signs in.
@@ -386,7 +430,17 @@ export async function startSync(uid: string): Promise<void> {
   if (!supabase) return
   userId = uid
   logInfo('startSync for user', uid)
-  await resolveOwner(uid)
+  const outcome = await resolveOwner(uid)
+  if (outcome === 'cancel') {
+    // The user declined an account switch. Keep them logged in but unsynced
+    // (the least destructive option) without deleting or claiming anything:
+    // stop here, don't poll, and don't touch the local store. Sync resumes on
+    // the next sign-in when they can decide again.
+    userId = null
+    useSync.getState().setError('Sync paused: account switch cancelled. Local data left untouched.')
+    logWarn('account switch cancelled — local data left intact, sync paused for this session')
+    return
+  }
   useSync.getState().setStatus('idle')
   await runSync()
   if (!poll) poll = setInterval(() => void runSync(), POLL_MS)

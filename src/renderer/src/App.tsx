@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Sidebar, { type ViewId } from './components/Sidebar'
 import UpdateGate from './components/UpdateGate'
 import LoginGate from './components/LoginGate'
+import AccountSwitchDialog from './components/AccountSwitchDialog'
 // import LogConsole from './components/LogConsole' // dev-only log popup; hidden in release
 import { installGlobalLogCapture } from './lib/logger'
 import StartView from './views/StartView'
@@ -51,6 +52,7 @@ export default function App(): JSX.Element {
     <LoginGate>
     <div className="flex h-full w-full overflow-hidden">
       <UpdateGate />
+      <AccountSwitchDialog />
       <Sidebar
         active={view}
         onChange={handleChange}

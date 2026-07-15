@@ -9,3 +9,6 @@ test/
 .env
 .env.local
 .env.*.local
+
+# Supabase CLI local project-link state
+supabase/.temp/

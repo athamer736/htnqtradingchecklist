@@ -36,6 +36,9 @@ const api = {
     applyRemote: (rows: unknown) => ipcRenderer.invoke('sync:applyRemote', rows)
   },
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  auth: {
+    startDiscord: (authUrl: string) => ipcRenderer.invoke('auth:startDiscord', authUrl)
+  },
   updates: {
     getStatus: () => ipcRenderer.invoke('update:getStatus'),
     subscribe: (cb: (status: unknown) => void) => {

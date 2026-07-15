@@ -56,6 +56,9 @@ interface HtnqApi {
     applyRemote: (rows: SyncRow[]) => Promise<void>
   }
   openExternal: (url: string) => Promise<void>
+  auth: {
+    startDiscord: (authUrl: string) => Promise<{ code?: string; error?: string }>
+  }
   updates?: {
     getStatus: () => Promise<UpdateStatus | null>
     subscribe: (cb: (status: UpdateStatus) => void) => () => void
