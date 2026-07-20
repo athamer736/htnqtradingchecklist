@@ -10,6 +10,7 @@ import {
   type DataExport,
   type DataImage
 } from '../../../shared/dataCollection'
+import { MAX_IMPORT_BYTES, sanitizeImportedExport } from '../../../shared/security'
 
 const DATA_FILE = 'data.json'
 const IMAGE_DIR = 'images'
@@ -130,6 +131,8 @@ async function unpackEntry(entry: DataEntry & { images: ImageRef[] }, zip: JSZip
 // null if the bytes aren't a valid Data Collection export.
 export async function unpackImport(input: ArrayBuffer | Uint8Array): Promise<DataExport | null> {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input)
+  // Reject oversized files up front to avoid unbounded memory use.
+  if (bytes.length > MAX_IMPORT_BYTES) return null
 
   if (looksLikeZip(bytes)) {
     try {
@@ -142,7 +145,8 @@ export async function unpackImport(input: ArrayBuffer | Uint8Array): Promise<Dat
         parsed.entries.map((e: DataEntry & { images: ImageRef[] }) => unpackEntry(e, zip))
       )
       const rebuilt = { ...parsed, entries }
-      return isDataExport(rebuilt) ? rebuilt : null
+      // Deep-validate every record and image before it can reach the store.
+      return isDataExport(rebuilt) ? sanitizeImportedExport(rebuilt) : null
     } catch {
       return null
     }
@@ -151,7 +155,7 @@ export async function unpackImport(input: ArrayBuffer | Uint8Array): Promise<Dat
   // Legacy plain-JSON export.
   try {
     const parsed = JSON.parse(new TextDecoder().decode(bytes))
-    return isDataExport(parsed) ? parsed : null
+    return isDataExport(parsed) ? sanitizeImportedExport(parsed) : null
   } catch {
     return null
   }

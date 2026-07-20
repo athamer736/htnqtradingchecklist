@@ -10,11 +10,14 @@ import candlesticksCover from '../assets/concepts/candlesticks.png'
 import cisdCover from '../assets/concepts/cisd.png'
 import mmxmCover from '../assets/concepts/mmxm.png'
 import smtsCover from '../assets/concepts/smts.png'
+import tpdsCover from '../assets/concepts/tpds.png'
+import ssmtsCover from '../assets/concepts/ssmts-cover.png'
 
 export type Block =
   | { kind: 'p'; text: string }
   | { kind: 'subhead'; text: string }
   | { kind: 'list'; items: string[] }
+  | { kind: 'link'; url: string; text?: string } // opens externally; defaults to "Watch this video to learn"
 
 export interface Concept {
   id: string
@@ -29,9 +32,6 @@ export interface Concept {
 // Same community link the sidebar already opens.
 export const MENTORSHIP_URL = 'https://discord.gg/3NCzYnRtKd'
 
-const MENTORSHIP_NOTE =
-  'To learn about this, please view the videos and description in the private mentorship in the respective location.'
-
 export const CONCEPTS: Concept[] = [
   {
     id: 'fvgs',
@@ -39,6 +39,16 @@ export const CONCEPTS: Concept[] = [
     blurb: 'Fair Value Gaps - price imbalances left behind by aggressive moves.',
     cover: fvgCover,
     body: [
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1UK2RqqUPlQafsnCdL6ms_mKLqDrFjNFn/view?usp=sharing',
+        text: 'Watch this video to learn'
+      },
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1Bjg5swNca2OSUfZsqEytRUlXDFkm6Oti/view?usp=sharing',
+        text: 'Watch: FVGs in more detail'
+      },
       { kind: 'p', text: 'FVGs are price imbalances in the market.' },
       {
         kind: 'list',
@@ -66,6 +76,11 @@ export const CONCEPTS: Concept[] = [
     blurb: 'Where orders rest in the market - the fuel price draws toward.',
     cover: liquidityCover,
     body: [
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1Kwz_A_RiXn9mL1Ylve1XfGf0N1qvGpKL/view?usp=sharing',
+        text: 'Watch this video to learn'
+      },
       { kind: 'p', text: 'Liquidity is where orders are sitting in the market.' },
       { kind: 'subhead', text: 'These could be:' },
       {
@@ -89,6 +104,11 @@ export const CONCEPTS: Concept[] = [
     blurb: 'How a single candle represents price movement over a timeframe.',
     cover: candlesticksCover,
     body: [
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/12ysOIgh7mKFmr1vw426F1oAdtuLf1Ywf/view?usp=sharing',
+        text: 'Watch this video to learn'
+      },
       { kind: 'p', text: 'A candle represents price movement over a set timeframe.' },
       { kind: 'subhead', text: '4 main parts of a candle:' },
       {
@@ -130,6 +150,11 @@ export const CONCEPTS: Concept[] = [
     blurb: 'CISD - when the market changes the way it delivers price.',
     cover: cisdCover,
     body: [
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1TgYHDZ8fQj6GyD6WPhMl3kMEYD_BzhZx/view?usp=sharing',
+        text: 'Watch this video to learn'
+      },
       { kind: 'p', text: 'A CISD is when the market changes the way it is delivering price.' },
       { kind: 'subhead', text: 'Price may go from being delivered:' },
       { kind: 'list', items: ['Bearish to Bullish', 'Bullish to Bearish'] },
@@ -149,6 +174,11 @@ export const CONCEPTS: Concept[] = [
     blurb: 'MMXM - how the market moves when delivering price in one direction.',
     cover: mmxmCover,
     body: [
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1StGu1MbWAPbXW7Vo1hDwcwCcLdoTWXB-/view?usp=sharing',
+        text: 'Watch this video to learn'
+      },
       {
         kind: 'p',
         text: 'The Market Maker Model is a concept that shows how the market moves when trying to deliver price in one direction.'
@@ -179,6 +209,11 @@ export const CONCEPTS: Concept[] = [
     cover: smtsCover,
     body: [
       {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1QTgKozcn51kGpM3-pYnnHm9saY0pJrBk/view?usp=sharing',
+        text: 'Watch this video to learn'
+      },
+      {
         kind: 'p',
         text: 'SMT Divergence is when correlated markets that usually move in the same direction stop moving the same.'
       },
@@ -191,22 +226,73 @@ export const CONCEPTS: Concept[] = [
   {
     id: 'tpds',
     title: 'TPDs',
-    blurb: 'Time & Price Delivery - covered in the private mentorship.',
-    mentorshipOnly: true,
-    body: [{ kind: 'p', text: MENTORSHIP_NOTE }]
+    blurb: 'Time & Price Delivery - a mismatched candle 2 between correlated assets.',
+    cover: tpdsCover,
+    body: [
+      {
+        kind: 'p',
+        text: 'A TPD (Time & Price Delivery) is when the same candle 2 prints a different colour between two different (correlated) assets, leading to an SMT between candle 1\u2019s close and candle 3\u2019s open.'
+      },
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1OV5BkDjfxhy5c5M6sSWVWmC3-3DwezN5/view?usp=sharing',
+        text: 'Watch this video to learn'
+      }
+    ]
   },
   {
     id: 'ssmts',
     title: 'SSMTs',
-    blurb: 'Covered in the private mentorship.',
-    mentorshipOnly: true,
-    body: [{ kind: 'p', text: MENTORSHIP_NOTE }]
+    blurb: 'Sequential SMTs - SMT divergences that fall within specific quarters.',
+    cover: ssmtsCover,
+    body: [
+      {
+        kind: 'p',
+        text: 'Study these two videos, then go over the charts and find examples of SMTs before continuing onto the next videos.'
+      },
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1wcJZJGSK7dTndH9fgyyp-m-4pNmHCk8F/view?usp=sharing',
+        text: 'Watch part 1'
+      },
+      {
+        kind: 'link',
+        url: 'https://drive.google.com/file/d/1faHgKOiOSjE5A2SDSVqTk4cOV7ng2Gi7/view?usp=sharing',
+        text: 'Watch part 2'
+      },
+      { kind: 'p', text: 'Sequential SSMTs are SMTs that fall within specific quarters.' },
+      { kind: 'subhead', text: 'The quarters to learn and memorise are:' },
+      {
+        kind: 'list',
+        items: [
+          'Monthly Quarters (1 Week = 1 Quarter)',
+          'Weekly (1 Day = 1 Quarter, excluding Friday)',
+          'Daily (Every 6 Hours / Every Trading Session = 1 Quarter)',
+          '90M (Every 90M = 1 Quarter)',
+          'Micro (Every 23M = 1 Quarter)'
+        ]
+      },
+      {
+        kind: 'p',
+        text: 'We can use the respective timeframes to spot these SSMTs alongside Daye\u2019s QT Indicator:'
+      },
+      {
+        kind: 'link',
+        url: 'https://www.tradingview.com/script/n2aeO1GB-Daye-Quarterly-Theory-by-toodegrees/',
+        text: 'Open Daye\u2019s QT Indicator (TradingView)'
+      },
+      { kind: 'subhead', text: 'Recommended TFs to spot SSMTs:' },
+      {
+        kind: 'list',
+        items: ['Monthly = H4', 'Weekly = H1', 'Daily = M15', '90M = M5', 'Micro = M1']
+      }
+    ]
   },
   {
     id: 'points-theory',
-    title: 'Points Theory',
+    title: 'Weighted Probability',
     blurb: 'Covered in the private mentorship.',
     mentorshipOnly: true,
-    body: [{ kind: 'p', text: MENTORSHIP_NOTE }]
+    body: [{ kind: 'p', text: 'This will be taught soon in the private mentorship in level 4.' }]
   }
 ]

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   SMT_POINTS,
   SMT_TIMEFRAMES,
@@ -12,6 +12,7 @@ import {
   type PointEntry
 } from '../strategy/points'
 import { uid } from '../util/id'
+import { markPointsDirty } from '../sync/syncEngine'
 
 type SideId = 'highs' | 'lows'
 
@@ -183,10 +184,21 @@ function SideColumn({
 
 export default function PointsView(): JSX.Element {
   const [board, setBoard] = useState<Board>(loadBoard)
+  const firstRun = useRef(true)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(board))
+    // Flag the board dirty for cloud sync on real changes, not the initial load.
+    if (firstRun.current) firstRun.current = false
+    else markPointsDirty()
   }, [board])
+
+  // Reload the board when a newer version arrives from another device.
+  useEffect(() => {
+    const onRemote = (): void => setBoard(loadBoard())
+    window.addEventListener('htnq-points-remote', onRemote)
+    return () => window.removeEventListener('htnq-points-remote', onRemote)
+  }, [])
 
   const highsTotal = useMemo(() => scoreSide(board.highs), [board.highs])
   const lowsTotal = useMemo(() => scoreSide(board.lows), [board.lows])

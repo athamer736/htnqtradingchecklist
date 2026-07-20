@@ -20,6 +20,22 @@ npm install
 npm run dev
 ```
 
+## Cloud login & sync (optional)
+
+The app can require a login and sync trades + data collection to a server, while
+still working fully offline (local-first). This is powered by Supabase
+(Postgres + Auth + Storage). If no Supabase keys are configured the app runs in
+local-only mode with no login.
+
+See [`supabase/README.md`](supabase/README.md) for the one-time setup: create the
+project, run `supabase/schema.sql`, create user logins, and put the Project URL +
+anon key in a root `.env` (see `.env.example`):
+
+```
+VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+```
+
 ## Build a distributable .exe
 
 ```bash

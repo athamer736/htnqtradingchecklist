@@ -25,7 +25,20 @@ const api = {
       ipcRenderer.invoke('data:exportFile', bytes, defaultName),
     importFile: () => ipcRenderer.invoke('data:importFile')
   },
+  sync: {
+    getMeta: () => ipcRenderer.invoke('sync:getMeta'),
+    setCursor: (cursor: string) => ipcRenderer.invoke('sync:setCursor', cursor),
+    setOwner: (owner: string) => ipcRenderer.invoke('sync:setOwner', owner),
+    claimAll: () => ipcRenderer.invoke('sync:claimAll'),
+    wipeForNewOwner: () => ipcRenderer.invoke('sync:wipeForNewOwner'),
+    collectOutbox: () => ipcRenderer.invoke('sync:collectOutbox'),
+    clearOutbox: (acks: unknown) => ipcRenderer.invoke('sync:clearOutbox', acks),
+    applyRemote: (rows: unknown) => ipcRenderer.invoke('sync:applyRemote', rows)
+  },
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  auth: {
+    startDiscord: (authUrl: string) => ipcRenderer.invoke('auth:startDiscord', authUrl)
+  },
   updates: {
     getStatus: () => ipcRenderer.invoke('update:getStatus'),
     subscribe: (cb: (status: unknown) => void) => {

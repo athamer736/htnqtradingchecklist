@@ -4,3 +4,11 @@ dist
 .DS_Store
 *.log
 test/
+
+# Local Supabase credentials - never commit
+.env
+.env.local
+.env.*.local
+
+# Supabase CLI local project-link state
+supabase/.temp/

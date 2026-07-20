@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import Sidebar, { type ViewId } from './components/Sidebar'
 import UpdateGate from './components/UpdateGate'
+import LoginGate from './components/LoginGate'
+import AccountSwitchDialog from './components/AccountSwitchDialog'
+// import LogConsole from './components/LogConsole' // dev-only log popup; hidden in release
+import { installGlobalLogCapture } from './lib/logger'
 import StartView from './views/StartView'
 import LearnView from './views/LearnView'
 import PointsView from './views/PointsView'
@@ -9,6 +13,8 @@ import JournalView from './views/JournalView'
 import DataView from './views/DataView'
 import { useTrades } from './store/useTrades'
 import { useDataCollection } from './store/useDataCollection'
+import { useAuth } from './store/useAuth'
+import { startSync, stopSync, isCloudSyncEnabled } from './sync/syncEngine'
 
 export default function App(): JSX.Element {
   const [view, setView] = useState<ViewId>('start')
@@ -17,11 +23,24 @@ export default function App(): JSX.Element {
   )
   const load = useTrades((s) => s.load)
   const loadData = useDataCollection((s) => s.load)
+  const authStatus = useAuth((s) => s.status)
+  const userId = useAuth((s) => s.user?.id ?? null)
 
   useEffect(() => {
+    installGlobalLogCapture()
     load()
     loadData()
   }, [load, loadData])
+
+  // Start/stop offline sync as the user signs in and out (respecting the
+  // per-device cloud-sync preference).
+  useEffect(() => {
+    if (authStatus === 'in' && userId && isCloudSyncEnabled()) {
+      void startSync(userId)
+      return () => stopSync()
+    }
+    return undefined
+  }, [authStatus, userId])
 
   const handleChange = (v: ViewId): void => {
     setView(v)
@@ -30,8 +49,10 @@ export default function App(): JSX.Element {
   }
 
   return (
+    <LoginGate>
     <div className="flex h-full w-full overflow-hidden">
       <UpdateGate />
+      <AccountSwitchDialog />
       <Sidebar
         active={view}
         onChange={handleChange}
@@ -60,6 +81,8 @@ export default function App(): JSX.Element {
           {view === 'data' && <DataView />}
         </div>
       </main>
+      {/* <LogConsole /> */}
     </div>
+    </LoginGate>
   )
 }
