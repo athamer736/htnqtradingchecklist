@@ -131,7 +131,13 @@ export const useAuth = create<AuthState>((set, get) => {
     signInWithDiscord: async () => {
       if (!supabase) return
       set({ signingIn: true, error: null })
-      const redirectTo = isDesktop ? DESKTOP_OAUTH_REDIRECT : window.location.origin
+      // Web: return to the exact app URL. Using origin + pathname (not just
+      // origin) preserves a GitHub Pages sub-path deployment
+      // (e.g. https://user.github.io/htnqbeta.github.io/), so Discord redirects
+      // back to the app rather than the domain root. Desktop uses the loopback.
+      const redirectTo = isDesktop
+        ? DESKTOP_OAUTH_REDIRECT
+        : window.location.origin + window.location.pathname
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'discord',
         options: { scopes: 'identify', redirectTo, skipBrowserRedirect: isDesktop }

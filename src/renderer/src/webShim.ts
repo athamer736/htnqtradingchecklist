@@ -356,6 +356,10 @@ async function reseedDefaults(db: IDBDatabase): Promise<void> {
 
 if (!window.htnq) {
   window.htnq = {
+    // Explicitly NOT the desktop shell: this is the browser (web) build. The
+    // renderer keys desktop-only behaviour (OAuth loopback, no detectSessionInUrl)
+    // off this flag; the real Electron preload sets it true.
+    isDesktop: false,
     trades: {
       list: async () => {
         const db = await getDb()

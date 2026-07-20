@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
+  // Unforgeable marker that this API is the real Electron preload (not the web
+  // shim in webShim.ts, which never sets this). Used by the renderer to tell the
+  // desktop app apart from the browser build, since both expose window.htnq.
+  isDesktop: true,
   trades: {
     list: () => ipcRenderer.invoke('trades:list'),
     save: (trade: unknown) => ipcRenderer.invoke('trades:save', trade),
