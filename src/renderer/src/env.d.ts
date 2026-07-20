@@ -23,6 +23,8 @@ export type UpdateStatus =
   | { phase: 'error'; message: string }
 
 interface HtnqApi {
+  // Present and true only in the real Electron preload; the web shim omits it.
+  isDesktop?: boolean
   trades: {
     list: () => Promise<TradeRecord[]>
     save: (trade: TradeRecord) => Promise<TradeRecord[]>

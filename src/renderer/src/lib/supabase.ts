@@ -18,13 +18,21 @@ export const SCREENSHOTS_BUCKET = 'screenshots'
 // Single generic sync table; every record is a JSONB blob keyed by (kind, id).
 export const SYNC_TABLE = 'sync_rows'
 
-// True when running inside the Electron desktop shell (preload exposes htnq).
+// True only when running inside the real Electron desktop shell. Both the
+// desktop app AND the web build expose window.htnq (the web build installs a
+// shim in webShim.ts), so we can't just check for htnq's existence. Instead we
+// rely on the unforgeable `isDesktop` flag set by the Electron preload
+// (src/preload/index.ts); the web shim never sets it. As a defensive fallback we
+// also treat a userAgent containing "Electron" as desktop.
+//
 // On desktop the Discord OAuth redirect is captured via a localhost loopback in
 // the main process, so the renderer must NOT try to parse a session from its own
 // file:// URL. In the browser build we let Supabase read the OAuth code/tokens
 // straight from the redirect URL.
 export const isDesktop =
-  typeof window !== 'undefined' && typeof (window as { htnq?: unknown }).htnq !== 'undefined'
+  typeof window !== 'undefined' &&
+  (((window as { htnq?: { isDesktop?: boolean } }).htnq?.isDesktop ?? false) ||
+    (typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent)))
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(url as string, anonKey as string, {
