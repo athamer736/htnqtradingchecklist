@@ -7,7 +7,7 @@
 // Deletions travel as tombstones. Screenshots are offloaded to Supabase Storage
 // and referenced by a deterministic path, so row payloads stay small.
 
-import { supabase, SYNC_TABLE, SCREENSHOTS_BUCKET } from '../lib/supabase'
+import { supabase, SYNC_TABLE, SCREENSHOTS_BUCKET, isDesktop } from '../lib/supabase'
 import type { SyncAck, SyncRow } from '../../../shared/sync'
 import type { DataImage } from '../../../shared/dataCollection'
 import { sanitizeStorageSegment, validateImageDataUrl } from '../../../shared/security'
@@ -19,6 +19,10 @@ import { logError, logInfo, logWarn } from '../lib/logger'
 const PAGE = 500
 const PUSH_CHUNK = 100
 const UPLOADED_KEY = 'htnq-uploaded-images'
+// Set once the desktop has scanned local entries and (re)uploaded any image
+// bytes missing from Storage. Cleared/absent means the backfill still needs to
+// run (it stays unset until a full pass completes without upload errors).
+const IMAGES_BACKFILLED_KEY = 'htnq-images-backfilled'
 const CLOUD_PREF_KEY = 'htnq-cloud-sync'
 // Points-theory board is a single localStorage blob synced as one app_state row.
 const POINTS_KEY = 'htnq-points'
@@ -183,7 +187,11 @@ async function prepareEntryForPush(row: SyncRow): Promise<SyncRow> {
   if (row.kind !== 'entry' || !uid || !supabase) return row
   const data = JSON.parse(JSON.stringify(row.data)) as Record<string, unknown>
   const images = entryImages(data)
-  const uploaded = uploadedSet()
+  // Dedupe repeated ids within this single push only. We deliberately do NOT
+  // gate uploads on the persisted `uploaded` set: it's an optimization, not a
+  // correctness record. The bytes live locally, so we upsert them (idempotent)
+  // to guarantee the object actually exists server-side.
+  const uploadedThisPush = new Set<string>()
   const newlyUploaded: string[] = []
 
   for (const img of images) {
@@ -194,14 +202,19 @@ async function prepareEntryForPush(row: SyncRow): Promise<SyncRow> {
       continue
     }
     img.storagePath = path
-    if (img.dataUrl && !uploaded.has(img.id)) {
+    if (img.dataUrl && !uploadedThisPush.has(img.id)) {
       const parsed = dataUrlToBytes(img.dataUrl)
       if (parsed) {
         const { error } = await supabase.storage
           .from(SCREENSHOTS_BUCKET)
           .upload(path, parsed.bytes, { contentType: parsed.mime, upsert: true })
-        if (error) logWarn('image upload failed', path, error)
-        else newlyUploaded.push(img.id)
+        // Surface the concrete Supabase error (message/status/code) per failing
+        // image so the console distinguishes RLS/permission vs a bad key.
+        if (error) logWarn('image upload failed:', path, error)
+        else {
+          uploadedThisPush.add(img.id)
+          newlyUploaded.push(img.id)
+        }
       } else {
         logWarn('image upload skipped: not a valid image', img.id)
       }
@@ -211,6 +224,52 @@ async function prepareEntryForPush(row: SyncRow): Promise<SyncRow> {
   }
   rememberUploaded(newlyUploaded)
   return { ...row, data }
+}
+
+// Desktop repair/backfill. The desktop keeps every screenshot's base64 locally,
+// so it's the source of truth that can (re)populate the user's OWN Storage
+// folder. Historical images whose upload silently failed (or predate sync) leave
+// the web build unable to download them. This scans local entries and idempotently
+// upserts any image that has local bytes to `<currentUid>/<imageId>`.
+//
+// Safe to run repeatedly and never blocks the UI: it only marks itself complete
+// after a full pass with zero upload failures, so a partial/offline run retries
+// on the next start. Only meaningful on desktop (where local bytes exist); it's
+// a no-op on web, whose pulled rows carry empty dataUrls.
+async function backfillImages(uid: string): Promise<void> {
+  if (!supabase || !isDesktop) return
+  if (localStorage.getItem(IMAGES_BACKFILLED_KEY) === '1') return
+  try {
+    const snap = await window.htnq.data.list()
+    let uploaded = 0
+    let failed = 0
+    const done: string[] = []
+    for (const e of snap.entries) {
+      for (const img of entryImages(e as unknown as Record<string, unknown>)) {
+        if (!img.dataUrl) continue
+        const path = storagePathFor(uid, img.id)
+        if (!path) continue
+        const parsed = dataUrlToBytes(img.dataUrl)
+        if (!parsed) continue
+        const { error } = await supabase.storage
+          .from(SCREENSHOTS_BUCKET)
+          .upload(path, parsed.bytes, { contentType: parsed.mime, upsert: true })
+        if (error) {
+          failed++
+          logWarn('image backfill upload failed:', path, error)
+        } else {
+          uploaded++
+          done.push(img.id)
+        }
+      }
+    }
+    rememberUploaded(done)
+    logInfo(`image backfill: uploaded ${uploaded}, failed ${failed}`)
+    // Only mark done on a clean pass so a partial/offline run retries next time.
+    if (failed === 0) localStorage.setItem(IMAGES_BACKFILLED_KEY, '1')
+  } catch (err) {
+    logWarn('image backfill error:', err)
+  }
 }
 
 async function push(): Promise<void> {
@@ -268,8 +327,19 @@ async function localImageCache(): Promise<Map<string, string>> {
 
 async function downloadImage(path: string): Promise<string> {
   if (!supabase) return ''
+  // A falsy/blank path would GET `/object/screenshots/` (no key) → a genuine
+  // 400. Bail before touching the network and say why.
+  if (!path || !path.trim()) {
+    logWarn('image download skipped: empty storage path')
+    return ''
+  }
   const { data, error } = await supabase.storage.from(SCREENSHOTS_BUCKET).download(path)
-  if (error || !data) return ''
+  if (error || !data) {
+    // Surface the real error (e.g. "Object not found" vs an RLS/permission
+    // error) instead of silently returning an empty image.
+    if (error) logWarn('image download failed:', path, error)
+    return ''
+  }
   return blobToDataUrl(data)
 }
 
@@ -277,9 +347,20 @@ async function downloadImage(path: string): Promise<string> {
 async function hydrateEntry(row: ServerRow, cache: Map<string, string>): Promise<SyncRow> {
   const data = (row.data ?? {}) as Record<string, unknown>
   const images = entryImages(data)
+  const uid = userId
   for (const img of images) {
     if (img.dataUrl) continue
-    const path = img.storagePath ?? (userId ? storagePathFor(userId, img.id) : null)
+    // Resolve the download path against the CURRENT user's own folder. Storage
+    // RLS only permits reading `<auth.uid()>/...`, so a `storagePath` whose
+    // first segment is a different (foreign/stale) uid would 400. Trust the
+    // embedded path only when it's already in this user's folder; otherwise use
+    // this user's deterministic own path.
+    const own = uid ? storagePathFor(uid, img.id) : null
+    const embedded =
+      uid && img.storagePath && img.storagePath.trim() && img.storagePath.split('/')[0] === uid
+        ? img.storagePath
+        : null
+    const path = embedded ?? own
     if (!path) continue
     const cached = cache.get(img.id)
     img.dataUrl = cached ?? (await downloadImage(path))
@@ -443,6 +524,9 @@ export async function startSync(uid: string): Promise<void> {
   }
   useSync.getState().setStatus('idle')
   await runSync()
+  // Repair any local images missing from this user's Storage folder. Fire and
+  // forget so it never blocks sign-in or the UI (no-op on web).
+  void backfillImages(uid)
   if (!poll) poll = setInterval(() => void runSync(), POLL_MS)
   window.addEventListener('online', onOnline)
 }
