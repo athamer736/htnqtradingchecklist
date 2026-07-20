@@ -11,6 +11,7 @@ function cleanTrade(trade: TradeRecord): TradeRecord {
     entryTimeframe: sanitizeName(trade.entryTimeframe),
     contract: sanitizeName(trade.contract),
     session: sanitizeName(trade.session),
+    mmxm: sanitizeName(trade.mmxm),
     notes: sanitizeText(trade.notes)
   }
 }

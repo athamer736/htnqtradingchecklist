@@ -8,6 +8,17 @@ import type { TradeRecord } from '../types'
 const RESULTS: TradeRecord['result'][] = ['win', 'loss', 'be']
 const SESSIONS = ['Asia', 'London', 'NY AM', 'NY PM', 'Other']
 
+// MMXM (market maker model) used, from highest to lowest timeframe.
+const MMXM_OPTIONS = [
+  'Weekly MMXM',
+  'Daily MMXM',
+  'H4 MMXM',
+  'H1 MMXM',
+  'M15 MMXM',
+  'M5 MMXM',
+  'M1 MMXM'
+]
+
 // Common CME / CME Group futures contracts.
 const CME_CONTRACTS = [
   'NQ',
@@ -55,6 +66,7 @@ function emptyTrade(): TradeRecord {
     result: 'win',
     rMultiple: null,
     session: 'NY AM',
+    mmxm: '',
     notes: ''
   }
 }
@@ -156,6 +168,7 @@ function TradeDetails({ t }: { t: TradeRecord }): JSX.Element {
         <DetailItem label="Points lows" value={fmt(t.lowsPoints)} />
         <DetailItem label="Points bias" value={biasEl} />
         <DetailItem label="Session" value={t.session} />
+        <DetailItem label="MMXM" value={t.mmxm || '-'} />
         <DetailItem label="Result" value={t.result.toUpperCase()} />
         <DetailItem label="Date" value={t.tradedAt} />
       </div>
@@ -450,6 +463,22 @@ export default function JournalView(): JSX.Element {
               >
                 {STARTING_TIMEFRAMES.map((tf) => (
                   <option key={tf} value={`${tf} FVG`}>{`${tf} FVG`}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">MMXM used</label>
+              <select
+                className="field"
+                value={draft.mmxm ?? ''}
+                onChange={(e) => update('mmxm', e.target.value)}
+              >
+                <option value="">None</option>
+                {MMXM_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
               </select>
             </div>

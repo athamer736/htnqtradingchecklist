@@ -17,6 +17,7 @@ export interface TradeRecord {
   result: 'win' | 'loss' | 'be'
   rMultiple: number | null
   session: string
+  mmxm?: string
   notes: string
   // Sync metadata (stamped by the local store on write).
   updatedAt?: string

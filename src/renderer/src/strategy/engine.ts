@@ -91,6 +91,11 @@ function buildTpdPath(rule: TpdPathRule, pathId: string): TreeNode {
     children: [rl]
   }
 
+  // An M1 TPD sits at the terminal timeframe, so it is itself tradable.
+  if (rule.tpd === TERMINAL_TIMEFRAME) {
+    tpd.extra = 'You can also use this as your entry.'
+  }
+
   return tpd
 }
 
@@ -198,7 +203,7 @@ export function nextSteps(node: TreeNode): NextStep[] {
     let cursor: TreeNode | undefined = child
     let entryTf: Timeframe | null = null
     // Each branch is a linear chain (single child) until it reaches the entry RL
-    // (or a terminal node, e.g. the Micro SMT).
+    // (or a terminal node with no entry, should a rule ever omit its TPD/MMXM).
     while (cursor) {
       steps.push(cursor.label)
       if (cursor.isEntry) {

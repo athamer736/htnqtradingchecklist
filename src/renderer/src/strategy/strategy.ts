@@ -62,14 +62,14 @@ export interface TpdPathRule {
 }
 
 // FVG (keyed by its timeframe) -> SMT confluence chain.
-// The Micro SMT is terminal: the tree ends there (no M1 TPD after it).
+// Every SMT resolves into a TPD -> MMXM (a new RL entry); there are no terminal
+// SMT leaves. The low timeframes (M15/M5) rely on their TPD path instead, so a
+// branch always bottoms out on an RL entry (or a TPD), never a bare SMT.
 export const SMT_PATH: Partial<Record<Timeframe, SmtPathRule>> = {
   Weekly: { smt: 'Monthly', tpd: 'H4', mmxm: 'H1' },
   Daily: { smt: 'Weekly', tpd: 'H1', mmxm: 'M15' },
   H4: { smt: 'Daily', tpd: 'M15', mmxm: 'M5' },
-  H1: { smt: '90m', tpd: 'M5', mmxm: 'M1' },
-  M15: { smt: 'Micro' },
-  M5: { smt: 'Micro' }
+  H1: { smt: '90m', tpd: 'M5', mmxm: 'M1' }
 }
 
 // FVG (keyed by its timeframe) -> TPD confluence chain.
@@ -78,7 +78,9 @@ export const TPD_PATH: Partial<Record<Timeframe, TpdPathRule>> = {
   Daily: { tpd: 'H4', mmxm: 'H1' },
   H4: { tpd: 'H1', mmxm: 'M15' },
   H1: { tpd: 'M15', mmxm: 'M5' },
-  M15: { tpd: 'M5', mmxm: 'M1' }
+  M15: { tpd: 'M5', mmxm: 'M1' },
+  // M5 FVG/RL bottoms out on an M1 TPD forming the M1 RL entry.
+  M5: { tpd: 'M1', mmxm: 'M1' }
 }
 
 // Timeframes the user can pick as "what I just spotted" (a starting FVG/RL).

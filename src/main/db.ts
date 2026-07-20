@@ -35,6 +35,7 @@ export interface TradeRecord {
   result: 'win' | 'loss' | 'be'
   rMultiple: number | null
   session: string
+  mmxm?: string
   notes: string
   updatedAt?: string
   deletedAt?: string | null
@@ -70,11 +71,13 @@ export function initDb(): void {
       result TEXT,
       rMultiple REAL,
       session TEXT,
+      mmxm TEXT,
       notes TEXT
     );
   `)
   ensureColumn('highsPoints', 'REAL')
   ensureColumn('lowsPoints', 'REAL')
+  ensureColumn('mmxm', 'TEXT')
   ensureColumn('updatedAt', 'TEXT')
   ensureColumn('deletedAt', 'TEXT')
   ensureColumn('dirty', 'INTEGER NOT NULL DEFAULT 0')
@@ -575,11 +578,11 @@ export function saveTrade(t: TradeRecord): TradeRecord[] {
     `INSERT INTO trades (
       id, createdAt, startSetup, entryTimeframe, direction, contract, contracts,
       entryPrice, tpPoints, slPoints, dollarRisk, dollarTp, highsPoints, lowsPoints,
-      tradedAt, result, rMultiple, session, notes, updatedAt, deletedAt, dirty
+      tradedAt, result, rMultiple, session, mmxm, notes, updatedAt, deletedAt, dirty
     ) VALUES (
       @id, @createdAt, @startSetup, @entryTimeframe, @direction, @contract, @contracts,
       @entryPrice, @tpPoints, @slPoints, @dollarRisk, @dollarTp, @highsPoints, @lowsPoints,
-      @tradedAt, @result, @rMultiple, @session, @notes, @updatedAt, NULL, 1
+      @tradedAt, @result, @rMultiple, @session, @mmxm, @notes, @updatedAt, NULL, 1
     )
     ON CONFLICT(id) DO UPDATE SET
       startSetup=excluded.startSetup,
@@ -598,11 +601,12 @@ export function saveTrade(t: TradeRecord): TradeRecord[] {
       result=excluded.result,
       rMultiple=excluded.rMultiple,
       session=excluded.session,
+      mmxm=excluded.mmxm,
       notes=excluded.notes,
       updatedAt=excluded.updatedAt,
       deletedAt=NULL,
       dirty=1`
-  ).run({ ...t, updatedAt: t.updatedAt ?? nowIso() })
+  ).run({ ...t, mmxm: t.mmxm ?? null, updatedAt: t.updatedAt ?? nowIso() })
   return listTrades()
 }
 
@@ -799,11 +803,11 @@ function applyRemoteRow(r: SyncRow): void {
         `INSERT INTO trades (
           id, createdAt, startSetup, entryTimeframe, direction, contract, contracts,
           entryPrice, tpPoints, slPoints, dollarRisk, dollarTp, highsPoints, lowsPoints,
-          tradedAt, result, rMultiple, session, notes, updatedAt, deletedAt, dirty
+          tradedAt, result, rMultiple, session, mmxm, notes, updatedAt, deletedAt, dirty
         ) VALUES (
           @id, @createdAt, @startSetup, @entryTimeframe, @direction, @contract, @contracts,
           @entryPrice, @tpPoints, @slPoints, @dollarRisk, @dollarTp, @highsPoints, @lowsPoints,
-          @tradedAt, @result, @rMultiple, @session, @notes, @updatedAt, @deletedAt, 0
+          @tradedAt, @result, @rMultiple, @session, @mmxm, @notes, @updatedAt, @deletedAt, 0
         )
         ON CONFLICT(id) DO UPDATE SET
           startSetup=excluded.startSetup, entryTimeframe=excluded.entryTimeframe,
@@ -811,7 +815,7 @@ function applyRemoteRow(r: SyncRow): void {
           entryPrice=excluded.entryPrice, tpPoints=excluded.tpPoints, slPoints=excluded.slPoints,
           dollarRisk=excluded.dollarRisk, dollarTp=excluded.dollarTp, highsPoints=excluded.highsPoints,
           lowsPoints=excluded.lowsPoints, tradedAt=excluded.tradedAt, result=excluded.result,
-          rMultiple=excluded.rMultiple, session=excluded.session, notes=excluded.notes,
+          rMultiple=excluded.rMultiple, session=excluded.session, mmxm=excluded.mmxm, notes=excluded.notes,
           updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt, dirty=0`
       ).run({
         id: r.id,
@@ -832,6 +836,7 @@ function applyRemoteRow(r: SyncRow): void {
         result: d.result ?? null,
         rMultiple: d.rMultiple ?? null,
         session: d.session ?? null,
+        mmxm: d.mmxm ?? null,
         notes: d.notes ?? null,
         updatedAt: r.updatedAt,
         deletedAt

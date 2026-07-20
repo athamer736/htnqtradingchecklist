@@ -15,6 +15,19 @@ function BlockView({ block }: { block: Block }): JSX.Element {
       </ul>
     )
   }
+  if (block.kind === 'link') {
+    return (
+      <button
+        onClick={() => void window.htnq.openExternal(block.url)}
+        className="inline-flex w-fit items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm font-medium text-accent transition hover:bg-accent/20"
+      >
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M8 5v14l11-7z" strokeLinejoin="round" />
+        </svg>
+        {block.text ?? 'Watch this video to learn'}
+      </button>
+    )
+  }
   return <p className="text-sm leading-relaxed text-slate-300">{block.text}</p>
 }
 
