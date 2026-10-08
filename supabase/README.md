@@ -116,8 +116,54 @@ the app.)
 - The function reads the user's Discord id from their linked identity, asks
   Discord `GET /guilds/{guildId}/members/{discordId}` with the bot token
   (200 = member, 404 = not), and upserts `authorized_members`.
+- It also replaces `member_levels` from Discord Level roles (atomic delete+insert;
+  failures clear levels so **video** access fails closed).
 - If the user has no Discord identity (email/password admins), the function
   returns `no-discord-identity` and writes nothing - the seed row from step 8 is
-  what keeps those accounts working.
-- RLS requires a fresh (`< 7 days`) positive verdict, so access lapses
-  automatically if someone leaves the server and stops re-verifying.
+  what keeps those accounts working for journal/sync.
+- RLS requires a fresh (`< 7 days`) positive verdict for sync data. **Video
+  playback does not use that 7-day window** — see below.
+
+---
+
+# Mentorship videos
+
+Protected videos need additional server secrets and the video tables from
+`migrations/20261008_video_platform.sql` (also appended to `schema.sql`).
+
+## 10. Extra secrets for videos
+
+```
+supabase secrets set \
+  DISCORD_ROLE_LEVEL_1=<role-id> \
+  DISCORD_ROLE_LEVEL_2=<role-id> \
+  DISCORD_ROLE_LEVEL_3=<role-id> \
+  MENTORSHIP_API_BASE_URL=https://<railway-service> \
+  MENTORSHIP_API_TOKEN=<dedicated-token> \
+  BUNNY_STREAM_LIBRARY_ID=<library-id> \
+  BUNNY_STREAM_TOKEN_KEY=<token-authentication-key>
+```
+
+Never put these in `VITE_` client env. Details: [`docs/video-platform.md`](../docs/video-platform.md).
+Bot API contract: [`docs/bot-handoff-member-access-api.md`](../docs/bot-handoff-member-access-api.md).
+
+## 11. Deploy video functions
+
+```
+supabase functions deploy verify-membership
+supabase functions deploy list-videos
+supabase functions deploy issue-playback-token
+```
+
+Until `MENTORSHIP_API_*` and Bunny secrets are set, playback fails closed with a
+clear “not configured / unavailable” message. Local journals keep working.
+
+## 12. Staff video path (optional)
+
+Email/password accounts have no Discord identity. To grant staff viewing without
+fabricating a customer:
+
+```sql
+insert into public.video_staff_access (user_id, label, levels)
+values ('<auth-user-uuid>', 'HTNQ Staff', '{1,2,3}');
+```

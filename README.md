@@ -36,6 +36,20 @@ VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
+## Mentorship videos (optional, online-only)
+
+Protected lessons live under the **Videos** sidebar entry. Playback always
+requires online authorisation (Discord roles + mentorship bot API + Bunny signed
+embed), even when the rest of the app works offline.
+
+- Architecture, secrets, watermark limits: [`docs/video-platform.md`](docs/video-platform.md)
+- Railway bot API handoff: [`docs/bot-handoff-member-access-api.md`](docs/bot-handoff-member-access-api.md)
+- Launch checklist: [`docs/launch-checklist.md`](docs/launch-checklist.md)
+
+```bash
+npm test   # contract / signing / role-mapping unit tests (mocked)
+```
+
 ## Build a distributable .exe
 
 ```bash

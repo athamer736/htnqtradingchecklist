@@ -4,7 +4,14 @@ import { useConfirm } from './ConfirmProvider'
 import SyncStatus from './SyncStatus'
 import logo from '../assets/htnq-logo.png'
 
-export type ViewId = 'start' | 'learn' | 'points' | 'reference' | 'journal' | 'data'
+export type ViewId =
+  | 'start'
+  | 'learn'
+  | 'videos'
+  | 'points'
+  | 'reference'
+  | 'journal'
+  | 'data'
 
 interface NavItem {
   id: ViewId
@@ -32,6 +39,17 @@ const items: NavItem[] = [
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
         <path d="M4 5h6a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H4z" strokeLinejoin="round" />
         <path d="M20 5h-6a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h6z" strokeLinejoin="round" />
+      </svg>
+    )
+  },
+  {
+    id: 'videos',
+    label: 'Videos',
+    hint: 'Mentorship lessons',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path d="M10 9.5v5l4.5-2.5z" fill="currentColor" stroke="none" />
       </svg>
     )
   },

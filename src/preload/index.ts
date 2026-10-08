@@ -43,6 +43,11 @@ const api = {
   auth: {
     startDiscord: (authUrl: string) => ipcRenderer.invoke('auth:startDiscord', authUrl)
   },
+  contentProtection: {
+    // Best-effort capture deterrent while a mentorship video plays. Not DRM;
+    // availability varies by OS. See docs/video-platform.md.
+    set: (on: boolean) => ipcRenderer.invoke('window:setContentProtection', on)
+  },
   updates: {
     getStatus: () => ipcRenderer.invoke('update:getStatus'),
     subscribe: (cb: (status: unknown) => void) => {

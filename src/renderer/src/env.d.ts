@@ -61,6 +61,9 @@ interface HtnqApi {
   auth: {
     startDiscord: (authUrl: string) => Promise<{ code?: string; error?: string }>
   }
+  contentProtection?: {
+    set: (on: boolean) => Promise<boolean>
+  }
   updates?: {
     getStatus: () => Promise<UpdateStatus | null>
     subscribe: (cb: (status: UpdateStatus) => void) => () => void

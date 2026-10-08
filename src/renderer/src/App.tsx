@@ -11,6 +11,7 @@ import PointsView from './views/PointsView'
 import ReferenceView from './views/ReferenceView'
 import JournalView from './views/JournalView'
 import DataView from './views/DataView'
+import VideosView from './views/VideosView'
 import { useTrades } from './store/useTrades'
 import { useDataCollection } from './store/useDataCollection'
 import { useAuth } from './store/useAuth'
@@ -75,6 +76,7 @@ export default function App(): JSX.Element {
         <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pl-12'}`}>
           {view === 'start' && <StartView />}
           {view === 'learn' && <LearnView />}
+          {view === 'videos' && <VideosView />}
           {view === 'points' && <PointsView />}
           {view === 'reference' && <ReferenceView />}
           {view === 'journal' && <JournalView />}
