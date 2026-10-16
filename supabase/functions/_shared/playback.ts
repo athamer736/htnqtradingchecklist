@@ -12,7 +12,9 @@ import {
 } from './decisions.ts'
 import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
 import {
+  MENTORSHIP_MAX_RECHECK_SECONDS,
   mapMentorshipDenyToPlayback,
+  normaliseLegalName,
   usableLegalName,
   type MentorshipLookupResult
 } from './mentorshipApi.ts'
@@ -114,6 +116,7 @@ export async function runPlayback(
     return denied(code)
   }
 
+  // Always the Discord ID from the verified linked identity, never the request.
   const mentorship = await deps.checkMentorship(auth.discordId)
   if (mentorship.kind !== 'allowed') {
     const code: DenyCode =
@@ -123,7 +126,18 @@ export async function runPlayback(
           ? 'service_unavailable'
           : mapMentorshipDenyToPlayback(mentorship.body.reason_code)
     await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: code })
-    return denied(code)
+    const out = denied(code)
+    if (mentorship.kind === 'unavailable' && mentorship.retryAfterSeconds) {
+      out.body.retryAfterSeconds = mentorship.retryAfterSeconds
+    }
+    return out
+  }
+
+  // A staff_record name is only valid alongside a live staff role. Without
+  // one there is no customer entitlement either (the bot prefers signed_nda).
+  if (mentorship.body.identity_source === 'staff_record' && !auth.caps.isStaff) {
+    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'staff_record_without_role' })
+    return denied('membership_inactive')
   }
 
   const legalName = mentorship.body.legal_name
@@ -132,7 +146,8 @@ export async function runPlayback(
     return denied('name_unavailable')
   }
 
-  const expiresAt = Math.floor(deps.now() / 1000) + deps.ttlSeconds
+  const grant = playbackGrantWindow(mentorship.body.recheck_after_seconds, deps.ttlSeconds, deps.renewLeadSeconds)
+  const expiresAt = Math.floor(deps.now() / 1000) + grant.embedTtlSeconds
   const embedUrl = await deps.signEmbed(bunnyVideoId, expiresAt)
   await deps.audit({
     ...base,
@@ -149,8 +164,33 @@ export async function runPlayback(
       itemId: request.id,
       embedUrl,
       expiresAt,
-      renewAfterSeconds: Math.max(deps.ttlSeconds - deps.renewLeadSeconds, 30),
-      watermark: { legalName: legalName.trim(), discordId: auth.discordId, sessionRef }
+      renewAfterSeconds: grant.renewAfterSeconds,
+      accessValidForSeconds: grant.accessValidForSeconds,
+      watermark: { legalName: normaliseLegalName(legalName), discordId: auth.discordId, sessionRef }
     }
+  }
+}
+
+const MIN_ACCESS_VALID_SECONDS = 30
+
+/**
+ * How long an allowed decision may be used. Access lapses after the bot's
+ * recheck interval (never more than 300 s); the client renews early enough
+ * to leave room for a bounded retry before that deadline.
+ */
+export function playbackGrantWindow(
+  recheckAfterSeconds: number,
+  ttlSeconds: number,
+  renewLeadSeconds: number
+): { accessValidForSeconds: number; renewAfterSeconds: number; embedTtlSeconds: number } {
+  const accessValidForSeconds = Math.max(
+    Math.min(recheckAfterSeconds, MENTORSHIP_MAX_RECHECK_SECONDS),
+    MIN_ACCESS_VALID_SECONDS
+  )
+  const lead = Math.min(renewLeadSeconds, Math.floor(accessValidForSeconds / 2))
+  return {
+    accessValidForSeconds,
+    renewAfterSeconds: Math.max(accessValidForSeconds - lead, 15),
+    embedTtlSeconds: Math.min(ttlSeconds, accessValidForSeconds + renewLeadSeconds)
   }
 }
