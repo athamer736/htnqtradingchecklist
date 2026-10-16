@@ -74,7 +74,16 @@ supabase functions delete list-videos
 1. Enable **Embed view token authentication** on the library.
 2. `BUNNY_STREAM_TOKEN_KEY` = the library **Token Authentication key**.
 3. `BUNNY_STREAM_API_KEY` = the library **API key** (Stream → library → API).
-4. Prefer blocking unsigned embeds / hotlinking.
+4. Leave **Allowed domains** empty: the player sends no referrer and the desktop app has
+   no web origin, so a domain allow-list would block playback. Token authentication
+   protects each embed.
+5. Turn on **MediaCage Basic DRM** (free) before the first upload. It blocks easy
+   downloads and only allows embed playback, which is the only route the platform uses.
+   Keep MP4 fallback off. It does not stop screen recording; the watermark is the
+   deterrent for that.
+6. **MediaCage Enterprise DRM** (from $99/month) is not recommended for now: stock
+   Electron has no Widevine CDM, so the Windows app could not play protected videos
+   without moving to a Widevine-enabled Electron build.
 
 ### Railway bot
 
