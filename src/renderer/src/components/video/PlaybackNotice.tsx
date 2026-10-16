@@ -39,8 +39,7 @@ export default function PlaybackNotice({
       )}
       {temporary && (
         <p className="mt-2 text-xs text-sky-100/80">
-          This is not a decision about your membership. Nothing has changed on your account, and
-          your local journal still works offline.
+          This is not a decision about your membership, and nothing has changed on your account.
           {error.retryAfterSeconds ? ` Try again in about ${error.retryAfterSeconds} seconds.` : ''}
         </p>
       )}
