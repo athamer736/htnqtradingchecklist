@@ -14,11 +14,17 @@ import {
   type UploadTarget,
   type Visibility
 } from '../../../shared/video'
+import {
+  afterRenewFailure,
+  grantFromSuccess,
+  playbackTick,
+  type PlaybackGrant
+} from '../../../shared/playbackSession'
 
 // Everything here is in memory only. Watermark legal names in particular must
 // never be written to localStorage.
 
-export type Failure = { ok: false; reasonCode: string; message: string }
+export type Failure = { ok: false; reasonCode: string; message: string; retryAfterSeconds?: number }
 type Result<T> = ({ ok: true } & T) | Failure
 
 export type ManageAction =
@@ -70,11 +76,20 @@ function toFailure(body: Record<string, unknown> | null, fallback = PLAYBACK_MES
   const reasonCode = typeof body.reasonCode === 'string' ? body.reasonCode : 'service_unavailable'
   const message =
     typeof body.message === 'string' && body.message ? body.message : messageFor(reasonCode, fallback)
-  return { ok: false, reasonCode, message }
+  const retry = body.retryAfterSeconds
+  return typeof retry === 'number' && retry > 0
+    ? { ok: false, reasonCode, message, retryAfterSeconds: Math.min(retry, 300) }
+    : { ok: false, reasonCode, message }
 }
 
 function isPlaybackSuccess(body: Record<string, unknown> | null): body is Record<string, unknown> & PlaybackSuccess {
-  return Boolean(body && body.ok === true && typeof body.embedUrl === 'string' && body.watermark)
+  return Boolean(
+    body &&
+      body.ok === true &&
+      typeof body.embedUrl === 'string' &&
+      typeof body.accessValidForSeconds === 'number' &&
+      body.watermark
+  )
 }
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -93,6 +108,9 @@ interface MentorshipState {
   recordings: StudentRecording[]
 
   playing: PlaybackSuccess | null
+  /** When the open player must re-check access, and when its permission lapses. */
+  grant: PlaybackGrant | null
+  renewing: boolean
   playTarget: PlaybackTarget | null
   playError: PlaybackDenied | null
   playLoading: boolean
@@ -103,6 +121,8 @@ interface MentorshipState {
   searchStudents: (query: string) => Promise<Result<{ students: StudentSummary[] }>>
   play: (target: PlaybackTarget) => Promise<void>
   renew: () => Promise<void>
+  /** Called periodically by the open player: renews when due, closes when access lapsed. */
+  tick: () => void
   stop: () => void
   manage: (kind: 'video' | 'recording', id: string, action: ManageAction) => Promise<Result<object>>
   createUpload: (req: CreateUploadRequest) => Promise<UploadCredentials | Failure>
@@ -120,9 +140,19 @@ const initial = {
   recordingsStudentId: null,
   recordings: [],
   playing: null,
+  grant: null,
+  renewing: false,
   playTarget: null,
   playError: null,
   playLoading: false
+}
+
+const CLOSED = { playing: null, grant: null, renewing: false, playTarget: null }
+
+const ACCESS_EXPIRED: PlaybackDenied = {
+  ok: false,
+  reasonCode: 'access_expired',
+  message: PLAYBACK_MESSAGES.access_expired
 }
 
 export const useMentorship = create<MentorshipState>((set, get) => ({
@@ -192,43 +222,57 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
       target.kind === 'video' ? { videoId: target.id } : { recordingId: target.id }
     )
     if (isPlaybackSuccess(body)) {
-      set({ playLoading: false, playing: body, playError: null })
+      set({ playLoading: false, playing: body, grant: grantFromSuccess(body, Date.now()), renewing: false, playError: null })
       return
     }
-    set({
-      playLoading: false,
-      playing: null,
-      playTarget: null,
-      playError: toFailure(body) as PlaybackDenied
-    })
+    set({ ...CLOSED, playLoading: false, playError: toFailure(body) as PlaybackDenied })
   },
 
   // Renewal re-runs every server check (Discord roles, Railway mentorship
   // status). The running player keeps its original embed so the video does not
   // restart; if access was revoked the player is closed.
   renew: async () => {
-    const { playing, playTarget } = get()
-    if (!playing || !playTarget) return
+    const { playing, playTarget, renewing } = get()
+    if (!playing || !playTarget || renewing) return
+    set({ renewing: true })
     const body = await invoke(
       'issue-playback-token',
       playTarget.kind === 'video' ? { videoId: playTarget.id } : { recordingId: playTarget.id }
     )
-    if (get().playing !== playing) return
+    const current = get()
+    if (current.playing !== playing || !current.grant) return
     if (isPlaybackSuccess(body)) {
       set({
+        renewing: false,
+        grant: grantFromSuccess(body, Date.now()),
         playing: {
           ...playing,
           expiresAt: body.expiresAt,
           renewAfterSeconds: body.renewAfterSeconds,
+          accessValidForSeconds: body.accessValidForSeconds,
           watermark: body.watermark
         }
       })
       return
     }
-    set({ playing: null, playTarget: null, playError: toFailure(body) as PlaybackDenied })
+    const failure = toFailure(body)
+    const step = afterRenewFailure(current.grant, failure, Date.now())
+    if (step.action === 'retry') {
+      set({ renewing: false, grant: step.grant })
+      return
+    }
+    set({ ...CLOSED, playError: failure as PlaybackDenied })
   },
 
-  stop: () => set({ playing: null, playTarget: null, playError: null, playLoading: false }),
+  tick: () => {
+    const { grant, renewing, playing } = get()
+    if (!grant || !playing) return
+    const action = playbackTick(grant, Date.now(), renewing)
+    if (action === 'expire') set({ ...CLOSED, playError: ACCESS_EXPIRED })
+    else if (action === 'renew') void get().renew()
+  },
+
+  stop: () => set({ ...CLOSED, playError: null, playLoading: false }),
 
   manage: async (kind, id, action) => {
     const body = await invoke('manage-content', { kind, id, ...action })
