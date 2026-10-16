@@ -1,10 +1,24 @@
 import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { useConfirm } from './ConfirmProvider'
+import { useMentorship } from '../store/useMentorship'
+import { levelsInclude, type VideoLevel } from '../../../shared/video'
 import SyncStatus from './SyncStatus'
 import logo from '../assets/htnq-logo.png'
 
-export type ViewId = 'start' | 'learn' | 'points' | 'reference' | 'journal' | 'data'
+export type ViewId =
+  | 'start'
+  | 'learn'
+  | 'level1'
+  | 'level2'
+  | 'level3'
+  | 'lectures'
+  | 'weekly'
+  | 'recordings'
+  | 'points'
+  | 'reference'
+  | 'journal'
+  | 'data'
 
 interface NavItem {
   id: ViewId
@@ -82,6 +96,108 @@ const items: NavItem[] = [
   }
 ]
 
+const LEARN_INDEX = items.findIndex((i) => i.id === 'learn')
+
+const MENTORSHIP_LEVELS: { id: ViewId; level: VideoLevel }[] = [
+  { id: 'level1', level: 1 },
+  { id: 'level2', level: 2 },
+  { id: 'level3', level: 3 }
+]
+
+const playIcon = (
+  <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.6">
+    <rect x="3" y="6" width="18" height="12" rx="2" />
+    <path d="M10 9.5v5l4.5-2.5z" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+const lockIcon = (
+  <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" stroke="currentColor" strokeWidth="1.8" aria-label="Locked">
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </svg>
+)
+
+function NavButton({
+  item,
+  active,
+  onChange
+}: {
+  item: NavItem
+  active: ViewId
+  onChange: (v: ViewId) => void
+}): JSX.Element {
+  const isActive = active === item.id
+  return (
+    <button
+      onClick={() => onChange(item.id)}
+      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 active:scale-[0.98] ${
+        isActive
+          ? 'bg-bg-hover text-white shadow-card'
+          : 'text-muted hover:translate-x-0.5 hover:bg-bg-hover/60 hover:text-slate-200'
+      }`}
+    >
+      <span className={isActive ? 'text-accent' : 'text-muted group-hover:text-slate-300'}>
+        {item.icon}
+      </span>
+      <span className="flex flex-col">
+        <span className="text-sm font-medium">{item.label}</span>
+        <span className="text-[11px] text-muted">{item.hint}</span>
+      </span>
+    </button>
+  )
+}
+
+function MentorshipNav({
+  active,
+  onChange
+}: {
+  active: ViewId
+  onChange: (v: ViewId) => void
+}): JSX.Element {
+  const caps = useMentorship((s) => s.capabilities)
+  const isStaff = Boolean(caps?.isStaff)
+  // Locks are a hint only; every list and playback request is re-checked server-side.
+  const sectionLocked = Boolean(caps && !caps.isStaff && !caps.isStudent)
+  const entries: { id: ViewId; label: string; locked: boolean }[] = [
+    ...MENTORSHIP_LEVELS.map(({ id, level }) => ({
+      id,
+      label: `Level ${level}`,
+      locked: Boolean(caps && !caps.isStaff && (!caps.isStudent || !levelsInclude(caps.levels, level)))
+    })),
+    { id: 'lectures', label: 'Lectures', locked: sectionLocked },
+    { id: 'weekly', label: 'Weekly Recaps & Outlooks', locked: sectionLocked },
+    { id: 'recordings', label: isStaff ? 'Student Recordings' : 'My Recordings', locked: sectionLocked }
+  ]
+
+  return (
+    <div className="mt-1 flex flex-col gap-0.5">
+      <div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted/80">
+        {playIcon}
+        Mentorship
+      </div>
+      {entries.map((e) => {
+        const isActive = active === e.id
+        return (
+          <button
+            key={e.id}
+            title={e.locked ? `${e.label} (locked)` : e.label}
+            onClick={() => onChange(e.id)}
+            className={`flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-left text-sm transition-all duration-150 active:scale-[0.98] ${
+              isActive
+                ? 'bg-bg-hover font-medium text-white shadow-card'
+                : 'text-muted hover:translate-x-0.5 hover:bg-bg-hover/60 hover:text-slate-200'
+            } ${e.id === 'recordings' ? 'mt-1' : ''}`}
+          >
+            <span className="flex-1 truncate">{e.label}</span>
+            {e.locked && <span className="text-muted/70">{lockIcon}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Sidebar({
   active,
   onChange,
@@ -146,32 +262,18 @@ export default function Sidebar({
           </button>
         </div>
 
-      <nav className="mt-2 flex flex-col gap-1 px-3">
-        {items.map((item) => {
-          const isActive = active === item.id
-          return (
-            <button
-              key={item.id}
-              onClick={() => onChange(item.id)}
-              className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 active:scale-[0.98] ${
-                isActive
-                  ? 'bg-bg-hover text-white shadow-card'
-                  : 'text-muted hover:translate-x-0.5 hover:bg-bg-hover/60 hover:text-slate-200'
-              }`}
-            >
-              <span className={isActive ? 'text-accent' : 'text-muted group-hover:text-slate-300'}>
-                {item.icon}
-              </span>
-              <span className="flex flex-col">
-                <span className="text-sm font-medium">{item.label}</span>
-                <span className="text-[11px] text-muted">{item.hint}</span>
-              </span>
-            </button>
-          )
-        })}
+      <nav className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-2">
+        {items.slice(0, LEARN_INDEX + 1).map((item) => (
+          <NavButton key={item.id} item={item} active={active} onChange={onChange} />
+        ))}
+        <MentorshipNav active={active} onChange={onChange} />
+        <div className="mt-1" />
+        {items.slice(LEARN_INDEX + 1).map((item) => (
+          <NavButton key={item.id} item={item} active={active} onChange={onChange} />
+        ))}
       </nav>
 
-      <div className="mt-auto px-5 py-4 text-[11px] leading-relaxed text-muted/70">
+      <div className="shrink-0 px-5 py-4 text-[11px] leading-relaxed text-muted/70">
         <SyncStatus />
         <div className="font-medium text-muted">HTNQ Ltd</div>
         <div className="mt-0.5">Coded by TH55MER</div>

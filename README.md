@@ -36,6 +36,34 @@ VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
+## Mentorship content (online-only)
+
+The **Mentorship** sidebar group (after Learn) has Level 1, Level 2, Level 3,
+Lectures, Weekly Recaps & Outlooks, and Student Recordings (staff) or My
+Recordings (students). Access follows live Discord roles: higher Level roles
+include the lower levels, mentors and admins upload directly from the app, and
+every video plays with a legal-name + Discord ID watermark after the mentorship
+bot confirms access. Playback always needs an online check, even though the
+rest of the app works offline.
+
+- Architecture, roles, uploads, secrets, watermark limits: [`docs/video-platform.md`](docs/video-platform.md)
+- Railway bot API handoff: [`docs/bot-handoff-member-access-api.md`](docs/bot-handoff-member-access-api.md)
+- Launch checklist: [`docs/launch-checklist.md`](docs/launch-checklist.md)
+
+```bash
+npm test   # roles, permissions, validation, playback pipeline, signing (all mocked)
+```
+
+## Web app
+
+The browser version is published to [app.htnq.org](https://app.htnq.org) by
+[`.github/workflows/deploy-web.yml`](.github/workflows/deploy-web.yml). Setup and
+DNS steps: [`docs/web-hosting.md`](docs/web-hosting.md).
+
+```bash
+npm run build:web   # single-file build in dist-web/
+```
+
 ## Build a distributable .exe
 
 ```bash
@@ -46,36 +74,11 @@ npm run dist:portable # portable .exe only
 Output appears in the `dist/` folder. Without a code-signing certificate, Windows SmartScreen will
 show a "More info -> Run anyway" prompt on first launch for other users.
 
-## macOS build
+## macOS and other platforms
 
-The macOS app (`.dmg` for Apple Silicon `arm64` and Intel `x64`) is built by a GitHub Actions
-runner rather than locally, because the native `better-sqlite3` module must be compiled on macOS.
-
-To cut a Mac release from Windows, push a version tag:
-
-```bash
-git tag v<version>
-git push --tags
-```
-
-The [`Release macOS`](.github/workflows/release.yml) workflow builds on `macos-latest` and attaches
-the `.dmg` files to the GitHub release. You can also trigger it manually from the Actions tab
-(`workflow_dispatch`). To build locally on a Mac instead, run `npm run dist:mac`.
-
-### Installing on macOS (unsigned)
-
-The Mac build is not code-signed or notarized, so Gatekeeper blocks it on first launch. Users open it
-once with either method:
-
-- Right-click (or Control-click) the app in `Applications` and choose **Open**, then confirm.
-- Or clear the quarantine flag in Terminal:
-
-  ```bash
-  xattr -cr "/Applications/HTNQ Trading Checklist.app"
-  ```
-
-Because the build is unsigned, macOS auto-update is disabled: Mac users update by downloading the
-latest `.dmg`. (Windows auto-update is unaffected.)
+There is no macOS desktop build. Mac (and Linux, phone and tablet) users use the web app at
+[app.htnq.org](https://app.htnq.org), which has the same tools, cloud sync and mentorship content.
+See [`docs/web-hosting.md`](docs/web-hosting.md).
 
 ## Auto-update (installed app)
 

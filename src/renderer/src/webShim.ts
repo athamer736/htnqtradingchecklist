@@ -550,6 +550,10 @@ if (!window.htnq) {
     // invoked here; provide a stub to satisfy the shared preload API shape.
     auth: {
       startDiscord: async () => ({ error: 'not-supported-on-web' })
+    },
+    // Browser build: no OS capture protection API.
+    contentProtection: {
+      set: async () => false
     }
   }
 }

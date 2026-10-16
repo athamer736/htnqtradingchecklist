@@ -61,8 +61,9 @@ The steps below are one-time. Do them in order.
    (replace `<project-ref>` with your Supabase project ref, the subdomain of
    your Project URL). Save.
 4. Open **Bot** -> **Add Bot**. Copy the **Bot Token** (you'll need it in
-   step 9). No privileged gateway intents are required - reading a single
-   member uses the REST API only.
+   step 9). Turn on **Server Members Intent** (Privileged Gateway Intents):
+   the staff Student Recordings picker searches guild members, which Discord
+   only allows with that intent. Reading a single member's roles does not need it.
 5. Invite the bot to your mentorship server. Open **OAuth2 -> URL Generator**,
    tick scope **`bot`** (no permissions needed), copy the generated URL, open it
    in a browser, and add the bot to the mentorship server.
@@ -74,8 +75,8 @@ The steps below are one-time. Do them in order.
 2. Toggle it on and paste the **Client ID** and **Client Secret** from step 6.
    Save.
 3. Go to **Authentication -> URL Configuration -> Redirect URLs** and add BOTH:
-   - your web app's site URL (e.g. `https://yourname.github.io/htnq/` - the page
-     the web build is served from), and
+   - the web app URL `https://app.htnq.org/` (also set it as the **Site URL**;
+     see [`docs/web-hosting.md`](../docs/web-hosting.md)), and
    - the desktop loopback: `http://127.0.0.1:53123`
    Without the loopback URL, desktop Discord sign-in will fail.
 
@@ -116,8 +117,74 @@ the app.)
 - The function reads the user's Discord id from their linked identity, asks
   Discord `GET /guilds/{guildId}/members/{discordId}` with the bot token
   (200 = member, 404 = not), and upserts `authorized_members`.
+- It also replaces `member_levels` from Discord Level roles (atomic delete+insert;
+  failures clear levels so **video** access fails closed).
 - If the user has no Discord identity (email/password admins), the function
   returns `no-discord-identity` and writes nothing - the seed row from step 8 is
-  what keeps those accounts working.
-- RLS requires a fresh (`< 7 days`) positive verdict, so access lapses
-  automatically if someone leaves the server and stops re-verifying.
+  what keeps those accounts working for journal/sync.
+- RLS requires a fresh (`< 7 days`) positive verdict for sync data. **Video
+  playback does not use that 7-day window** — see below.
+
+---
+
+# Mentorship videos
+
+Protected videos need additional server secrets and the tables from
+`migrations/20261008_video_platform.sql` and
+`migrations/20261016_roles_sections_recordings.sql` (both also appended to
+`schema.sql`; both are safe to re-run).
+
+## 10. Extra secrets for videos
+
+Set these in **Supabase → Edge Functions → Secrets** (or with
+`supabase secrets set` in your own terminal):
+
+| Secret | What it is |
+| --- | --- |
+| `MENTORSHIP_API_BASE_URL` | Railway mentorship bot API base URL (`https://…`) |
+| `MENTORSHIP_API_TOKEN` | The dedicated token for `POST /api/v1/member-access` (not a Discord, Stripe, Checkout or Supabase key) |
+| `BUNNY_STREAM_LIBRARY_ID` | Bunny Stream video library ID |
+| `BUNNY_STREAM_TOKEN_KEY` | Library **Token Authentication** key (signs embed URLs) |
+| `BUNNY_STREAM_API_KEY` | Library **API key** (creates/deletes videos, signs TUS uploads, reads encoding status) |
+| `BUNNY_STREAM_CDN_HOSTNAME` | Optional: library CDN hostname (e.g. `vz-xxxx.b-cdn.net`) for thumbnails |
+| `PLAYBACK_TTL_SECONDS` | Optional: signed embed lifetime, 60-1800, default 720 |
+
+Discord role IDs for owner, admin, mentor, student and Levels 1-3 are built in
+(see `functions/_shared/roles.ts`). Only set `DISCORD_ROLE_OWNER`,
+`DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT` or
+`DISCORD_ROLE_LEVEL_1` / `_2` / `_3` to point at a different (e.g. sandbox) server.
+
+Never put any of these in `VITE_` client env. Details: [`docs/video-platform.md`](../docs/video-platform.md).
+Bot API contract: [`docs/bot-handoff-member-access-api.md`](../docs/bot-handoff-member-access-api.md).
+
+## 11. Deploy video functions
+
+```
+supabase functions deploy verify-membership
+supabase functions deploy list-content
+supabase functions deploy list-recordings
+supabase functions deploy list-students
+supabase functions deploy create-upload
+supabase functions deploy manage-content
+supabase functions deploy issue-playback-token
+supabase functions delete list-videos   # replaced by list-content
+```
+
+Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
+closed with a clear "not configured / unavailable" message. Local journals keep
+working.
+
+## 12. Who can do what
+
+Every mentorship request checks the caller's **live** Discord roles. Email/password
+accounts have no Discord identity and cannot watch or manage mentorship content
+(the old `video_staff_access` email bypass is no longer used).
+
+| Role | Watch | Upload | Publish / make private | Edit details | Delete |
+| --- | --- | --- | --- | --- | --- |
+| Owner, Admin | Everything | Every section and any student's recordings | Yes | Yes | Yes |
+| Mentor | Everything, including every student's recordings | Level 1-3 and 1:1 recordings | Level 1-3 and recordings | No | No |
+| Student | Level tabs up to their highest Level role (inclusive), Lectures, Weekly Recaps, their own published recordings | No | No | No | No |
+
+Staff playback still goes through the Railway mentorship check, so staff need a
+mentorship record with a legal name for the watermark (see the bot handoff).
