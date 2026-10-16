@@ -114,6 +114,8 @@ export type PlaybackDenyReason =
   | 'not_ready'
   | 'misconfigured'
   | 'invalid_request'
+  | 'forbidden'
+  | 'upstream_failed'
 
 export interface PlaybackWatermark {
   legalName: string
@@ -171,7 +173,9 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   video_not_found: 'That video is not available.',
   not_ready: 'This video is still processing. Try again in a few minutes.',
   misconfigured: 'Video playback is not configured on the server yet. Contact staff.',
-  invalid_request: 'That request was not valid.'
+  invalid_request: 'That request was not valid.',
+  forbidden: 'Your Discord roles do not allow this action.',
+  upstream_failed: 'The video service could not complete that request. Try again shortly.'
 }
 
 export function isVideoLevel(n: unknown): n is VideoLevel {
