@@ -1,11 +1,39 @@
 # Bot-side handoff: `POST /api/v1/member-access`
 
 The HTNQ Trading Checklist video platform expects a **versioned HTTPS API** on
-the H4STH2 Mentorship Discord bot (Railway). This endpoint did **not** exist in
-the platform checkout, and the bot repository was **not available** in this
-environment (`athamer736/h4sth2-mentorship-bot` returned 404 to the agent token).
-**End-to-end integration remains incomplete** until the bot implements and
-deploys this contract.
+the H4STH2 Mentorship Discord bot (Railway).
+
+**Status (2026-10-16):** implemented in the bot repository
+(`athamer736/h4sth2-mentorship-bot`, draft PR #10, branch `member-access-api`,
+commit `33c5b29`), built on the bot's pricing/onboarding PR #9. Not merged or
+deployed. The bot repository is private and was not readable from the platform
+agent, so the platform was matched to the contract as relayed by the owner (the
+same shapes as below), not to the bot's source files. **End-to-end integration
+is unverified** until an authorised sandbox test passes.
+
+## How the platform validates responses
+
+The platform (`supabase/functions/_shared/mentorshipApi.ts`) fails closed
+("temporarily unavailable") on anything outside this contract:
+
+- `schema_version` must be the number `1`; `discord_id` must equal the
+  requested ID (a decimal string matching `^[1-9]\d{16,19}$`).
+- `checked_at` (UTC, `Z` suffix) and integer `recheck_after_seconds` are
+  required on **both** allowed and denied responses.
+- Exact key sets: allowed has exactly the 7 documented keys; denied has
+  exactly 6 and never `legal_name` or `identity_source`. Extra fields (for
+  example an address or payment reference) are rejected.
+- `identity_source` is `signed_nda` or `staff_record` (`manual_review` is no
+  longer accepted). `staff_record` is only honoured if the viewer also holds a
+  live owner/admin/mentor role.
+- Names must pass the same usability rules as the bot (2-200 chars, a letter,
+  no control/bidi characters, no placeholders).
+- `recheck_after_seconds` is capped at 300 on the platform side.
+- HTTP: 401/403 → misconfigured (no retry); 429 → unavailable, `Retry-After`
+  passed to the client (no retry); 5xx/timeout/network → up to 2 retries;
+  non-JSON content type, bodies over 16 KiB, redirects → unavailable.
+- `MENTORSHIP_API_BASE_URL` must be a bare HTTPS origin; the platform appends
+  `/api/v1/member-access`.
 
 Do **not** give the video platform a Railway database URL. Do **not** reuse
 Stripe, Discord, Supabase service-role, or Checkout credentials for this API.
