@@ -34,6 +34,24 @@ export async function signBunnyEmbedToken(
   return toHex(digest)
 }
 
+/**
+ * Presigned TUS upload signature:
+ *   SHA256_HEX(library_id + api_key + expiration_time + video_id)
+ * Docs: https://docs.bunny.net/reference/tus-resumable-uploads
+ * Uses the library API key (not the token-authentication key). The signature
+ * only authorises uploading into that one video object.
+ */
+export async function signBunnyTusUpload(
+  libraryId: string,
+  apiKey: string,
+  expirationUnixSeconds: number,
+  videoId: string
+): Promise<string> {
+  const payload = `${libraryId}${apiKey}${expirationUnixSeconds}${videoId}`
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload))
+  return toHex(digest)
+}
+
 export function buildBunnyEmbedUrl(opts: {
   libraryId: string
   videoId: string

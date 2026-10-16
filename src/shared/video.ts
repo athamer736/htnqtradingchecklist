@@ -1,26 +1,101 @@
-// Shared video / mentorship-access types used by the renderer and documented
-// for Edge Functions. Server-side Deno modules under supabase/functions/_shared
-// mirror the validation logic; keep the shapes in sync.
+// Shared mentorship video types for the renderer. The Edge Functions under
+// supabase/functions/ produce these shapes (Deno modules can't import from
+// src/, so the server keeps its own copies in supabase/functions/_shared).
 
-/** Discord Level roles map 1:1 to video catalogue levels. Higher does NOT imply lower. */
+/** Discord Level roles. Levels are inclusive: Level 3 unlocks Levels 1 and 2. */
 export type VideoLevel = 1 | 2 | 3
 
 export const VIDEO_LEVELS: VideoLevel[] = [1, 2, 3]
 
-export interface VideoCatalogueItem {
+export type ContentSection = 'level' | 'lectures' | 'weekly_recaps'
+export type Visibility = 'published' | 'private'
+export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
+export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'none'
+
+export const SECTION_LABELS: Record<ContentSection, string> = {
+  level: 'Level',
+  lectures: 'Lectures',
+  weekly_recaps: 'Weekly Recaps & Outlooks'
+}
+
+/** Per-item permission flags computed server-side from live Discord roles. */
+export interface ItemPermissions {
+  canSetVisibility: boolean
+  canEdit: boolean
+  canDelete: boolean
+}
+
+export interface ContentVideo extends ItemPermissions {
   id: string
-  bunnyVideoId: string
+  section: ContentSection
+  level: VideoLevel | null
   title: string
   description: string | null
-  level: VideoLevel
   durationSeconds: number | null
   thumbnailUrl: string | null
+  visibility: Visibility
+  encodingStatus: EncodingStatus
+  createdAt: string
   sortOrd: number
 }
 
-/** Client request body for issue-playback-token. Only videoId is trusted input. */
-export interface IssuePlaybackRequest {
-  videoId: string
+export interface StudentRecording extends ItemPermissions {
+  id: string
+  studentDiscordId: string
+  studentLabel: string | null
+  title: string
+  description: string | null
+  recordedAt: string | null
+  durationSeconds: number | null
+  visibility: Visibility
+  encodingStatus: EncodingStatus
+  createdAt: string
+}
+
+export interface MentorshipCapabilities {
+  role: PrimaryRole
+  discordId: string
+  isStaff: boolean
+  isManager: boolean
+  isStudent: boolean
+  levels: VideoLevel[]
+  canUpload: {
+    level: boolean
+    lectures: boolean
+    weekly_recaps: boolean
+    recordings: boolean
+  }
+}
+
+export interface ListContentResponse {
+  ok: true
+  capabilities: MentorshipCapabilities
+  videos: ContentVideo[]
+}
+
+export interface StudentSummary {
+  discordId: string
+  label: string
+  username?: string
+  avatarUrl?: string | null
+  recordingCount?: number
+}
+
+export type PlaybackTarget = { kind: 'video'; id: string } | { kind: 'recording'; id: string }
+
+export type UploadTarget =
+  | { kind: 'video'; section: ContentSection; level: VideoLevel | null }
+  | { kind: 'recording'; studentDiscordId: string; studentLabel: string }
+
+export interface UploadCredentials {
+  ok: true
+  itemKind: 'video' | 'recording'
+  itemId: string
+  bunnyVideoId: string
+  libraryId: string
+  expirationTime: number
+  signature: string
+  resumed: boolean
 }
 
 export type PlaybackDenyReason =
@@ -36,8 +111,9 @@ export type PlaybackDenyReason =
   | 'name_unavailable'
   | 'service_unavailable'
   | 'video_not_found'
+  | 'not_ready'
   | 'misconfigured'
-  | 'staff_path_required'
+  | 'invalid_request'
 
 export interface PlaybackWatermark {
   legalName: string
@@ -48,16 +124,14 @@ export interface PlaybackWatermark {
 
 export interface PlaybackSuccess {
   ok: true
-  videoId: string
-  bunnyVideoId: string
-  /** Signed Bunny Player embed URL (only delivery route returned to clients). */
+  itemKind: 'video' | 'recording'
+  itemId: string
+  /** Signed Bunny Player embed URL (the only delivery route returned to clients). */
   embedUrl: string
   /** Unix seconds when the signed URL expires. */
   expiresAt: number
-  /** Suggested client renew lead time in seconds before expiry. */
   renewAfterSeconds: number
   watermark: PlaybackWatermark
-  level: VideoLevel
 }
 
 export interface PlaybackDenied {
@@ -68,90 +142,43 @@ export interface PlaybackDenied {
 
 export type PlaybackResponse = PlaybackSuccess | PlaybackDenied
 
-// --- Railway mentorship API contract (proposed v1) --------------------------
-
-export const MENTORSHIP_API_SCHEMA_VERSION = 1 as const
-
-export type MentorshipAccess = 'allowed' | 'denied'
-
-export type MentorshipDenyReason =
-  | 'onboarding_incomplete'
-  | 'nda_missing'
-  | 'payment_incomplete'
-  | 'membership_inactive'
-  | 'suspended'
-  | 'not_found'
-  | 'identity_unresolved'
-
-export interface MentorshipAccessRequest {
-  discord_id: string
-}
-
-export interface MentorshipAccessAllowed {
-  schema_version: typeof MENTORSHIP_API_SCHEMA_VERSION
-  discord_id: string
-  access: 'allowed'
-  legal_name: string
-  identity_source: 'signed_nda' | 'staff_record' | 'manual_review'
-  checked_at: string
-  recheck_after_seconds: number
-}
-
-export interface MentorshipAccessDenied {
-  schema_version: typeof MENTORSHIP_API_SCHEMA_VERSION
-  discord_id: string
-  access: 'denied'
-  reason_code: MentorshipDenyReason
-  checked_at?: string
-  recheck_after_seconds?: number
-}
-
-export type MentorshipAccessResponse = MentorshipAccessAllowed | MentorshipAccessDenied
-
 /** Bounded playback URL lifetime (seconds). Renew via a fresh issue call. */
 export const PLAYBACK_TTL_SECONDS = 12 * 60
 
 /** Renew this many seconds before expiry. */
 export const PLAYBACK_RENEW_LEAD_SECONDS = 90
 
-/**
- * Video authorisation freshness for Discord membership/roles.
- * Intentionally much shorter than the 7-day sync window.
- */
-export const VIDEO_ROLE_MAX_AGE_SECONDS = 15 * 60
-
-/** User-facing copy for blocked playback (customer path). */
 export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   unauthenticated: 'Sign in with Discord to watch mentorship videos.',
   invalid_session: 'Your session expired. Sign in again to continue.',
   no_discord_identity:
-    'Mentorship videos require a Discord-linked account. Sign in with Discord, or ask staff if you need a staff viewing path.',
+    'Mentorship videos require a Discord-linked account. Sign out and sign in with Discord.',
   not_a_member:
     'We could not confirm you are in the mentorship Discord server. Rejoin the server or contact staff.',
   roles_unavailable:
-    'We could not confirm your video level roles right now. Try again shortly, or contact staff if this persists.',
+    'We could not confirm your Discord roles right now. Try again shortly, or contact staff if this persists.',
   level_insufficient:
-    'Your Discord roles do not include access to this video level. Contact staff if you believe this is wrong.',
+    'Your Discord roles do not include access to this video. Contact staff if you believe this is wrong.',
   onboarding_incomplete:
     'Your mentorship onboarding is incomplete. Finish joining in Discord (documents and payment) before watching videos.',
   membership_inactive:
     'Your mentorship access is not active. Open a ticket in Discord or message staff for help.',
-  suspended:
-    'Video access is currently restricted on your account. Contact staff for details.',
+  suspended: 'Video access is currently restricted on your account. Contact staff for details.',
   name_unavailable:
     'Staff still need to complete your account details (legal name on file) before videos can play with your watermark.',
   service_unavailable:
     'The mentorship access service is temporarily unavailable. Video playback is paused until it recovers. Your local journal still works offline.',
   video_not_found: 'That video is not available.',
+  not_ready: 'This video is still processing. Try again in a few minutes.',
   misconfigured: 'Video playback is not configured on the server yet. Contact staff.',
-  staff_path_required:
-    'This account has no Discord identity. Staff video access must be granted explicitly by an administrator.'
+  invalid_request: 'That request was not valid.'
 }
 
 export function isVideoLevel(n: unknown): n is VideoLevel {
   return n === 1 || n === 2 || n === 3
 }
 
+/** Inclusive level check: holding Level 3 unlocks Level 1 and 2 content. */
 export function levelsInclude(levels: readonly number[], required: VideoLevel): boolean {
-  return levels.includes(required)
+  return levels.some((l) => l >= required)
 }

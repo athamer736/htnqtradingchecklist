@@ -131,45 +131,62 @@ export function parseMentorshipAccessResponse(
   return { kind: 'unavailable', error: 'bad-access-field' }
 }
 
-/** Constant-time compare for bearer tokens (same length only). */
+/**
+ * Constant-time comparison of two secrets. Length differences return false
+ * after a full pass over the longer input so timing doesn't reveal content.
+ */
 export function timingSafeEqualString(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const ab = enc.encode(a)
   const bb = enc.encode(b)
-  if (ab.length !== bb.length) {
-    // Still walk the longer buffer to reduce trivial timing oracle on length.
-    let dig = 0
-    const longer = ab.length > bb.length ? ab : bb
-    for (let i = 0; i < longer.length; i++) dig |= longer[i]!
-    return dig === -1 // always false; keeps dig used
-  }
-  let out = 0
-  for (let i = 0; i < ab.length; i++) out |= ab[i]! ^ bb[i]!
-  return out === 0
+  const len = Math.max(ab.length, bb.length)
+  let diff = ab.length ^ bb.length
+  for (let i = 0; i < len; i++) diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0)
+  return diff === 0
 }
 
 export type FetchMentorshipOptions = {
   baseUrl: string
   token: string
   discordId: string
-  /** Abort / timeout in ms. */
+  /** Per-attempt timeout in ms. */
   timeoutMs?: number
+  /** Extra attempts after a timeout/network/5xx failure (bounded to 0-2). */
+  retries?: number
+  /** Allow http://127.0.0.1 / http://localhost for the test-only mock. */
+  allowLocalHttp?: boolean
   fetchImpl?: typeof fetch
+  sleep?: (ms: number) => Promise<void>
 }
 
+const RETRYABLE = new Set(['timeout', 'network', 'upstream-500', 'upstream-502', 'upstream-503', 'upstream-504'])
+
 /**
- * Calls Railway POST /api/v1/member-access.
- * Distinguishes access denial from upstream unavailability.
+ * Calls Railway POST /api/v1/member-access with a short timeout and at most
+ * two bounded retries (never on 429 or auth errors), so an outage can't
+ * multiply load. Distinguishes access denial from upstream unavailability.
  */
 export async function fetchMentorshipAccess(
   opts: FetchMentorshipOptions
 ): Promise<MentorshipLookupResult> {
+  const retries = Math.min(Math.max(opts.retries ?? 1, 0), 2)
+  const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
+  let result = await fetchMentorshipAccessOnce(opts)
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    if (result.kind !== 'unavailable' || !RETRYABLE.has(result.error)) break
+    await sleep(250 * attempt)
+    result = await fetchMentorshipAccessOnce(opts)
+  }
+  return result
+}
+
+async function fetchMentorshipAccessOnce(
+  opts: FetchMentorshipOptions
+): Promise<MentorshipLookupResult> {
   const base = opts.baseUrl.replace(/\/+$/, '')
-  if (!base.startsWith('https://') && !base.startsWith('http://127.0.0.1') && !base.startsWith('http://localhost')) {
-    // Allow localhost only for explicit local mocks; production must be HTTPS.
-    if (!base.startsWith('https://')) {
-      return { kind: 'misconfigured', error: 'base-url-must-be-https' }
-    }
+  const isLocal = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base)
+  if (!base.startsWith('https://') && !(opts.allowLocalHttp && isLocal)) {
+    return { kind: 'misconfigured', error: 'base-url-must-be-https' }
   }
   if (!opts.token || opts.token.length < 32) {
     return { kind: 'misconfigured', error: 'token-missing' }
@@ -178,7 +195,7 @@ export async function fetchMentorshipAccess(
     return { kind: 'unavailable', error: 'bad-discord-id' }
   }
 
-  const timeoutMs = opts.timeoutMs ?? 8_000
+  const timeoutMs = opts.timeoutMs ?? 4_000
   const fetchImpl = opts.fetchImpl ?? fetch
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)

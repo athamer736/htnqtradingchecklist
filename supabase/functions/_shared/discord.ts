@@ -57,25 +57,95 @@ export async function fetchGuildMember(
   }
 }
 
-/** Map Discord role IDs → video levels. Higher does NOT include lower. */
-export function mapRolesToLevels(
-  memberRoles: readonly string[],
-  roleByLevel: { 1?: string; 2?: string; 3?: string }
-): number[] {
-  const out: number[] = []
-  if (roleByLevel[1] && memberRoles.includes(roleByLevel[1])) out.push(1)
-  if (roleByLevel[2] && memberRoles.includes(roleByLevel[2])) out.push(2)
-  if (roleByLevel[3] && memberRoles.includes(roleByLevel[3])) out.push(3)
-  return out
+export interface GuildMemberSummary {
+  discordId: string
+  username: string
+  displayName: string
+  avatarUrl: string | null
+  roles: string[]
 }
 
-export function parseRoleEnv(
-  env: { get(key: string): string | undefined } = typeof Deno !== 'undefined'
-    ? Deno.env
-    : { get: (k) => process.env[k] }
-): { 1?: string; 2?: string; 3?: string; configured: boolean } {
-  const l1 = env.get('DISCORD_ROLE_LEVEL_1')?.trim() || undefined
-  const l2 = env.get('DISCORD_ROLE_LEVEL_2')?.trim() || undefined
-  const l3 = env.get('DISCORD_ROLE_LEVEL_3')?.trim() || undefined
-  return { 1: l1, 2: l2, 3: l3, configured: Boolean(l1 || l2 || l3) }
+export type MemberSearchResult =
+  | { kind: 'ok'; members: GuildMemberSummary[] }
+  | { kind: 'rate_limited'; retryAfterSeconds?: number }
+  | { kind: 'error'; status: number }
+  | { kind: 'unreachable' }
+
+interface RawGuildMember {
+  nick?: string | null
+  roles?: unknown
+  user?: {
+    id?: string
+    username?: string
+    global_name?: string | null
+    avatar?: string | null
+  }
+}
+
+export function toMemberSummary(raw: RawGuildMember): GuildMemberSummary | null {
+  const id = raw.user?.id
+  if (typeof id !== 'string' || !/^\d{5,32}$/.test(id)) return null
+  const username = raw.user?.username ?? ''
+  const displayName = raw.nick || raw.user?.global_name || username
+  const avatar = raw.user?.avatar
+  return {
+    discordId: id,
+    username,
+    displayName,
+    avatarUrl: avatar ? `https://cdn.discordapp.com/avatars/${id}/${avatar}.png?size=64` : null,
+    roles: Array.isArray(raw.roles) ? raw.roles.filter((r): r is string => typeof r === 'string') : []
+  }
+}
+
+/**
+ * Name-prefix search over guild members. Requires the bot's Server Members
+ * Intent to be enabled in the Discord Developer Portal.
+ */
+export async function searchGuildMembers(
+  botToken: string,
+  guildId: string,
+  query: string,
+  limit = 25,
+  fetchImpl: typeof fetch = fetch
+): Promise<MemberSearchResult> {
+  try {
+    const url = new URL(`https://discord.com/api/v10/guilds/${guildId}/members/search`)
+    url.searchParams.set('query', query)
+    url.searchParams.set('limit', String(Math.min(Math.max(limit, 1), 100)))
+    const res = await fetchImpl(url.toString(), { headers: { Authorization: `Bot ${botToken}` } })
+    if (res.status === 429) {
+      const retry = Number(res.headers.get('retry-after') ?? '')
+      return { kind: 'rate_limited', retryAfterSeconds: Number.isFinite(retry) ? retry : undefined }
+    }
+    if (!res.ok) return { kind: 'error', status: res.status }
+    const body = (await res.json()) as unknown
+    if (!Array.isArray(body)) return { kind: 'error', status: 502 }
+    const members = body
+      .map((m) => toMemberSummary(m as RawGuildMember))
+      .filter((m): m is GuildMemberSummary => m !== null)
+    return { kind: 'ok', members }
+  } catch {
+    return { kind: 'unreachable' }
+  }
+}
+
+/** Single-member lookup returning a display summary (used to label recordings). */
+export async function fetchGuildMemberSummary(
+  botToken: string,
+  guildId: string,
+  discordId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<{ kind: 'ok'; member: GuildMemberSummary } | { kind: 'not_member' } | { kind: 'unavailable' }> {
+  try {
+    const res = await fetchImpl(
+      `https://discord.com/api/v10/guilds/${guildId}/members/${discordId}`,
+      { headers: { Authorization: `Bot ${botToken}` } }
+    )
+    if (res.status === 404) return { kind: 'not_member' }
+    if (!res.ok) return { kind: 'unavailable' }
+    const member = toMemberSummary((await res.json()) as RawGuildMember)
+    return member ? { kind: 'ok', member } : { kind: 'unavailable' }
+  } catch {
+    return { kind: 'unavailable' }
+  }
 }

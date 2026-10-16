@@ -6,13 +6,18 @@
 // on failure to replace), but does not invent a false "not a member" for the
 // 7-day journal sync window when Discord membership itself was confirmed.
 //
+// Levels are inclusive (the Level 3 role unlocks 1-3) and staff roles
+// (owner/admin/mentor) unlock every level; see _shared/roles.ts. Video
+// endpoints re-check live roles themselves, so member_levels is informational.
+//
 // Secrets:
 //   DISCORD_BOT_TOKEN, DISCORD_GUILD_ID
-//   DISCORD_ROLE_LEVEL_1, DISCORD_ROLE_LEVEL_2, DISCORD_ROLE_LEVEL_3 (optional but required for videos)
+//   DISCORD_ROLE_* (optional overrides of the built-in role IDs, e.g. for a sandbox server)
 // SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY injected automatically.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { extractDiscordId, fetchGuildMember, mapRolesToLevels, parseRoleEnv } from '../_shared/discord.ts'
+import { extractDiscordId, fetchGuildMember } from '../_shared/discord.ts'
+import { loadRoleConfig, resolveCapabilities } from '../_shared/roles.ts'
 import { handleOptions, json } from '../_shared/http.ts'
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -46,7 +51,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const discordId = extractDiscordId(user)
   if (!discordId) {
-    // Email/password admins: journal access relies on seeded authorized_members.
     return json({ authorized: false, reason: 'no-discord-identity', levels: [] })
   }
 
@@ -70,11 +74,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const isMember = member.kind === 'member'
-  const roleEnv = parseRoleEnv()
-  const levels =
-    isMember && roleEnv.configured
-      ? mapRolesToLevels(member.roles, roleEnv)
-      : []
+  const caps = isMember ? resolveCapabilities(member.roles, loadRoleConfig()) : null
+  const levels: number[] = caps ? [...caps.levels] : []
 
   const checkedAt = new Date().toISOString()
 
@@ -122,6 +123,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     authorized: isMember,
     levels: levelsOk ? levels : [],
     levelsReliable: levelsOk,
+    role: caps?.role ?? 'none',
     discordId
   })
 })
