@@ -91,7 +91,7 @@ export default function ContentSectionView({
   const load = useMentorship((s) => s.load)
   const playing = useMentorship((s) => s.playing)
   const playError = useMentorship((s) => s.playError)
-  const renew = useMentorship((s) => s.renew)
+  const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
   const [uploading, setUploading] = useState(false)
 
@@ -110,9 +110,8 @@ export default function ContentSectionView({
         <VideoPlayer
           embedUrl={playing.embedUrl}
           watermark={playing.watermark}
-          expiresAt={playing.expiresAt}
           onClose={stop}
-          onRequestRenew={() => void renew()}
+          onTick={tick}
         />
       </div>
     )

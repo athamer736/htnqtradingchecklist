@@ -116,6 +116,8 @@ export type PlaybackDenyReason =
   | 'invalid_request'
   | 'forbidden'
   | 'upstream_failed'
+  /** Client-side: the open player couldn't re-confirm access before it lapsed. */
+  | 'access_expired'
 
 export interface PlaybackWatermark {
   legalName: string
@@ -132,7 +134,10 @@ export interface PlaybackSuccess {
   embedUrl: string
   /** Unix seconds when the signed URL expires. */
   expiresAt: number
+  /** Start re-checking access this many seconds after the response arrives. */
   renewAfterSeconds: number
+  /** Access lapses this many seconds after the response unless re-checked (max 300). */
+  accessValidForSeconds: number
   watermark: PlaybackWatermark
 }
 
@@ -140,6 +145,7 @@ export interface PlaybackDenied {
   ok: false
   reasonCode: PlaybackDenyReason
   message: string
+  retryAfterSeconds?: number
 }
 
 export type PlaybackResponse = PlaybackSuccess | PlaybackDenied
@@ -149,6 +155,21 @@ export const PLAYBACK_TTL_SECONDS = 12 * 60
 
 /** Renew this many seconds before expiry. */
 export const PLAYBACK_RENEW_LEAD_SECONDS = 90
+
+/** An allowed mentorship decision is never used for longer than this. */
+export const MAX_ACCESS_VALID_SECONDS = 300
+
+/** Failures that mean "couldn't check right now" rather than "access denied". */
+const TEMPORARY_FAILURES: ReadonlySet<string> = new Set([
+  'service_unavailable',
+  'roles_unavailable',
+  'upstream_failed',
+  'access_expired'
+])
+
+export function isTemporaryPlaybackFailure(reasonCode: string): boolean {
+  return TEMPORARY_FAILURES.has(reasonCode)
+}
 
 export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   unauthenticated: 'Sign in with Discord to watch mentorship videos.',
@@ -175,7 +196,9 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   misconfigured: 'Video playback is not configured on the server yet. Contact staff.',
   invalid_request: 'That request was not valid.',
   forbidden: 'Your Discord roles do not allow this action.',
-  upstream_failed: 'The video service could not complete that request. Try again shortly.'
+  upstream_failed: 'The video service could not complete that request. Try again shortly.',
+  access_expired:
+    'We could not re-confirm your access in time, so playback stopped. This is usually temporary: press play to try again.'
 }
 
 export function isVideoLevel(n: unknown): n is VideoLevel {
