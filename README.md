@@ -36,18 +36,32 @@ VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
-## Mentorship videos (optional, online-only)
+## Mentorship content (online-only)
 
-Protected lessons live under the **Videos** sidebar entry. Playback always
-requires online authorisation (Discord roles + mentorship bot API + Bunny signed
-embed), even when the rest of the app works offline.
+The **Mentorship** sidebar group (after Learn) has Level 1, Level 2, Level 3,
+Lectures, Weekly Recaps & Outlooks, and Student Recordings (staff) or My
+Recordings (students). Access follows live Discord roles: higher Level roles
+include the lower levels, mentors and admins upload directly from the app, and
+every video plays with a legal-name + Discord ID watermark after the mentorship
+bot confirms access. Playback always needs an online check, even though the
+rest of the app works offline.
 
-- Architecture, secrets, watermark limits: [`docs/video-platform.md`](docs/video-platform.md)
+- Architecture, roles, uploads, secrets, watermark limits: [`docs/video-platform.md`](docs/video-platform.md)
 - Railway bot API handoff: [`docs/bot-handoff-member-access-api.md`](docs/bot-handoff-member-access-api.md)
 - Launch checklist: [`docs/launch-checklist.md`](docs/launch-checklist.md)
 
 ```bash
-npm test   # contract / signing / role-mapping unit tests (mocked)
+npm test   # roles, permissions, validation, playback pipeline, signing (all mocked)
+```
+
+## Web app
+
+The browser version is published to [app.htnq.org](https://app.htnq.org) by
+[`.github/workflows/deploy-web.yml`](.github/workflows/deploy-web.yml). Setup and
+DNS steps: [`docs/web-hosting.md`](docs/web-hosting.md).
+
+```bash
+npm run build:web   # single-file build in dist-web/
 ```
 
 ## Build a distributable .exe

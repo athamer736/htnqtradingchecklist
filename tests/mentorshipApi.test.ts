@@ -134,4 +134,87 @@ describe('fetchMentorshipAccess (mocked)', () => {
     })
     assert.equal(r.kind, 'misconfigured')
   })
+
+  it('allows http://localhost only with the explicit test flag', async () => {
+    const allowedBody = JSON.stringify({
+      schema_version: 1,
+      discord_id: '123456789012345678',
+      access: 'denied',
+      reason_code: 'not_found'
+    })
+    const base = {
+      baseUrl: 'http://127.0.0.1:8787',
+      token: 't'.repeat(40),
+      discordId: '123456789012345678',
+      fetchImpl: async () => new Response(allowedBody, { status: 200 })
+    }
+    assert.equal((await fetchMentorshipAccess(base)).kind, 'misconfigured')
+    assert.equal((await fetchMentorshipAccess({ ...base, allowLocalHttp: true })).kind, 'denied')
+    const remote = await fetchMentorshipAccess({ ...base, baseUrl: 'http://example.test', allowLocalHttp: true })
+    assert.equal(remote.kind, 'misconfigured')
+  })
+
+  it('retries transient failures a bounded number of times', async () => {
+    let calls = 0
+    const sleeps: number[] = []
+    const r = await fetchMentorshipAccess({
+      baseUrl: 'https://mentorship.example.test',
+      token: 't'.repeat(40),
+      discordId: '123456789012345678',
+      retries: 5,
+      sleep: async (ms) => {
+        sleeps.push(ms)
+      },
+      fetchImpl: async () => {
+        calls += 1
+        return new Response('down', { status: 503 })
+      }
+    })
+    assert.equal(r.kind, 'unavailable')
+    assert.equal(calls, 3, 'retries are capped at 2')
+    assert.deepEqual(sleeps, [250, 500])
+  })
+
+  it('does not retry denials, auth failures or rate limits', async () => {
+    for (const status of [401, 404, 429]) {
+      let calls = 0
+      await fetchMentorshipAccess({
+        baseUrl: 'https://mentorship.example.test',
+        token: 't'.repeat(40),
+        discordId: '123456789012345678',
+        retries: 2,
+        sleep: async () => {},
+        fetchImpl: async () => {
+          calls += 1
+          return new Response('x', { status })
+        }
+      })
+      assert.equal(calls, 1, `status ${status}`)
+    }
+  })
+
+  it('recovers when a retry succeeds', async () => {
+    let calls = 0
+    const r = await fetchMentorshipAccess({
+      baseUrl: 'https://mentorship.example.test',
+      token: 't'.repeat(40),
+      discordId: '123456789012345678',
+      sleep: async () => {},
+      fetchImpl: async () => {
+        calls += 1
+        if (calls === 1) throw new TypeError('fetch failed')
+        return new Response(
+          JSON.stringify({
+            schema_version: 1,
+            discord_id: '123456789012345678',
+            access: 'denied',
+            reason_code: 'suspended'
+          }),
+          { status: 200 }
+        )
+      }
+    })
+    assert.equal(r.kind, 'denied')
+    assert.equal(calls, 2)
+  })
 })

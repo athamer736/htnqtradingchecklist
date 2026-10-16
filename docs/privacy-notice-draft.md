@@ -16,6 +16,12 @@ Suggested addition for the owner’s privacy notice:
 > can operate and secure the service; HTNQ chooses how long those records are
 > retained.
 >
+> If you have 1:1 calls with the mentorship team, recordings of those calls may
+> be stored with our video provider and shown to you in the app. Only you and
+> HTNQ staff (owners, admins and mentors) can view your recordings. We store
+> your Discord ID and Discord display name with each recording so staff can find
+> it.
+>
 > Watermarking is a deterrent. It does not prevent every form of screen
 > recording, guarantee that every leak can be traced, or by itself prove a legal
 > breach.

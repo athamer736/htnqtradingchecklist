@@ -96,6 +96,35 @@ or complete contracts to the video platform.
 Existing customers must retain agreed prices and valid document history. Video
 access must **not** hard-code “paid £1,500”.
 
+### Staff (owner, admin, mentor)
+
+Staff watch through the same playback check, so every playback, including staff
+previews of private videos and 1:1 recordings, needs `access: "allowed"` with a
+legal name for the watermark. The platform decides **who is staff** from live
+Discord roles; the bot only answers "may this Discord ID watch, and under what
+name?". For staff who have no customer joining record, return:
+
+```json
+{
+  "schema_version": 1,
+  "discord_id": "123456789012345678",
+  "access": "allowed",
+  "legal_name": "Staff Member Name",
+  "identity_source": "staff_record",
+  "checked_at": "2026-10-16T12:00:00Z",
+  "recheck_after_seconds": 300
+}
+```
+
+Keep `staff_record` names in a bot-side staff table maintained by the owner.
+Do not invent names, and do not allow everyone holding a Discord staff role
+automatically; an unknown staff member should get
+`{ "access": "denied", "reason_code": "identity_unresolved" }` until a name is
+recorded.
+
+Students only see their own 1:1 recordings; the platform enforces that. The bot
+needs no recording-specific logic.
+
 ## Auth & ops
 
 - Dedicated high-entropy, rotatable service credential
@@ -116,7 +145,8 @@ MENTORSHIP_API_BASE_URL=https://<your-railway-service>
 MENTORSHIP_API_TOKEN=<production credential>
 ```
 
-Redeploy Edge Functions: `issue-playback-token` (and keep `verify-membership`).
+Then redeploy the `issue-playback-token` Edge Function (with deployment
+authorisation).
 
 ## Tests the bot should add
 
@@ -125,7 +155,9 @@ Redeploy Edge Functions: `issue-playback-token` (and keep `verify-membership`).
 - Wrong/missing token → 401
 - Invalid discord_id shape → 400
 - Voided NDA / suspended → denied
-- Name conflict → `identity_unresolved` or staff path
+- Name conflict → `identity_unresolved`
+- Staff with a staff record → allowed, `identity_source: "staff_record"`
+- Staff without a staff record → denied `identity_unresolved`
 - Load/rate-limit behaviour
 
 ## Platform test-only mock

@@ -1,103 +1,182 @@
 # Mentorship video platform
 
-## Status of this checkout
+## Status
 
-The previous inspection assumed video files already existed. On `main` at the
-start of this work they did **not**: there was Discord login +
-`verify-membership` only. This document describes what was implemented in this
-branch.
+| Layer | State |
+| --- | --- |
+| Edge Functions, migrations, client views, upload flow | Implemented on this branch |
+| Unit tests (roles, permissions, validation, authorisation, playback pipeline, Bunny signing/API, Railway contract) | Tested with mocks (`npm test`) |
+| Supabase secrets, migrations applied, functions deployed | Not done: owner action (see [`launch-checklist.md`](launch-checklist.md)) |
+| Railway `POST /api/v1/member-access` | Specified in [`bot-handoff-member-access-api.md`](bot-handoff-member-access-api.md); not built or verified in the bot repo |
+| End-to-end (real Discord + Railway + Bunny) | Not verified |
 
 ## Architecture
 
 ```
-Customer app (Electron / web)
+Customer app (Windows desktop or https://app.htnq.org)
   → Supabase Auth (Discord)
-  → Edge Functions (verify-membership | list-videos | issue-playback-token)
-       → Discord API (guild membership + Level roles)
-       → Railway mentorship API (POST /api/v1/member-access)
-       → Bunny Stream (signed embed URL only)
+  → Edge Functions
+       list-content | list-recordings | list-students     (listings, no playback URLs)
+       create-upload | manage-content                     (staff)
+       issue-playback-token                               (every play and renewal)
+       verify-membership                                  (journal sync gate)
+     → Discord API: live guild member + roles on every request
+     → Railway mentorship API (POST /api/v1/member-access) on every playback
+     → Bunny Stream: signed embed URLs, TUS upload signatures, video management
+  → Bunny TUS endpoint (browser uploads files directly; never via Supabase)
 ```
 
-The browser/desktop app never talks to Railway’s database. Legal names are
-fetched at playback time for the watermark and are kept in memory only.
+The app never talks to Railway's database. Legal names are fetched at playback
+time for the watermark and kept in memory only.
+
+## Roles
+
+Every request resolves capabilities from the caller's **live** Discord roles
+(`supabase/functions/_shared/roles.ts`). Role IDs are built in and can be
+overridden per environment with `DISCORD_ROLE_OWNER`, `DISCORD_ROLE_ADMIN`,
+`DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT`, `DISCORD_ROLE_LEVEL_1..3`.
+
+| Role | Discord role ID |
+| --- | --- |
+| Owner | 1498654518286618665 |
+| Admin | 1499493868419420262 |
+| Mentor | 1554810663799488553 |
+| Student | 1502003458847281322 |
+| Level 1 | 1504525385059270847 |
+| Level 2 | 1504525684322730176 |
+| Level 3 | 1504525483814158376 |
+
+**Levels are inclusive:** the Level 3 role unlocks Levels 1, 2 and 3; Level 2
+unlocks 1 and 2. Students also need the Student role. Staff (owner, admin,
+mentor) see every level.
+
+| | Owner / Admin | Mentor | Student |
+| --- | --- | --- | --- |
+| Level 1-3 tabs | All, including private and processing | All, including private and processing | Published + ready, up to their highest Level role |
+| Lectures, Weekly Recaps & Outlooks | All | All | Published + ready |
+| 1:1 recordings | Any student's | Any student's | Their own, published + ready |
+| Upload | Every section; any student's recordings | Level 1-3; any student's recordings | No |
+| Publish / make private | Everything | Level 1-3 and recordings | No |
+| Edit title / description | Yes | No | No |
+| Delete (also deletes in Bunny) | Yes | No | No |
+
+The client only receives per-item permission flags. Every action is re-checked
+on the server; sidebar locks are hints.
+
+Email/password accounts have no Discord identity and cannot watch or manage
+mentorship content. The earlier `video_staff_access` email bypass is removed.
+
+## Sidebar
+
+After **Learn**, a **Mentorship** group: Level 1, Level 2, Level 3, Lectures,
+Weekly Recaps & Outlooks, then **Student Recordings** (staff: searchable
+picker of Discord members with the Student role, then that student's
+recordings and an upload button) or **My Recordings** (students). Learn is
+unchanged.
 
 ## Authorisation chain (playback)
 
-Before any signed URL is issued, `issue-playback-token` must:
+Before any signed URL is issued, `issue-playback-token`:
 
-1. Validate the Supabase JWT.
-2. Resolve the Discord ID from the **linked Discord identity** (not request body / metadata).
-3. Live-check guild membership and Level 1/2/3 roles (not the 7-day sync window).
-4. Confirm the requested video’s level is in the member’s roles (higher ≠ lower).
-5. Call Railway mentorship access; require `access: "allowed"` and a usable legal name.
-6. Sign a Bunny **embed** URL with a short TTL and return watermark identity.
+1. Validates the Supabase JWT.
+2. Takes the Discord ID from the **linked Discord identity**, never from the request body.
+3. Live-checks guild membership and roles. Discord rate limits or outages fail closed.
+4. Applies the role rules above (private / unfinished items look "not found" to students).
+5. Calls Railway mentorship access; requires `access: "allowed"` and a usable legal name.
+   This applies to staff too, so staff need a Railway `staff_record` with a legal name.
+6. Signs a short-lived Bunny **embed** URL and returns the watermark identity.
 
-Email/password staff accounts have no Discord identity. They need an explicit
-row in `video_staff_access` (no fabricated customer identities).
+Every grant and denial is written to `playback_audit`. Uploads, visibility
+changes, edits, deletes and status refreshes are written to `content_audit`.
+
+## Uploads
+
+1. Staff choose a file in the upload dialog. `create-upload` checks the live
+   role, creates the Bunny video object with the library API key, inserts the
+   row as **private / uploading**, and returns a TUS signature
+   `SHA256(library_id + api_key + expiration + video_id)` valid for 24 hours.
+2. The browser uploads straight to `https://video.bunnycdn.com/tusupload`
+   with `tus-js-client` in 64 MB chunks with automatic retries. Multi-GB
+   files are fine; Supabase never handles the file.
+3. Pause / resume works in the dialog. If the window closes, choosing the same
+   file again from the same device resumes it: `create-upload` re-signs only for
+   the original uploader while Bunny still reports the video as not yet uploaded.
+4. Bunny encodes the file. Staff listings poll Bunny for unfinished items
+   (capped per request) and **Check status** forces a refresh.
+5. Items stay private until published. The upload dialog can publish
+   automatically; students only ever see items that are both published and
+   finished processing.
+
+For recordings, the target must currently be a guild member with the Student
+role. Their Discord display name is stored as a label for staff lists (not a
+legal name).
+
+Deleting removes the Bunny video first and then soft-deletes the row, so a
+failed Bunny delete never leaves a playable but unlisted file.
 
 ## Freshness and revocation
 
 | Concern | Window |
-|--------|--------|
+| --- | --- |
 | Journal/sync RLS (`authorized_members`) | 7 days (unchanged) |
-| Video Discord roles | Live check on every issue/list; cached row replaced atomically |
-| Railway entitlement | Live check on every playback issue |
-| Bunny embed token TTL | Default **12 minutes** (max 30); client renews ~90s early |
+| Mentorship listings and actions | Live Discord role check on every request |
+| Playback | Live Discord + Railway check on every issue and renewal |
+| Bunny embed token TTL | Default **12 minutes** (60 s-30 min) |
+| In-app renewal | About 90 s before expiry, while the player stays open |
 
-**Revocation honesty:** if a member loses a role or mentorship access, new
-playback issues fail immediately (fail closed). An already-issued Bunny URL can
-still play until its TTL expires (up to ~12 minutes by default). We do **not**
-promise instant CDN revocation.
-
-If `member_levels` cannot be replaced after a role change, levels are wiped so
-video access fails closed. Journal access is separate and is not locked solely
-because video role persistence failed.
+**Revocation honesty:** after a role or mentorship change, new plays fail
+immediately. A player that is already open keeps playing until its next
+renewal (at most about 10-11 minutes with defaults); the renewal re-runs every
+check and closes the player if access was withdrawn. The renewal keeps the
+already-loaded embed so the video does not restart, which means this close is
+enforced by the app; a modified client could keep an open player running. We
+do **not** promise instant CDN revocation.
 
 ## Bunny signing
 
-- **Embed (used in production response):**
-  `token = SHA256_HEX(security_key + video_id + expires)`  
-  Docs: https://bunny.net/docs/stream/token-authentication
-- **HLS directory tokens (implemented, not returned to clients):**
-  Advanced HMAC-SHA256 path-based `bcdn_token` so playlist + segments inherit auth.  
-  Docs: https://docs.bunny.net/cdn/security/token-authentication/advanced
-
-Returning only the embed route prevents a weaker direct-stream URL from
-undermining the web protection model. Client-supplied “desktop vs web” flags
-are not a security boundary.
+- **Embed (the only delivery route returned to clients):**
+  `token = SHA256_HEX(token_key + video_id + expires)`.
+  Docs: https://docs.bunny.net/docs/stream-embed-token-authentication
+- **TUS upload:** `SHA256_HEX(library_id + api_key + expiration + video_id)`.
+  Docs: https://docs.bunny.net/reference/tus-resumable-uploads
+- **HLS directory tokens:** implemented (advanced HMAC path tokens) but not
+  returned to clients, so no weaker direct-stream URL undermines the model.
 
 ## Watermark and fullscreen
 
-- Overlay text: `Full legal name · Discord user ID` (+ optional `sessionRef`).
+- Overlay text: `Full legal name · Discord user ID` (+ a short session reference).
+- Applies to every video: Level, Lectures, Weekly Recaps and 1:1 recordings.
 - Custom fullscreen on the **player shell** (iframe + overlay). The iframe is
-  not granted `allow="fullscreen"` so native player fullscreen / PiP cannot
+  not granted fullscreen or picture-in-picture, so the native player cannot
   eject the watermark.
 - Electron `setContentProtection` is best-effort and **not DRM**.
-- A DOM overlay can be removed by a determined user. Stronger provider-backed
-  or burned-in watermarking is a later option and is **not** implemented; do
-  not purchase add-ons without approval.
+- The watermark is a deterrent and investigation aid. A DOM overlay can be
+  removed by a determined user, and it does not prevent all screen recording
+  or by itself establish a legal breach. Burned-in or provider-side
+  watermarking is not implemented; do not buy add-ons without approval.
 
-## Secrets (server only — Supabase Edge Function secrets)
+## Secrets (server only: Supabase Edge Function secrets)
 
 Never use `VITE_` prefixes for these. Never put them in Electron bundles,
-frontend JS, localStorage, git, or screenshots.
+frontend JS, localStorage, git or screenshots.
 
 ```
 DISCORD_BOT_TOKEN
 DISCORD_GUILD_ID
-DISCORD_ROLE_LEVEL_1
-DISCORD_ROLE_LEVEL_2
-DISCORD_ROLE_LEVEL_3
 MENTORSHIP_API_BASE_URL          # https://… Railway service
 MENTORSHIP_API_TOKEN             # dedicated high-entropy credential
 BUNNY_STREAM_LIBRARY_ID
-BUNNY_STREAM_TOKEN_KEY           # Token authentication key (not the library API key)
+BUNNY_STREAM_TOKEN_KEY           # Token Authentication key (embed signing)
+BUNNY_STREAM_API_KEY             # Library API key (create/delete, TUS signing, status)
+BUNNY_STREAM_CDN_HOSTNAME        # optional, thumbnails
 PLAYBACK_TTL_SECONDS             # optional, default 720
-VIDEO_ROLE_MAX_AGE_SECONDS       # optional, default 900
-MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1   # test mock only
+DISCORD_ROLE_*                   # optional overrides of the built-in role IDs
+MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1   # local mock testing only; never in production
 ```
 
-Client `.env` still only has:
+The Discord bot needs **Server Members Intent** for the student search.
+
+Client env (public by design) only has:
 
 ```
 VITE_SUPABASE_URL=
@@ -106,30 +185,18 @@ VITE_SUPABASE_ANON_KEY=
 
 ## Database
 
-Apply `supabase/migrations/20261008_video_platform.sql` (also appended to
-`schema.sql`):
+Apply in order (both idempotent, both appended to `schema.sql`):
 
-- `videos` — catalogue
-- `member_levels` — Discord role snapshot (service-written)
-- `video_staff_access` — explicit staff path
-- `playback_audit` — minimal investigation trail (service-only; **owner chooses retention**)
+- `20261008_video_platform.sql`: `videos`, `member_levels`, `video_staff_access` (now unused), `playback_audit`.
+- `20261016_roles_sections_recordings.sql`: adds `section`, `visibility`, `encoding_status`,
+  `uploaded_by_discord_id`, `deleted_at` to `videos`; makes `level` nullable for
+  Lectures / Weekly Recaps; adds `student_recordings`, `content_audit` and
+  `playback_audit.recording_id`; drops the client select policy on `videos`.
 
-## Privacy note (draft for owner — not legal advice)
-
-> When you watch mentorship videos we retrieve your legal name from your
-> mentorship joining records so we can display it with your Discord user ID on
-> the player as a personalised watermark. We use this to discourage unauthorised
-> sharing and to investigate suspected misuse. Names are requested when needed
-> for playback rather than copied indefinitely into a second customer database.
-> Short-lived technical logs of playback grants/denials may be kept to operate
-> the service; retention is set by HTNQ. Watermarking is not a guarantee against
-> all recording and does not by itself establish a legal breach.
+All mentorship tables are read and written only by Edge Functions (service role).
+The owner chooses audit retention.
 
 ## Price context
 
-Advertised price changes (e.g. £1,500) are **not** encoded here. Video access
-depends on the bot’s agreement-aware Railway decision, not a hard-coded amount.
-
-## Configuration still required before launch
-
-See `docs/launch-checklist.md` and `docs/bot-handoff-member-access-api.md`.
+Advertised price changes are **not** encoded here. Video access depends on the
+bot's agreement-aware Railway decision, not a hard-coded amount.
