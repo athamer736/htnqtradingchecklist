@@ -181,6 +181,7 @@ function MentorshipNav({
         return (
           <button
             key={e.id}
+            title={e.locked ? `${e.label} (locked)` : e.label}
             onClick={() => onChange(e.id)}
             className={`flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-left text-sm transition-all duration-150 active:scale-[0.98] ${
               isActive
