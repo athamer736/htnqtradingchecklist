@@ -93,8 +93,11 @@ export async function writeContentAudit(
     actor_user_id: string
     actor_discord_id: string
     action: string
-    target_kind: 'video' | 'recording'
-    target_id: string
+    target_kind: 'video' | 'recording' | 'member'
+    /** Null for member targets, which are identified by Discord id instead. */
+    target_id: string | null
+    /** Set for 'member' targets (an id, never a name). */
+    target_discord_id?: string
     detail?: Record<string, unknown>
   }
 ): Promise<void> {

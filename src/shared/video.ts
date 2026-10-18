@@ -81,6 +81,45 @@ export interface StudentSummary {
   recordingCount?: number
 }
 
+/** A mentorship server member as listed in the Admin panel (Discord data only). */
+export interface AdminMember {
+  discordId: string
+  displayName: string
+  username: string
+  avatarUrl: string | null
+  role: PrimaryRole
+  isStaff: boolean
+  isStudent: boolean
+  /** What they can actually open: staff all, students inclusive, others none. */
+  levels: VideoLevel[]
+  /** What their Level roles would grant, ignoring the Student requirement. */
+  levelRoles: VideoLevel[]
+  /** Holds a Level role but not the Student role, so those levels stay locked. */
+  levelWithoutStudent: boolean
+}
+
+export interface AdminMembersResponse {
+  ok: true
+  members: AdminMember[]
+  /** More members existed than the server scanned. */
+  truncated: boolean
+}
+
+/** One member's identity as the bot reports it. Fetched on request, never persisted. */
+export type MemberIdentity =
+  | { access: 'allowed'; legalName: string; identitySource: 'signed_nda' | 'staff_record' }
+  | { access: 'denied'; reason: string }
+
+export const IDENTITY_DENY_LABELS: Record<string, string> = {
+  onboarding_incomplete: 'Onboarding incomplete',
+  nda_missing: 'NDA not signed',
+  payment_incomplete: 'Payment incomplete',
+  membership_inactive: 'Membership inactive',
+  suspended: 'Suspended',
+  not_found: 'Not found in the bot',
+  identity_unresolved: 'Legal name could not be resolved'
+}
+
 export type PlaybackTarget = { kind: 'video'; id: string } | { kind: 'recording'; id: string }
 
 export type UploadTarget =

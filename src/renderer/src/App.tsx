@@ -11,6 +11,7 @@ import PointsView from './views/PointsView'
 import ReferenceView from './views/ReferenceView'
 import JournalView from './views/JournalView'
 import DataView from './views/DataView'
+import AdminView from './views/AdminView'
 import ContentSectionView from './views/ContentSectionView'
 import StudentRecordingsView from './views/StudentRecordingsView'
 import { useTrades } from './store/useTrades'
@@ -97,6 +98,7 @@ export default function App(): JSX.Element {
           {view === 'reference' && <ReferenceView />}
           {view === 'journal' && <JournalView />}
           {view === 'data' && <DataView />}
+          {view === 'admin' && <AdminView />}
         </div>
       </main>
       {/* <LogConsole /> */}

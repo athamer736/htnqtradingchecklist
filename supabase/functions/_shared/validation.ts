@@ -3,6 +3,7 @@
 // Supabase identity, and legal names only from the Railway API.
 
 import { isContentSection, isVisibility, type ContentSection, type Visibility } from './decisions.ts'
+import type { MoveDirection } from './ordering.ts'
 import type { VideoLevel } from './roles.ts'
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -139,6 +140,8 @@ export type ManageRequest =
     }
   | { kind: 'video' | 'recording'; id: string; action: 'delete' }
   | { kind: 'video' | 'recording'; id: string; action: 'refresh_status' }
+  /** Videos only (recordings have no manual order). Swaps with the neighbour in its section/level. */
+  | { kind: 'video'; id: string; action: 'move'; direction: MoveDirection }
 
 export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
   const o = asObject(body)
@@ -162,9 +165,29 @@ export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
       return { ok: true, value: { ...base, action: 'delete' } }
     case 'refresh_status':
       return { ok: true, value: { ...base, action: 'refresh_status' } }
+    case 'move':
+      if (o.kind !== 'video') return { ok: false, error: 'move-videos-only' }
+      if (o.direction !== 'up' && o.direction !== 'down') return { ok: false, error: 'invalid-direction' }
+      return { ok: true, value: { kind: 'video', id: o.id, action: 'move', direction: o.direction } }
     default:
       return { ok: false, error: 'invalid-action' }
   }
+}
+
+// --- admin-member-identity --------------------------------------------------
+
+/**
+ * The member being looked up is named `memberDiscordId` on purpose: the plain
+ * `discordId` / `discord_id` keys are rejected everywhere else because they would
+ * let a client claim to be someone. Here the caller is an authorised manager
+ * choosing a target, and the target is validated as a Discord snowflake.
+ */
+export function parseMemberIdentityRequest(body: unknown): Parsed<{ memberDiscordId: string }> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
+  if (!isSnowflake(o.memberDiscordId)) return { ok: false, error: 'invalid-member' }
+  return { ok: true, value: { memberDiscordId: o.memberDiscordId } }
 }
 
 // --- list-students / list-recordings ---------------------------------------

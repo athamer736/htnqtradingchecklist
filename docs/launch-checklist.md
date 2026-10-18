@@ -36,10 +36,11 @@
 
 ### Supabase SQL
 
-Apply in order (both idempotent; both are also appended to `schema.sql`):
+Apply in order (all idempotent; all are also appended to `schema.sql`):
 
 1. `supabase/migrations/20261008_video_platform.sql`
 2. `supabase/migrations/20261016_roles_sections_recordings.sql`
+3. `supabase/migrations/20261018_admin_panel.sql` (Admin panel: wider `content_audit`)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -71,6 +72,8 @@ supabase functions deploy list-recordings
 supabase functions deploy list-students
 supabase functions deploy create-upload
 supabase functions deploy manage-content
+supabase functions deploy admin-members
+supabase functions deploy admin-member-identity
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos
 ```

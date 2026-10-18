@@ -32,6 +32,8 @@ export type ManageAction =
   | { action: 'update_metadata'; title?: string; description?: string | null }
   | { action: 'delete' }
   | { action: 'refresh_status' }
+  /** Owner/admin, videos only: swap with the neighbour in the same section/Level. */
+  | { action: 'move'; direction: 'up' | 'down' }
 
 export type CreateUploadRequest =
   | {
@@ -55,7 +57,7 @@ function messageFor(code: unknown, fallback: string): string {
 }
 
 /** Calls an Edge Function and returns its JSON body, including on non-2xx deny responses. */
-async function invoke(name: string, body: unknown): Promise<Record<string, unknown> | null> {
+export async function invoke(name: string, body: unknown): Promise<Record<string, unknown> | null> {
   if (!supabase) return null
   try {
     const { data, error } = await supabase.functions.invoke(name, { body: body ?? {} })
@@ -71,7 +73,10 @@ async function invoke(name: string, body: unknown): Promise<Record<string, unkno
   }
 }
 
-function toFailure(body: Record<string, unknown> | null, fallback = PLAYBACK_MESSAGES.service_unavailable): Failure {
+export function toFailure(
+  body: Record<string, unknown> | null,
+  fallback = PLAYBACK_MESSAGES.service_unavailable
+): Failure {
   if (!body) return GENERIC_FAILURE
   const reasonCode = typeof body.reasonCode === 'string' ? body.reasonCode : 'service_unavailable'
   const message =

@@ -131,8 +131,9 @@ the app.)
 
 Protected videos need additional server secrets and the tables from
 `migrations/20261008_video_platform.sql` and
-`migrations/20261016_roles_sections_recordings.sql` (both also appended to
-`schema.sql`; both are safe to re-run).
+`migrations/20261016_roles_sections_recordings.sql` and
+`migrations/20261018_admin_panel.sql` (all also appended to `schema.sql`; all
+are safe to re-run).
 
 ## 10. Extra secrets for videos
 
@@ -166,9 +167,15 @@ supabase functions deploy list-recordings
 supabase functions deploy list-students
 supabase functions deploy create-upload
 supabase functions deploy manage-content
+supabase functions deploy admin-members
+supabase functions deploy admin-member-identity
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos   # replaced by list-content
 ```
+
+`admin-members` and `admin-member-identity` back the Admin panel (owner/admin
+only). The member list needs the bot's **Server Members Intent**; the legal-name
+lookup also needs `MENTORSHIP_API_BASE_URL` / `MENTORSHIP_API_TOKEN`.
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep

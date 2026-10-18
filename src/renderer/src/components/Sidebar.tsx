@@ -19,6 +19,7 @@ export type ViewId =
   | 'reference'
   | 'journal'
   | 'data'
+  | 'admin'
 
 interface NavItem {
   id: ViewId
@@ -97,6 +98,20 @@ const items: NavItem[] = [
 ]
 
 const LEARN_INDEX = items.findIndex((i) => i.id === 'learn')
+
+// Owner/admin only. Shown from the server-computed `isManager` capability; the
+// functions behind the panel re-check live Discord roles on every call.
+const adminItem: NavItem = {
+  id: 'admin',
+  label: 'Admin',
+  hint: 'Members & library',
+  icon: (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
+      <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" strokeLinejoin="round" />
+      <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 const MENTORSHIP_LEVELS: { id: ViewId; level: VideoLevel }[] = [
   { id: 'level1', level: 1 },
@@ -212,6 +227,7 @@ export default function Sidebar({
   const clearTrades = useTrades((s) => s.clear)
   const resetData = useDataCollection((s) => s.reset)
   const confirm = useConfirm()
+  const isManager = useMentorship((s) => Boolean(s.capabilities?.isManager))
 
   const handleReset = async (): Promise<void> => {
     const ok = await confirm({
@@ -271,6 +287,7 @@ export default function Sidebar({
         {items.slice(LEARN_INDEX + 1).map((item) => (
           <NavButton key={item.id} item={item} active={active} onChange={onChange} />
         ))}
+        {isManager && <NavButton item={adminItem} active={active} onChange={onChange} />}
       </nav>
 
       <div className="shrink-0 px-5 py-4 text-[11px] leading-relaxed text-muted/70">

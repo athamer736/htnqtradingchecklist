@@ -18,6 +18,7 @@ Customer app (Windows desktop or https://app.htnq.org)
   → Edge Functions
        list-content | list-recordings | list-students     (listings, no playback URLs)
        create-upload | manage-content                     (staff)
+       admin-members | admin-member-identity              (owner/admin: Admin panel)
        issue-playback-token                               (every play and renewal)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
@@ -59,6 +60,9 @@ mentor) see every level.
 | Publish / make private | Everything | Level 1-3 and recordings | No |
 | Edit title / description | Yes | No | No |
 | Delete (also deletes in Bunny) | Yes | No | No |
+| Reorder videos within a section / Level | Yes | No | No |
+| Admin panel: members list (live roles and levels) | Yes | No | No |
+| Admin panel: look up a member's legal name (live from the bot, audited) | Yes | No | No |
 
 The client only receives per-item permission flags. Every action is re-checked
 on the server; sidebar locks are hints.
@@ -73,6 +77,22 @@ Weekly Recaps & Outlooks, then **Student Recordings** (staff: searchable
 picker of Discord members with the Student role, then that student's
 recordings and an upload button) or **My Recordings** (students). Learn is
 unchanged.
+
+Owners and admins also get an **Admin** item (shown from the server-computed
+`isManager` capability) with two tabs:
+
+- **Members**: everyone in the mentorship server who holds a staff, Student or
+  Level role (`admin-members`). Roles and effective levels come live from
+  Discord and are read-only: levels and staff roles are changed in Discord. A
+  member with a Level role but no Student role is flagged because none of their
+  levels unlock. Legal names are **not** listed. **Show legal name** calls
+  `admin-member-identity`, which asks the bot for that one member, returns the
+  name without storing it, and records the lookup (Discord IDs only, never the
+  name) in `content_audit`. The name lives in memory while the panel is open.
+- **Library**: every video grouped by Level 1-3, Lectures and Weekly Recaps, in
+  the order members see, with **Up / Down** (`manage-content` `move`),
+  publish / make private, edit and delete. Upload still happens on each
+  section's page.
 
 ## Authorisation chain (playback)
 
@@ -91,7 +111,8 @@ Before any signed URL is issued, `issue-playback-token`:
    plus the access window (`accessValidForSeconds`, at most 300 s).
 
 Every grant and denial is written to `playback_audit`. Uploads, visibility
-changes, edits, deletes and status refreshes are written to `content_audit`.
+changes, edits, deletes, reorders, status refreshes and Admin-panel legal-name
+lookups are written to `content_audit`.
 
 ## Uploads
 
@@ -204,13 +225,16 @@ VITE_SUPABASE_ANON_KEY=
 
 ## Database
 
-Apply in order (both idempotent, both appended to `schema.sql`):
+Apply in order (all idempotent, all appended to `schema.sql`):
 
 - `20261008_video_platform.sql`: `videos`, `member_levels`, `video_staff_access` (now unused), `playback_audit`.
 - `20261016_roles_sections_recordings.sql`: adds `section`, `visibility`, `encoding_status`,
   `uploaded_by_discord_id`, `deleted_at` to `videos`; makes `level` nullable for
   Lectures / Weekly Recaps; adds `student_recordings`, `content_audit` and
   `playback_audit.recording_id`; drops the client select policy on `videos`.
+- `20261018_admin_panel.sql`: widens `content_audit` for the `reordered` and
+  `member_name_viewed` actions and a `member` target (Discord id in the new
+  `target_discord_id` column; `target_id` becomes nullable).
 
 All mentorship tables are read and written only by Edge Functions (service role).
 The owner chooses audit retention.

@@ -75,6 +75,23 @@ export function canDeleteVideo(caps: Capabilities): boolean {
   return caps.isManager
 }
 
+/** Reordering changes what every student sees, so it is a manager action. */
+export function canReorderContent(caps: Capabilities): boolean {
+  return caps.isManager
+}
+
+// --- Admin panel ------------------------------------------------------------
+
+/** The member list (roles and levels). Owner/admin only. */
+export function canViewMembers(caps: Capabilities): boolean {
+  return caps.isManager
+}
+
+/** A member's legal name is sensitive: owner/admin only, and each lookup is audited. */
+export function canViewMemberIdentity(caps: Capabilities): boolean {
+  return caps.isManager
+}
+
 // --- 1:1 student recordings -------------------------------------------------
 
 export function canListRecording(
