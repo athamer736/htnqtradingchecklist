@@ -67,6 +67,11 @@ export function canSetVideoVisibility(caps: Capabilities, item: VideoItem): bool
   return false
 }
 
+/** Same people who may publish/hide a video: owner/admin anywhere, mentors in Level sections. */
+export function canSetVideoThumbnail(caps: Capabilities, item: VideoItem): boolean {
+  return canSetVideoVisibility(caps, item)
+}
+
 export function canEditVideo(caps: Capabilities): boolean {
   return caps.isManager
 }

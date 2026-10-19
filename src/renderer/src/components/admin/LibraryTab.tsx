@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useConfirm } from '../ConfirmProvider'
 import EditDetailsDialog from '../video/EditDetailsDialog'
+import ThumbnailButton from '../video/ThumbnailButton'
 import { formatDuration } from '../video/ContentCard'
 import { useMentorship, type ManageAction } from '../../store/useMentorship'
 import { SECTION_LABELS, type ContentSection, type ContentVideo } from '../../../../shared/video'
@@ -147,6 +148,14 @@ export default function LibraryTab(): JSX.Element {
                         >
                           {isPrivate ? 'Publish' : 'Make private'}
                         </button>
+                      )}
+                      {v.encodingStatus === 'ready' && v.canSetVisibility && (
+                        <ThumbnailButton
+                          videoId={v.id}
+                          disabled={busy}
+                          onDone={() => void load()}
+                          onError={setError}
+                        />
                       )}
                       {v.canEdit && (
                         <button type="button" className="btn-ghost px-2.5 py-1 text-xs" disabled={busy} onClick={() => setEditing(v)}>

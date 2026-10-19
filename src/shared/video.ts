@@ -12,6 +12,46 @@ export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'none'
 
+/**
+ * File picker filter for uploads. `video/*` alone hides .mkv on Windows, where
+ * the system has no registered MIME type for Matroska, so list it explicitly.
+ */
+export const UPLOAD_ACCEPT = 'video/*,.mkv,.mp4,.mov,.m4v,.webm,.avi'
+
+const EXTENSION_MIME: Record<string, string> = {
+  mkv: 'video/x-matroska',
+  mp4: 'video/mp4',
+  m4v: 'video/x-m4v',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+  avi: 'video/x-msvideo'
+}
+
+/**
+ * MIME type to tell Bunny. Browsers leave File.type empty for formats the OS
+ * doesn't know (typically .mkv), so fall back to the extension, then to mp4.
+ */
+export function uploadMimeType(fileName: string, reportedType: string): string {
+  if (reportedType.startsWith('video/')) return reportedType
+  const ext = /\.([a-z0-9]+)$/i.exec(fileName)?.[1]?.toLowerCase() ?? ''
+  return EXTENSION_MIME[ext] ?? 'video/mp4'
+}
+
+/** Custom thumbnails: JPEG, PNG or WebP up to 2 MB (the server enforces the same). */
+export const THUMBNAIL_ACCEPT = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
+export const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
+
+/** A readable message when the file can't be used as a thumbnail, otherwise null. */
+export function thumbnailFileProblem(file: { name: string; size: number; type: string }): string | null {
+  const okType = /^image\/(jpeg|png|webp)$/.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name)
+  if (!okType) return 'Choose a JPEG, PNG or WebP image.'
+  if (file.size <= 0) return 'That image file is empty.'
+  if (file.size > MAX_THUMBNAIL_BYTES) {
+    return `That image is ${(file.size / 1024 ** 2).toFixed(1)} MB. Thumbnails can be up to 2 MB.`
+  }
+  return null
+}
+
 export const SECTION_LABELS: Record<ContentSection, string> = {
   level: 'Level',
   lectures: 'Lectures',

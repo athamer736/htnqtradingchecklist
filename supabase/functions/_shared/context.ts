@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import type { AuthzDeps } from './authz.ts'
 import { fetchGuildMember } from './discord.ts'
 import { loadRoleConfig, type RoleConfig } from './roles.ts'
+import { thumbnailCdnUrl } from './thumbnail.ts'
 
 export interface MentorshipEnv {
   botToken: string
@@ -109,7 +110,7 @@ export async function writeContentAudit(
 }
 
 /** Optional Bunny CDN thumbnail URL (only when a CDN hostname is configured). */
-export function thumbnailUrl(env: MentorshipEnv, bunnyVideoId: string): string | null {
+export function thumbnailUrl(env: MentorshipEnv, bunnyVideoId: string, version?: string | null): string | null {
   if (!env.bunnyCdnHostname) return null
-  return `https://${env.bunnyCdnHostname}/${encodeURIComponent(bunnyVideoId)}/thumbnail.jpg`
+  return thumbnailCdnUrl(env.bunnyCdnHostname, bunnyVideoId, version)
 }

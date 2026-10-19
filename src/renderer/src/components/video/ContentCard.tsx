@@ -3,6 +3,7 @@ import type { EncodingStatus, ItemPermissions, Visibility } from '../../../../sh
 import { useMentorship, type ManageAction } from '../../store/useMentorship'
 import { useConfirm } from '../ConfirmProvider'
 import EditDetailsDialog from './EditDetailsDialog'
+import ThumbnailButton from './ThumbnailButton'
 
 export function formatDuration(seconds: number | null): string {
   if (seconds == null || seconds <= 0) return ''
@@ -140,6 +141,9 @@ export default function ContentCard({
               >
                 {isPrivate ? 'Publish' : 'Make private'}
               </button>
+            )}
+            {kind === 'video' && ready && item.canSetVisibility && (
+              <ThumbnailButton videoId={item.id} disabled={busy} onDone={onChanged} onError={setError} />
             )}
             {item.canEdit && (
               <button type="button" className="btn-ghost px-2.5 py-1 text-xs" disabled={busy} onClick={() => setEditing(true)}>

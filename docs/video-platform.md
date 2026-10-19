@@ -17,7 +17,7 @@ Customer app (Windows desktop or https://app.htnq.org)
   → Supabase Auth (Discord)
   → Edge Functions
        list-content | list-recordings | list-students     (listings, no playback URLs)
-       create-upload | manage-content                     (staff)
+       create-upload | manage-content | set-thumbnail     (staff)
        admin-members | admin-member-identity              (owner/admin: Admin panel)
        issue-playback-token                               (every play and renewal)
        verify-membership                                  (journal sync gate)

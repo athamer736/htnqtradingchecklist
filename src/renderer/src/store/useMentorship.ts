@@ -12,7 +12,8 @@ import {
   type StudentSummary,
   type UploadCredentials,
   type UploadTarget,
-  type Visibility
+  type Visibility,
+  thumbnailFileProblem
 } from '../../../shared/video'
 import {
   afterRenewFailure,
@@ -131,6 +132,8 @@ interface MentorshipState {
   stop: () => void
   manage: (kind: 'video' | 'recording', id: string, action: ManageAction) => Promise<Result<object>>
   createUpload: (req: CreateUploadRequest) => Promise<UploadCredentials | Failure>
+  /** Staff: replace a ready video's thumbnail with a JPEG/PNG/WebP image (max 2 MB). */
+  setThumbnail: (videoId: string, image: File) => Promise<Result<object>>
   reset: () => void
 }
 
@@ -301,6 +304,15 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
     const body = await invoke('create-upload', payload)
     if (body?.ok === true && typeof body.signature === 'string') return body as unknown as UploadCredentials
     return toFailure(body, 'Could not start the upload.')
+  },
+
+  setThumbnail: async (videoId, image) => {
+    const problem = thumbnailFileProblem(image)
+    if (problem) return { ok: false, reasonCode: 'invalid_request', message: problem }
+    // The raw image is the request body; the video id travels in the query string.
+    const body = await invoke(`set-thumbnail?id=${encodeURIComponent(videoId)}`, image)
+    if (body?.ok === true) return { ok: true }
+    return toFailure(body, 'The thumbnail could not be saved.')
   },
 
   reset: () => set({ ...initial })

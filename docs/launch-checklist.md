@@ -72,6 +72,7 @@ supabase functions deploy list-recordings
 supabase functions deploy list-students
 supabase functions deploy create-upload
 supabase functions deploy manage-content
+supabase functions deploy set-thumbnail
 supabase functions deploy admin-members
 supabase functions deploy admin-member-identity
 supabase functions deploy issue-playback-token

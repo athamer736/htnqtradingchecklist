@@ -167,11 +167,16 @@ supabase functions deploy list-recordings
 supabase functions deploy list-students
 supabase functions deploy create-upload
 supabase functions deploy manage-content
+supabase functions deploy set-thumbnail
 supabase functions deploy admin-members
 supabase functions deploy admin-member-identity
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos   # replaced by list-content
 ```
+
+`set-thumbnail` lets staff replace a ready video's thumbnail (JPEG/PNG/WebP, up
+to 2 MB; same permission as publishing: owner/admin anywhere, mentors in Level
+videos). The thumbnail only shows on cards when `BUNNY_STREAM_CDN_HOSTNAME` is set.
 
 `admin-members` and `admin-member-identity` back the Admin panel (owner/admin
 only). The member list needs the bot's **Server Members Intent**; the legal-name

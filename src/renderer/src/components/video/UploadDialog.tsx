@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Upload } from 'tus-js-client'
-import { SECTION_LABELS, type UploadCredentials, type UploadTarget } from '../../../../shared/video'
+import {
+  SECTION_LABELS,
+  UPLOAD_ACCEPT,
+  uploadMimeType,
+  type UploadCredentials,
+  type UploadTarget
+} from '../../../../shared/video'
 import { isDesktop } from '../../lib/supabase'
 import { useMentorship } from '../../store/useMentorship'
 import { useConfirm } from '../ConfirmProvider'
@@ -125,7 +131,7 @@ export default function UploadDialog({
         VideoId: creds.bunnyVideoId,
         LibraryId: creds.libraryId
       },
-      metadata: { filetype: f.type || 'video/mp4', title: title.trim() },
+      metadata: { filetype: uploadMimeType(f.name, f.type), title: title.trim() },
       onShouldRetry: (err) => {
         const status = err.originalResponse?.getStatus() ?? 0
         // Auth / validation failures will not succeed on retry.
@@ -264,7 +270,7 @@ export default function UploadDialog({
             <input
               id="upload-file"
               type="file"
-              accept="video/*"
+              accept={UPLOAD_ACCEPT}
               className="field file:mr-3 file:rounded-md file:border-0 file:bg-bg-hover file:px-2.5 file:py-1 file:text-xs file:text-slate-200"
               onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
             />

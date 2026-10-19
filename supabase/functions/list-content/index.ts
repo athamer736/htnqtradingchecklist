@@ -40,7 +40,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: rows, error } = await admin
     .from('videos')
     .select(
-      'id, bunny_video_id, section, level, title, description, duration_seconds, visibility, encoding_status, created_at, sort_ord'
+      'id, bunny_video_id, section, level, title, description, duration_seconds, visibility, encoding_status, created_at, updated_at, sort_ord'
     )
     .is('deleted_at', null)
     .order('sort_ord', { ascending: true })
@@ -84,7 +84,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       title: r.title as string,
       description: (r.description as string | null) ?? null,
       durationSeconds: (r.duration_seconds as number | null) ?? null,
-      thumbnailUrl: item.encodingStatus === 'ready' ? thumbnailUrl(env, r.bunny_video_id as string) : null,
+      thumbnailUrl: item.encodingStatus === 'ready' ? thumbnailUrl(env, r.bunny_video_id as string, r.updated_at as string | null) : null,
       visibility: item.visibility,
       encodingStatus: item.encodingStatus,
       createdAt: r.created_at as string,
