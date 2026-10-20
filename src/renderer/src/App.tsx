@@ -11,9 +11,12 @@ import PointsView from './views/PointsView'
 import ReferenceView from './views/ReferenceView'
 import JournalView from './views/JournalView'
 import DataView from './views/DataView'
+import ContentSectionView from './views/ContentSectionView'
+import StudentRecordingsView from './views/StudentRecordingsView'
 import { useTrades } from './store/useTrades'
 import { useDataCollection } from './store/useDataCollection'
 import { useAuth } from './store/useAuth'
+import { useMentorship } from './store/useMentorship'
 import { startSync, stopSync, isCloudSyncEnabled } from './sync/syncEngine'
 
 export default function App(): JSX.Element {
@@ -25,6 +28,8 @@ export default function App(): JSX.Element {
   const loadData = useDataCollection((s) => s.load)
   const authStatus = useAuth((s) => s.status)
   const userId = useAuth((s) => s.user?.id ?? null)
+  const loadMentorship = useMentorship((s) => s.load)
+  const resetMentorship = useMentorship((s) => s.reset)
 
   useEffect(() => {
     installGlobalLogCapture()
@@ -41,6 +46,13 @@ export default function App(): JSX.Element {
     }
     return undefined
   }, [authStatus, userId])
+
+  // Capabilities come from live Discord roles and drive the sidebar locks.
+  // Cleared on sign-out / account switch so nothing leaks between accounts.
+  useEffect(() => {
+    resetMentorship()
+    if (authStatus === 'in' && userId) void loadMentorship()
+  }, [authStatus, userId, loadMentorship, resetMentorship])
 
   const handleChange = (v: ViewId): void => {
     setView(v)
@@ -75,6 +87,12 @@ export default function App(): JSX.Element {
         <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pl-12'}`}>
           {view === 'start' && <StartView />}
           {view === 'learn' && <LearnView />}
+          {view === 'level1' && <ContentSectionView section="level" level={1} />}
+          {view === 'level2' && <ContentSectionView section="level" level={2} />}
+          {view === 'level3' && <ContentSectionView section="level" level={3} />}
+          {view === 'lectures' && <ContentSectionView section="lectures" />}
+          {view === 'weekly' && <ContentSectionView section="weekly_recaps" />}
+          {view === 'recordings' && <StudentRecordingsView />}
           {view === 'points' && <PointsView />}
           {view === 'reference' && <ReferenceView />}
           {view === 'journal' && <JournalView />}

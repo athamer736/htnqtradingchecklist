@@ -149,6 +149,20 @@ ipcMain.handle('sync:applyRemote', (_e, rows: SyncRow[]) => applyRemote(rows))
 
 ipcMain.handle('update:getStatus', () => getUpdateStatus())
 
+// Best-effort content protection while mentorship videos play. Electron's
+// setContentProtection blocks some OS-level capture paths on some platforms;
+// it is not DRM and does not stop all recording hardware or phones.
+ipcMain.handle('window:setContentProtection', (e, on: boolean) => {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  if (!win) return false
+  try {
+    win.setContentProtection(Boolean(on))
+    return true
+  } catch {
+    return false
+  }
+})
+
 ipcMain.handle('shell:openExternal', (_e, url: string) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) {
     return shell.openExternal(url)
@@ -240,5 +254,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  app.quit()
 })
