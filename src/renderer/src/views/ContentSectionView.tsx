@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import ContentCard from '../components/video/ContentCard'
+import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
 import PlaybackNotice from '../components/video/PlaybackNotice'
 import UploadDialog from '../components/video/UploadDialog'
 import VideoPlayer from '../components/video/VideoPlayer'
@@ -90,6 +90,7 @@ export default function ContentSectionView({
   const videos = useMentorship((s) => s.videos)
   const load = useMentorship((s) => s.load)
   const playing = useMentorship((s) => s.playing)
+  const playTarget = useMentorship((s) => s.playTarget)
   const playError = useMentorship((s) => s.playError)
   const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
@@ -105,11 +106,23 @@ export default function ContentSectionView({
   if (status !== 'ready' || !caps) return gate
 
   if (playing) {
+    const current = videos.find((v) => v.id === playTarget?.id)
     return (
       <div className="h-full p-4 md:p-6">
         <VideoPlayer
           embedUrl={playing.embedUrl}
           watermark={playing.watermark}
+          details={
+            current
+              ? {
+                  title: current.title,
+                  description: current.description,
+                  meta: [formatDuration(current.durationSeconds), formatDate(current.createdAt)]
+                    .filter(Boolean)
+                    .join(' · ')
+                }
+              : null
+          }
           onClose={stop}
           onTick={tick}
         />

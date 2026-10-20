@@ -19,14 +19,24 @@ const ACCESS_TICK_MS = 2_000
  *   seconds of the decision lapsing); an already-loaded embed is not otherwise
  *   cut off by Bunny until its signed URL expires.
  */
+export interface VideoDetails {
+  title: string
+  description: string | null
+  /** Small line under the title, e.g. duration or date. */
+  meta?: string
+}
+
 export default function VideoPlayer({
   embedUrl,
   watermark,
+  details,
   onClose,
   onTick
 }: {
   embedUrl: string
   watermark: WatermarkIdentity
+  /** Title and description shown in a side panel the viewer can close. */
+  details?: VideoDetails | null
   onClose: () => void
   /** Re-checks access when due and closes the player once it has lapsed. */
   onTick: () => void
@@ -35,6 +45,8 @@ export default function VideoPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [fsError, setFsError] = useState<string | null>(null)
+  // Open by default; closing it gives the video the full width.
+  const [showDetails, setShowDetails] = useState(true)
 
   useEffect(() => {
     const onChange = (): void => {
@@ -113,6 +125,16 @@ export default function VideoPlayer({
           ← Back to videos
         </button>
         <div className="flex items-center gap-2">
+          {details && (
+            <button
+              type="button"
+              className="btn-ghost"
+              aria-pressed={showDetails}
+              onClick={() => setShowDetails((v) => !v)}
+            >
+              {showDetails ? 'Hide details' : 'Show details'}
+            </button>
+          )}
           <button type="button" className="btn-ghost" onClick={() => void toggleFullscreen()}>
             {big ? 'Exit fullscreen' : 'Fullscreen'}
           </button>
@@ -125,36 +147,70 @@ export default function VideoPlayer({
         </p>
       )}
 
-      <div
-        ref={shellRef}
-        className={
-          expanded
-            ? 'fixed inset-0 z-50 overflow-hidden bg-black'
-            : 'relative min-h-0 flex-1 overflow-hidden rounded-xl border border-line bg-black'
-        }
-        style={{ containerType: 'inline-size' }}
-      >
-        {/*
-          allow: no fullscreen / no picture-in-picture — watermark stays with shell.
-        */}
-        <iframe
-          key={embedUrl}
-          src={embedUrl}
-          title="Mentorship video"
-          className="absolute inset-0 h-full w-full border-0"
-          allow="accelerometer; encrypted-media; gyroscope"
-          referrerPolicy="no-referrer"
-        />
-        <WatermarkOverlay identity={watermark} />
-        {big && (
-          <button
-            type="button"
-            onClick={() => void exitFullscreen()}
-            className="absolute right-3 top-3 z-30 rounded-md bg-black/60 px-3 py-1.5 text-xs font-medium text-white/90 hover:bg-black/80"
-            style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: 'max(0.75rem, env(safe-area-inset-right))' }}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+        <div
+          ref={shellRef}
+          className={
+            expanded
+              ? 'fixed inset-0 z-50 overflow-hidden bg-black'
+              : 'relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-line bg-black'
+          }
+          style={{ containerType: 'inline-size' }}
+        >
+          {/*
+            allow: no fullscreen / no picture-in-picture — watermark stays with shell.
+          */}
+          <iframe
+            key={embedUrl}
+            src={embedUrl}
+            title="Mentorship video"
+            className="absolute inset-0 h-full w-full border-0"
+            allow="accelerometer; encrypted-media; gyroscope"
+            referrerPolicy="no-referrer"
+          />
+          <WatermarkOverlay identity={watermark} />
+          {big && (
+            <button
+              type="button"
+              onClick={() => void exitFullscreen()}
+              className="absolute right-3 top-3 z-30 rounded-md bg-black/60 px-3 py-1.5 text-xs font-medium text-white/90 hover:bg-black/80"
+              style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: 'max(0.75rem, env(safe-area-inset-right))' }}
+            >
+              Exit fullscreen
+            </button>
+          )}
+        </div>
+
+        {details && showDetails && (
+          <aside
+            aria-label="Video details"
+            className="flex max-h-48 shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-bg-card lg:max-h-none lg:w-80 xl:w-96"
           >
-            Exit fullscreen
-          </button>
+            <div className="flex items-start justify-between gap-2 border-b border-line px-4 py-3">
+              <div className="min-w-0">
+                <h2 className="break-words text-sm font-semibold text-slate-100">{details.title}</h2>
+                {details.meta && <p className="mt-0.5 text-[11px] text-muted">{details.meta}</p>}
+              </div>
+              <button
+                type="button"
+                className="btn-ghost shrink-0 px-2 py-1 text-xs"
+                aria-label="Close details"
+                title="Close details to make the video bigger"
+                onClick={() => setShowDetails(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {details.description ? (
+                <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-300">
+                  {details.description}
+                </p>
+              ) : (
+                <p className="text-sm text-muted">No description for this video.</p>
+              )}
+            </div>
+          </aside>
         )}
       </div>
 

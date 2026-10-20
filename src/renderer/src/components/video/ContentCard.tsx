@@ -102,7 +102,16 @@ export default function ContentCard({
             {statusChip ? statusChip.label : badge}
           </div>
         )}
-        <div className="absolute left-2 top-2 flex flex-wrap gap-1">
+        {ready && (
+          <button
+            type="button"
+            aria-label={`Play ${item.title}`}
+            className="absolute inset-0 z-0 cursor-pointer bg-transparent transition hover:bg-black/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            disabled={playLoading}
+            onClick={() => void play({ kind, id: item.id })}
+          />
+        )}
+        <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
           {badge && <span className="chip bg-black/60 text-slate-100">{badge}</span>}
           {isStaff && isPrivate && <span className="chip bg-black/70 text-slate-300">Private</span>}
           {isStaff && statusChip && <span className={`chip ${statusChip.className}`}>{statusChip.label}</span>}

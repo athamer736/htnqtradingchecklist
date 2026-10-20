@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import ContentCard, { formatDate } from '../components/video/ContentCard'
+import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
 import PlaybackNotice from '../components/video/PlaybackNotice'
 import UploadDialog from '../components/video/UploadDialog'
 import VideoPlayer from '../components/video/VideoPlayer'
@@ -117,6 +117,7 @@ export default function StudentRecordingsView(): JSX.Element {
   const recordingsStatus = useMentorship((s) => s.recordingsStatus)
   const recordingsError = useMentorship((s) => s.recordingsError)
   const playing = useMentorship((s) => s.playing)
+  const playTarget = useMentorship((s) => s.playTarget)
   const playError = useMentorship((s) => s.playError)
   const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
@@ -140,11 +141,23 @@ export default function StudentRecordingsView(): JSX.Element {
   if (status !== 'ready' || !caps) return <MentorshipStatus />
 
   if (playing) {
+    const current = recordings.find((r) => r.id === playTarget?.id)
     return (
       <div className="h-full p-4 md:p-6">
         <VideoPlayer
           embedUrl={playing.embedUrl}
           watermark={playing.watermark}
+          details={
+            current
+              ? {
+                  title: current.title,
+                  description: current.description,
+                  meta: [formatDuration(current.durationSeconds), formatDate(current.recordedAt ?? current.createdAt)]
+                    .filter(Boolean)
+                    .join(' · ')
+                }
+              : null
+          }
           onClose={stop}
           onTick={tick}
         />
