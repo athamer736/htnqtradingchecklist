@@ -98,15 +98,12 @@ describe('member-access integration (platform ↔ test-only bot mock)', () => {
     assert.ok((out.body.accessValidForSeconds as number) <= 300)
   })
 
-  it('paid but unfinished onboarding is denied without a name', async () => {
-    const out = await play(student(IDS.onboarding))
-    assert.equal(out.body.reasonCode, 'onboarding_incomplete')
-    assert.ok(!JSON.stringify(out.body).includes('Example'))
-  })
-
-  it('suspended and inactive memberships are denied', async () => {
-    assert.equal((await play(student(IDS.suspended))).body.reasonCode, 'suspended')
-    assert.equal((await play(student(IDS.inactive))).body.reasonCode, 'membership_inactive')
+  it('a bot denial never blocks a signed-in member with the right roles; no name is shown', async () => {
+    for (const id of [IDS.onboarding, IDS.suspended, IDS.inactive]) {
+      const out = await play(student(id))
+      assert.equal(out.body.ok, true, id)
+      assert.deepEqual(out.body.watermark, { discordId: id, sessionRef: 'ref-int' })
+    }
   })
 
   it('staff with an approved name record are allowed, watermarked with that name and their Discord ID', async () => {
@@ -135,49 +132,39 @@ describe('member-access integration (platform ↔ test-only bot mock)', () => {
     })
   })
 
-  it('a staff_record name is refused when the viewer has no live staff role', async () => {
-    assert.equal((await play(student(IDS.staffWithRecord))).body.reasonCode, 'membership_inactive')
+  it('a staff_record name is not shown when the viewer has no live staff role', async () => {
+    const out = await play(student(IDS.staffWithRecord))
+    assert.equal(out.body.ok, true)
+    assert.deepEqual(out.body.watermark, { discordId: IDS.staffWithRecord, sessionRef: 'ref-int' })
   })
 
   it('a client-supplied Discord ID is rejected and only the verified ID is ever sent to the bot', async () => {
     const parsed = parsePlaybackRequest({ videoId: VIDEO_ID, discord_id: IDS.entitled })
     assert.deepEqual(parsed, { ok: false, error: 'identity-not-accepted' })
     botCalls.length = 0
-    const out = await play(student(IDS.onboarding))
-    assert.equal(out.body.reasonCode, 'onboarding_incomplete')
+    await play(student(IDS.onboarding))
     await new Promise((r) => setTimeout(r, 20))
     assert.deepEqual(botCalls, [IDS.onboarding])
   })
 
-  it('wrong shared token → misconfigured (401 from the bot), no retry', async () => {
+  it('wrong token, 429, 503 and timeouts from the bot still play, with no legal name', async () => {
     botCalls.length = 0
-    const out = await play(student(IDS.entitled), deps('wrong-token-wrong-token-wrong-token-1234'))
-    assert.equal(out.body.reasonCode, 'misconfigured')
+    const wrong = await play(student(IDS.entitled), deps('wrong-token-wrong-token-wrong-token-1234'))
+    assert.equal(wrong.body.ok, true)
+    assert.deepEqual(wrong.body.watermark, { discordId: IDS.entitled, sessionRef: 'ref-int' })
     await new Promise((r) => setTimeout(r, 20))
     assert.equal(botCalls.length, 1)
-  })
 
-  it('429 → temporarily unavailable with Retry-After', async () => {
-    const out = await play(student(IDS.rateLimited))
-    assert.equal(out.status, 503)
-    assert.equal(out.body.reasonCode, 'service_unavailable')
-    assert.equal(out.body.retryAfterSeconds, 9)
-  })
-
-  it('503 → temporarily unavailable after a bounded retry', async () => {
-    botCalls.length = 0
-    const out = await play(student(IDS.down))
-    assert.equal(out.body.reasonCode, 'service_unavailable')
-    await new Promise((r) => setTimeout(r, 20))
-    assert.equal(botCalls.length, 2)
-  })
-
-  it('timeout → temporarily unavailable, nothing signed', async () => {
-    const d = deps(TOKEN, 100)
-    const out = await play(student(IDS.slow), d)
-    assert.equal(out.body.reasonCode, 'service_unavailable')
-    assert.ok(!('embedUrl' in out.body))
-    assert.equal(d.audits.at(-1)?.outcome, 'denied')
+    for (const [id, d] of [
+      [IDS.rateLimited, deps()],
+      [IDS.down, deps()],
+      [IDS.slow, deps(TOKEN, 100)]
+    ] as const) {
+      const out = await play(student(id), d)
+      assert.equal(out.body.ok, true, id)
+      assert.ok((out.body.accessValidForSeconds as number) <= 300)
+      assert.equal(d.audits.at(-1)?.outcome, 'issued')
+    }
   })
 
   it('audit rows never contain legal names', async () => {

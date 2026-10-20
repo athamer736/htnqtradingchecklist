@@ -131,13 +131,12 @@ after explicit approval), a sandbox bot deployment and its own credential.
 3. Accounts to prepare in the bot's sandbox data: an entitled customer, a paid
    member with onboarding unfinished, a suspended member, a staff member with a
    staff-table name, and a staff member without one.
-4. Check each account sees only its own Discord ID (and its own legal name, if on
-   file) on the watermark, the
-   unfinished and suspended accounts are refused with the right message, a
-   nameless staff account can still watch, and a wrong token shows "not configured" rather than a denial.
-5. Revoke the entitled customer in the bot while their player is open: it must
-   close within about 3.5 minutes. Stop the bot service: the open player must show
-   "temporarily unavailable" and close within 5 minutes.
+4. Check each account sees only its own Discord ID and username (and its own
+   legal name, if on file) on the watermark. Every account with the right
+   Discord roles plays, whatever the bot answers; the bot only supplies the name.
+5. Remove a student's Level role while their player is open: it must close
+   within about 3.5 minutes. Stop the bot service: playback must carry on,
+   just without the bot's legal name.
 6. Fullscreen on desktop, browser and a phone: watermark stays visible.
 
 ### Web app
