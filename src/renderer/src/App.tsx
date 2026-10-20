@@ -91,6 +91,7 @@ export default function App(): JSX.Element {
           {view === 'level1' && <ContentSectionView section="level" level={1} />}
           {view === 'level2' && <ContentSectionView section="level" level={2} />}
           {view === 'level3' && <ContentSectionView section="level" level={3} />}
+          {view === 'furtherStudying' && <ContentSectionView section="further_studying" />}
           {view === 'lectures' && <ContentSectionView section="lectures" />}
           {view === 'weekly' && <ContentSectionView section="weekly_recaps" />}
           {view === 'recordings' && <StudentRecordingsView />}

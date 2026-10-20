@@ -210,7 +210,7 @@ accounts have no Discord identity and cannot watch or manage mentorship content
 | --- | --- | --- | --- | --- | --- |
 | Owner, Admin | Everything | Every section and any student's recordings | Yes | Yes | Yes |
 | Mentor | Everything, including every student's recordings | Level 1-3 and 1:1 recordings | Level 1-3 and recordings | No | No |
-| Student | Level tabs up to their highest Level role (inclusive), Lectures, Weekly Recaps, their own published recordings | No | No | No | No |
+| Student | Level tabs up to their highest Level role (inclusive), Further Studying (Level 3 role only), Lectures, Weekly Recaps, their own published recordings | No | No | No | No |
 
 Staff playback still goes through the Railway mentorship check. The watermark is the
 viewer's Discord ID (plus their legal name when one is on file), so staff do not need a recorded legal name to watch.

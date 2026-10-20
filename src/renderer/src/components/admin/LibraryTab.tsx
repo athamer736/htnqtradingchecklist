@@ -28,7 +28,8 @@ function buildGroups(videos: ContentVideo[]): Group[] {
       videos: videos.filter((v) => v.section === 'level' && v.level === level)
     })
   }
-  for (const section of ['lectures', 'weekly_recaps'] as ContentSection[]) {
+  // Further Studying sits right after Level 3, the same place it has in the sidebar.
+  for (const section of ['further_studying', 'lectures', 'weekly_recaps'] as ContentSection[]) {
     groups.push({
       key: section,
       label: SECTION_LABELS[section],

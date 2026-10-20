@@ -58,9 +58,10 @@ mentor) see every level.
 | | Owner / Admin | Mentor | Student |
 | --- | --- | --- | --- |
 | Level 1-3 tabs | All, including private and processing | All, including private and processing | Published + ready, up to their highest Level role |
+| Further Studying | All, including private and processing | All, including private and processing | Published + ready, with the Level 3 role |
 | Lectures, Weekly Recaps & Outlooks | All | All | Published + ready |
 | 1:1 recordings | Any student's | Any student's | Their own, published + ready |
-| Upload | Every section; any student's recordings | Level 1-3; any student's recordings | No |
+| Upload | Every section (Further Studying: owner/admin only); any student's recordings | Level 1-3; any student's recordings | No |
 | Publish / make private | Everything | Level 1-3 and recordings | No |
 | Edit title / description | Yes | No | No |
 | Delete (also deletes in Bunny) | Yes | No | No |
@@ -85,7 +86,7 @@ mentorship content. The earlier `video_staff_access` email bypass is removed.
 
 ## Sidebar
 
-After **Learn**, a **Mentorship** group: Level 1, Level 2, Level 3, Lectures,
+After **Learn**, a **Mentorship** group: Level 1, Level 2, Level 3, Further Studying, Lectures,
 Weekly Recaps & Outlooks, then **Student Recordings** (staff: searchable
 picker of Discord members with the Student role, then that student's
 recordings and an upload button) or **My Recordings** (students). Learn is
@@ -110,7 +111,7 @@ Owners and admins also get an **Admin** item (shown from the server-computed
   sent to the player or used for any access decision, and each change is audited
   with who/whom but never the name. It works for any member, including those the
   bot has no name for, and does not change anything in the bot.
-- **Library**: every video grouped by Level 1-3, Lectures and Weekly Recaps, in
+- **Library**: every video grouped by Level 1-3, Further Studying, Lectures and Weekly Recaps, in
   the order members see, with **Up / Down** (`manage-content` `move`),
   publish / make private, edit and delete. Upload still happens on each
   section's page.

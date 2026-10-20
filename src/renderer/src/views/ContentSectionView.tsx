@@ -8,6 +8,7 @@ import VideoPlayer from '../components/video/VideoPlayer'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { useMentorship } from '../store/useMentorship'
 import {
+  FURTHER_STUDYING_LEVEL,
   SECTION_LABELS,
   levelsInclude,
   type ContentSection,
@@ -18,7 +19,8 @@ import {
 const INTRO: Record<ContentSection, string> = {
   level: 'Lessons for this mentorship level.',
   lectures: 'Full-length mentorship lectures.',
-  weekly_recaps: 'Weekly market recaps and the outlook for the week ahead.'
+  weekly_recaps: 'Weekly market recaps and the outlook for the week ahead.',
+  further_studying: 'Extra material for Level 3 members who want to keep going.'
 }
 
 function sectionTitle(section: ContentSection, level: VideoLevel | null): string {
@@ -38,6 +40,9 @@ export function lockReason(
   if (section === 'level' && level !== null && !levelsInclude(caps.levels, level)) {
     const roles = ([1, 2, 3] as VideoLevel[]).filter((l) => l >= level).map((l) => `Level ${l}`)
     return `Level ${level} unlocks with the ${roles.join(' or ')} Discord role.`
+  }
+  if (section === 'further_studying' && !levelsInclude(caps.levels, FURTHER_STUDYING_LEVEL)) {
+    return 'Further Studying unlocks with the Level 3 Discord role.'
   }
   return null
 }

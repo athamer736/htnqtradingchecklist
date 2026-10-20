@@ -4,11 +4,14 @@
 
 import type { Capabilities, VideoLevel } from './roles.ts'
 
-export type ContentSection = 'level' | 'lectures' | 'weekly_recaps'
+export type ContentSection = 'level' | 'lectures' | 'weekly_recaps' | 'further_studying'
 export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 
-export const CONTENT_SECTIONS: ContentSection[] = ['level', 'lectures', 'weekly_recaps']
+export const CONTENT_SECTIONS: ContentSection[] = ['level', 'lectures', 'weekly_recaps', 'further_studying']
+
+/** Further Studying is for members whose roles unlock Level 3 (and staff). */
+export const FURTHER_STUDYING_LEVEL: VideoLevel = 3
 
 export interface VideoItem {
   section: ContentSection
@@ -24,7 +27,7 @@ export interface RecordingItem {
 }
 
 export function isContentSection(v: unknown): v is ContentSection {
-  return v === 'level' || v === 'lectures' || v === 'weekly_recaps'
+  return v === 'level' || v === 'lectures' || v === 'weekly_recaps' || v === 'further_studying'
 }
 
 export function isVisibility(v: unknown): v is Visibility {
@@ -39,6 +42,7 @@ export function canListVideo(caps: Capabilities, item: VideoItem): boolean {
   if (!caps.isStudent) return false
   if (item.visibility !== 'published' || item.encodingStatus !== 'ready') return false
   if (item.section === 'level') return item.level !== null && caps.levels.includes(item.level)
+  if (item.section === 'further_studying') return caps.levels.includes(FURTHER_STUDYING_LEVEL)
   return true
 }
 
@@ -172,6 +176,7 @@ export interface UploadCapabilities {
   level: boolean
   lectures: boolean
   weekly_recaps: boolean
+  further_studying: boolean
   recordings: boolean
 }
 
@@ -180,6 +185,7 @@ export function uploadCapabilities(caps: Capabilities): UploadCapabilities {
     level: canUploadVideo(caps, 'level', 1),
     lectures: canUploadVideo(caps, 'lectures', null),
     weekly_recaps: canUploadVideo(caps, 'weekly_recaps', null),
+    further_studying: canUploadVideo(caps, 'further_studying', null),
     recordings: canUploadRecording(caps)
   }
 }

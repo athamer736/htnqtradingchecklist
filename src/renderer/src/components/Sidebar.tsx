@@ -2,7 +2,7 @@ import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { useConfirm } from './ConfirmProvider'
 import { useMentorship } from '../store/useMentorship'
-import { levelsInclude, type VideoLevel } from '../../../shared/video'
+import { FURTHER_STUDYING_LEVEL, SECTION_LABELS, levelsInclude, type VideoLevel } from '../../../shared/video'
 import SyncStatus from './SyncStatus'
 import logo from '../assets/htnq-logo.png'
 
@@ -12,6 +12,7 @@ export type ViewId =
   | 'level1'
   | 'level2'
   | 'level3'
+  | 'furtherStudying'
   | 'lectures'
   | 'weekly'
   | 'recordings'
@@ -180,6 +181,13 @@ function MentorshipNav({
       label: `Level ${level}`,
       locked: Boolean(caps && !caps.isStaff && (!caps.isStudent || !levelsInclude(caps.levels, level)))
     })),
+    {
+      id: 'furtherStudying',
+      label: SECTION_LABELS.further_studying,
+      locked: Boolean(
+        caps && !caps.isStaff && (!caps.isStudent || !levelsInclude(caps.levels, FURTHER_STUDYING_LEVEL))
+      )
+    },
     { id: 'lectures', label: 'Lectures', locked: sectionLocked },
     { id: 'weekly', label: 'Weekly Recaps & Outlooks', locked: sectionLocked },
     { id: 'recordings', label: isStaff ? 'Student Recordings' : 'My Recordings', locked: sectionLocked }

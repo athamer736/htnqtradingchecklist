@@ -3,7 +3,7 @@
 ## Implemented (this branch)
 
 - [x] Live Discord role capabilities: owner, admin, mentor, student, inclusive Levels 1-3
-- [x] Sections: Level 1-3, Lectures, Weekly Recaps & Outlooks; private/published; encoding status
+- [x] Sections: Level 1-3, Further Studying (Level 3), Lectures, Weekly Recaps & Outlooks; private/published; encoding status
 - [x] 1:1 student recordings (staff upload and browse; students see only their own)
 - [x] Edge Functions: `list-content`, `list-recordings`, `list-students`, `create-upload`,
       `manage-content`, `issue-playback-token`, `verify-membership` (`list-videos` removed)

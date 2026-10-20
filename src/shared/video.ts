@@ -7,7 +7,10 @@ export type VideoLevel = 1 | 2 | 3
 
 export const VIDEO_LEVELS: VideoLevel[] = [1, 2, 3]
 
-export type ContentSection = 'level' | 'lectures' | 'weekly_recaps'
+export type ContentSection = 'level' | 'lectures' | 'weekly_recaps' | 'further_studying'
+
+/** Further Studying opens for members whose roles unlock this Level (and staff). */
+export const FURTHER_STUDYING_LEVEL: VideoLevel = 3
 export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'none'
@@ -55,7 +58,8 @@ export function thumbnailFileProblem(file: { name: string; size: number; type: s
 export const SECTION_LABELS: Record<ContentSection, string> = {
   level: 'Level',
   lectures: 'Lectures',
-  weekly_recaps: 'Weekly Recaps & Outlooks'
+  weekly_recaps: 'Weekly Recaps & Outlooks',
+  further_studying: 'Further Studying'
 }
 
 /** Per-item permission flags computed server-side from live Discord roles. */
@@ -113,6 +117,7 @@ export interface MentorshipCapabilities {
     level: boolean
     lectures: boolean
     weekly_recaps: boolean
+    further_studying: boolean
     recordings: boolean
   }
 }
