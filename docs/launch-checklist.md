@@ -111,7 +111,8 @@ supabase functions delete list-videos
    Owners/admins can also record any member's name in
    Admin -> Members -> **Legal name** (stored in this project's `member_legal_names`;
    needs migration `20261019_member_legal_names.sql` and the `admin-member-name`
-   function). Update the privacy notice before using it (see `privacy-notice-draft.md`).
+   function). The owner approved the privacy wording on 2026-10-20 (see
+   `privacy-notice-draft.md`); add it to the published privacy notice before using it.
 
 ### Sandbox test (before production)
 

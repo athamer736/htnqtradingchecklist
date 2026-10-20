@@ -1,6 +1,9 @@
-# Draft customer-facing privacy text (owner to review)
+# Customer-facing privacy text (approved by the owner)
 
-**Not legal advice. Not approved. No retention period is invented here.**
+**Wording approved by the owner on 2026-10-20 (includes the legal-name
+watermark). Not legal advice. No retention period is invented here: the
+retention wording below is still HTNQ's to set. This text still has to be added
+to the published privacy notice.**
 
 Suggested addition for the owner’s privacy notice:
 
