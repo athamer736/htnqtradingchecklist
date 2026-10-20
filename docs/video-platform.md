@@ -29,7 +29,7 @@ Customer app (Windows desktop or https://app.htnq.org)
 ```
 
 The app never talks to Railway's database. The playback watermark always shows the
-viewer's own Discord ID, plus their legal name when one is on file (the bot's name
+viewer's own Discord ID and current Discord username, plus their legal name when one is on file (the bot's name
 first, else the one an admin entered), so no legal name is needed to watch. Names
 are only ever sent back to that same verified viewer, and are listed or looked up
 by owners and admins on request.
@@ -139,7 +139,8 @@ Before any signed URL is issued, `issue-playback-token`:
    ID (re-validated; an unusable value is skipped, and a failed read just means no
    name). A stored name never changes an access decision.
 7. Signs a short-lived Bunny **embed** URL and returns the watermark (Discord ID,
-   the viewer's own legal name when there is one, and a session reference) and the
+   current Discord username from the live member lookup, the viewer's own legal
+   name when there is one, and a session reference) and the
    access window (`accessValidForSeconds`, at most 300 s). The name is never put in
    the URL, `playback_audit` or logs.
 
@@ -209,10 +210,12 @@ expires. We do **not** promise instant CDN revocation.
 
 ## Watermark and fullscreen
 
-- Overlay text: `Discord ID <viewer's ID>` (+ a short session reference). The ID
-  comes from the verified linked Discord identity, never from the request. It is
-  never placed in URLs. A legal name is **not** shown; it stays a backup
-  identifier held by the bot for investigations.
+- Overlay text: the viewer's legal name (when one is on file), their current
+  Discord username as `@username`, and `Discord ID <viewer's ID>` (+ a short
+  session reference). The ID comes from the verified linked Discord identity,
+  never from the request. The username comes from the live guild member lookup
+  done on every play, so a rename shows up on the next play; if Discord doesn't
+  return a usable one it is simply left out. None of these are placed in URLs.
 - Applies to every video: Level, Lectures, Weekly Recaps and 1:1 recordings.
 - Moves every 12 s within the upper ~75% of the player so the Bunny controls
   stay usable; text scales with the player width (11-22 px), so it stays

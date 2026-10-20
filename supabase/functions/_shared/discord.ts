@@ -1,7 +1,8 @@
 // Discord guild membership + role helpers for Edge Functions.
 
 export type DiscordMemberResult =
-  | { kind: 'member'; roles: string[] }
+  /** `username` is the member's current Discord username, when Discord sent a usable one. */
+  | { kind: 'member'; roles: string[]; username?: string }
   | { kind: 'not_member' }
   | { kind: 'rate_limited'; retryAfterSeconds?: number }
   | { kind: 'error'; status: number; detail: string }
@@ -24,6 +25,17 @@ export function extractDiscordId(user: {
   return null
 }
 
+/**
+ * A Discord username safe to draw on a watermark: control and bidi characters
+ * (which could visually spoof the overlay) are dropped, and anything empty or
+ * longer than Discord allows is rejected rather than shown.
+ */
+export function cleanDiscordUsername(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined
+  const s = v.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim()
+  return s.length >= 2 && s.length <= 32 ? s : undefined
+}
+
 export async function fetchGuildMember(
   botToken: string,
   guildId: string,
@@ -36,11 +48,12 @@ export async function fetchGuildMember(
       { headers: { Authorization: `Bot ${botToken}` } }
     )
     if (res.status === 200) {
-      const body = (await res.json()) as { roles?: unknown }
+      const body = (await res.json()) as { roles?: unknown; user?: { username?: unknown } }
       const roles = Array.isArray(body.roles)
         ? body.roles.filter((r): r is string => typeof r === 'string')
         : []
-      return { kind: 'member', roles }
+      const username = cleanDiscordUsername(body.user?.username)
+      return username ? { kind: 'member', roles, username } : { kind: 'member', roles }
     }
     if (res.status === 404) return { kind: 'not_member' }
     if (res.status === 429) {

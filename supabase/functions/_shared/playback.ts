@@ -182,8 +182,14 @@ export async function runPlayback(
       expiresAt,
       renewAfterSeconds: grant.renewAfterSeconds,
       accessValidForSeconds: grant.accessValidForSeconds,
-      // The Discord ID is always shown; the viewer's own legal name is added when one exists.
-      watermark: { discordId: auth.discordId, sessionRef, ...(legalName ? { legalName } : {}) }
+      // The Discord ID is always shown; the viewer's own legal name and current
+      // Discord username (from this request's live member lookup) are added when known.
+      watermark: {
+        discordId: auth.discordId,
+        sessionRef,
+        ...(legalName ? { legalName } : {}),
+        ...(auth.username ? { username: auth.username } : {})
+      }
     }
   }
 }

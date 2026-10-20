@@ -3,12 +3,15 @@
 **Wording approved by the owner on 2026-10-20 (includes the legal-name
 watermark). Not legal advice. No retention period is invented here: the
 retention wording below is still HTNQ's to set. This text still has to be added
-to the published privacy notice.**
+to the published privacy notice. The watermark now also shows the viewer's
+current Discord username; the first sentence below was updated to say so and
+that change still needs the owner's approval.**
 
 Suggested addition for the owner’s privacy notice:
 
 > When you watch mentorship videos in HTNQ Trading Checklist, we display your
-> Discord user ID, and your legal name where we hold one, on the video player as
+> Discord user ID and current Discord username, and your legal name where we
+> hold one, on the video player as
 > a personalised watermark to discourage unauthorised sharing and to help
 > investigate suspected misuse. Only you see your own watermark. If misuse is
 > suspected, we can also match your Discord ID to your mentorship joining records

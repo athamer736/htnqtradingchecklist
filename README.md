@@ -43,7 +43,7 @@ Lectures, Weekly Recaps & Outlooks, the 1st Of July, 1st Of September and Batch 
 sections (each only for members with that batch's Discord role), and Student Recordings (staff) or My
 Recordings (students). Access follows live Discord roles: higher Level roles
 include the lower levels, mentors and admins upload directly from the app, and
-every video plays with a personalised watermark (the viewer's Discord ID, plus their legal name when one is on file) after the mentorship
+every video plays with a personalised watermark (the viewer's Discord ID and current Discord username, plus their legal name when one is on file) after the mentorship
 bot confirms access. Playback always needs an online check, even though the
 rest of the app works offline.
 

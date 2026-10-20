@@ -23,7 +23,15 @@ export interface AuthzDeps {
 }
 
 export type AuthzResult =
-  | { ok: true; userId: string; discordId: string; roles: string[]; caps: Capabilities }
+  | {
+      ok: true
+      userId: string
+      discordId: string
+      roles: string[]
+      caps: Capabilities
+      /** Current Discord username from the same live lookup, when Discord sent one. */
+      username?: string
+    }
   | { ok: false; reasonCode: DenyCode }
 
 export function bearerToken(req: Request): string {
@@ -64,6 +72,7 @@ export async function authorize(req: Request, deps: AuthzDeps): Promise<AuthzRes
     userId: user.id,
     discordId,
     roles: member.roles,
-    caps: resolveCapabilities(member.roles, deps.roleConfig)
+    caps: resolveCapabilities(member.roles, deps.roleConfig),
+    ...(member.username ? { username: member.username } : {})
   }
 }

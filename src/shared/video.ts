@@ -271,6 +271,8 @@ export interface PlaybackWatermark {
   discordId: string
   /** The viewer's own legal name, only when one is on file (bot first, else admin-entered). */
   legalName?: string
+  /** The viewer's current Discord username, from the server's live member lookup. */
+  username?: string
   /** Short server-generated reference for investigation (not PII). */
   sessionRef: string
 }

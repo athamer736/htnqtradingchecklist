@@ -5,12 +5,14 @@ export interface WatermarkIdentity {
   discordId: string
   /** The viewer's own legal name, when one is on file. */
   legalName?: string
+  /** The viewer's current Discord username, when the server could read it. */
+  username?: string
   sessionRef?: string
 }
 
 /**
  * Moving personalised watermark showing the viewer's own legal name (when one
- * is on file) and Discord ID. This is a deterrent / investigation aid only. A determined user can remove a DOM
+ * is on file), current Discord username and Discord ID. This is a deterrent / investigation aid only. A determined user can remove a DOM
  * overlay; it is not DRM and does not prove a legal breach by itself.
  */
 export default function WatermarkOverlay({
@@ -30,7 +32,7 @@ export default function WatermarkOverlay({
     tick()
     const id = window.setInterval(tick, 12_000)
     return () => window.clearInterval(id)
-  }, [identity.discordId, identity.legalName])
+  }, [identity.discordId, identity.legalName, identity.username])
 
   const line = `Discord ID ${identity.discordId}`
   const sub = identity.sessionRef ? `ref ${identity.sessionRef}` : null
@@ -47,6 +49,7 @@ export default function WatermarkOverlay({
         style={{ fontSize: 'clamp(11px, 1.6cqw, 22px)', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
       >
         {identity.legalName && <div className="break-words font-semibold tracking-wide">{identity.legalName}</div>}
+        {identity.username && <div className="break-words font-medium tracking-wide">@{identity.username}</div>}
         <div className="break-words font-medium tracking-wide">{line}</div>
         {sub && <div className="mt-0.5 text-[0.8em] text-white/55">{sub}</div>}
       </div>
