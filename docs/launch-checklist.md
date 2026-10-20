@@ -103,8 +103,9 @@ supabase functions delete list-videos
    On the bot service set `MEMBER_ACCESS_API_TOKEN`; on Supabase set
    `MENTORSHIP_API_TOKEN` to the same value. Never reuse other secrets.
 3. `MENTORSHIP_API_BASE_URL` = the bot service's HTTPS origin, no path.
-4. Record legal names in the bot's staff table for every owner/admin/mentor who
-   will watch or preview videos.
+4. Optional: record legal names in the bot's staff table for owners/admins/mentors.
+   Watching does not need a name (the watermark is the Discord ID); a recorded name
+   is only a backup identifier and what the Admin panel's **Show legal name** returns.
 
 ### Sandbox test (before production)
 
@@ -118,9 +119,9 @@ after explicit approval), a sandbox bot deployment and its own credential.
 3. Accounts to prepare in the bot's sandbox data: an entitled customer, a paid
    member with onboarding unfinished, a suspended member, a staff member with a
    staff-table name, and a staff member without one.
-4. Check each account sees only its own name and Discord ID on the watermark, the
-   unfinished, suspended and nameless-staff accounts are refused with the right
-   message, and a wrong token shows "not configured" rather than a denial.
+4. Check each account sees only its own Discord ID on the watermark, the
+   unfinished and suspended accounts are refused with the right message, a
+   nameless staff account can still watch, and a wrong token shows "not configured" rather than a denial.
 5. Revoke the entitled customer in the bot while their player is open: it must
    close within about 3.5 minutes. Stop the bot service: the open player must show
    "temporarily unavailable" and close within 5 minutes.

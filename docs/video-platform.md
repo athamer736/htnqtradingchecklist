@@ -27,8 +27,9 @@ Customer app (Windows desktop or https://app.htnq.org)
   → Bunny TUS endpoint (browser uploads files directly; never via Supabase)
 ```
 
-The app never talks to Railway's database. Legal names are fetched at playback
-time for the watermark and kept in memory only.
+The app never talks to Railway's database. The playback watermark is the viewer's
+Discord ID, so no legal name is needed to watch. Legal names stay in the bot as a
+backup identifier and are only shown, on request, to owners and admins.
 
 ## Roles
 
@@ -102,13 +103,17 @@ Before any signed URL is issued, `issue-playback-token`:
 2. Takes the Discord ID from the **linked Discord identity**, never from the request body.
 3. Live-checks guild membership and roles. Discord rate limits or outages fail closed.
 4. Applies the role rules above (private / unfinished items look "not found" to students).
-5. Calls the bot's `POST /api/v1/member-access` for **that** Discord ID; requires
-   a strictly valid `access: "allowed"` response with a usable legal name. This
-   applies to staff too: staff need both a live staff role and a bot
-   `staff_record` name. A `staff_record` name without a live staff role is
-   refused. A Discord display name or editable profile name is never used.
-6. Signs a short-lived Bunny **embed** URL and returns the watermark identity
-   plus the access window (`accessValidForSeconds`, at most 300 s).
+5. Calls the bot's `POST /api/v1/member-access` for **that** Discord ID and
+   requires either a strictly valid `access: "allowed"` response or the bot's
+   `identity_unresolved` denial. `identity_unresolved` is returned only after
+   every real check (suspension, membership, payment, NDA, onboarding) has passed
+   and the only gap is a usable legal name, so it is treated as "eligible": the
+   watermark does not need a name. Every other denial still blocks playback.
+   This applies to staff too (they need a live staff role; a `staff_record`
+   without a live staff role is refused). The legal name is never sent to the
+   client.
+6. Signs a short-lived Bunny **embed** URL and returns the watermark (Discord ID
+   plus a session reference) and the access window (`accessValidForSeconds`, at most 300 s).
 
 Every grant and denial is written to `playback_audit`. Uploads, visibility
 changes, edits, deletes, reorders, status refreshes and Admin-panel legal-name
@@ -176,9 +181,10 @@ expires. We do **not** promise instant CDN revocation.
 
 ## Watermark and fullscreen
 
-- Overlay text: `Full legal name · Discord user ID` (+ a short session reference),
-  taken only from the viewer's own allowed bot response and kept in memory.
-  It is never written to storage, logs or analytics, and never placed in URLs.
+- Overlay text: `Discord ID <viewer's ID>` (+ a short session reference). The ID
+  comes from the verified linked Discord identity, never from the request. It is
+  never placed in URLs. A legal name is **not** shown; it stays a backup
+  identifier held by the bot for investigations.
 - Applies to every video: Level, Lectures, Weekly Recaps and 1:1 recordings.
 - Moves every 12 s within the upper ~75% of the player so the Bunny controls
   stay usable; text scales with the player width (11-22 px), so it stays

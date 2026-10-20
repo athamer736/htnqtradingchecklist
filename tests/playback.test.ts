@@ -108,7 +108,7 @@ describe('runPlayback', () => {
     assert.equal(out.body.accessValidForSeconds, 300)
     assert.equal(out.body.renewAfterSeconds, 210)
     assert.equal(out.body.expiresAt, 1_700_000_000 + 300 + 90)
-    assert.deepEqual(out.body.watermark, { legalName: 'Example Customer', discordId: STUDENT_ID, sessionRef: 'ref123' })
+    assert.deepEqual(out.body.watermark, { discordId: STUDENT_ID, sessionRef: 'ref123' })
     assert.match(String(out.body.embedUrl), /^https:\/\/player\.mediadelivery\.net\/embed\//)
     assert.ok(!String(out.body.embedUrl).includes('Example'), 'no PII in playback URL')
     assert.equal(d.audits.at(-1)?.outcome, 'issued')
@@ -154,7 +154,6 @@ describe('runPlayback', () => {
     const cases: [MentorshipLookupResult, string][] = [
       [deniedResult('payment_incomplete'), 'onboarding_incomplete'],
       [deniedResult('suspended'), 'suspended'],
-      [deniedResult('identity_unresolved'), 'name_unavailable'],
       [{ kind: 'unavailable', error: 'timeout' }, 'service_unavailable'],
       [{ kind: 'unavailable', error: 'discord-id-mismatch' }, 'service_unavailable'],
       [{ kind: 'misconfigured', error: 'no token' }, 'misconfigured']
@@ -167,10 +166,32 @@ describe('runPlayback', () => {
     }
   })
 
-  it('refuses to play without a usable legal name', async () => {
-    const blank: MentorshipLookupResult = { kind: 'allowed', body: { ...allowed.body, legal_name: '   ' } as typeof allowed.body }
-    const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(), deps({ checkMentorship: async () => blank }))
-    assert.equal(out.body.reasonCode, 'name_unavailable')
+  it('does not need a legal name to play: the watermark is the Discord ID', async () => {
+    const out = await runPlayback(
+      { kind: 'video', id: VIDEO_ID },
+      student(R.level3),
+      deps({ checkMentorship: async () => deniedResult('identity_unresolved') })
+    )
+    assert.equal(out.status, 200)
+    assert.equal(out.body.ok, true)
+    assert.deepEqual(out.body.watermark, { discordId: STUDENT_ID, sessionRef: 'ref123' })
+    assert.ok(!JSON.stringify(out.body).includes('Example Customer'), 'legal names never reach the client')
+  })
+
+  it('still applies the usual grant window when no legal name is on file', async () => {
+    const out = await runPlayback(
+      { kind: 'video', id: VIDEO_ID },
+      student(R.level3),
+      deps({ checkMentorship: async () => deniedResult('identity_unresolved') })
+    )
+    assert.equal(out.body.accessValidForSeconds, 300)
+    assert.equal(out.body.renewAfterSeconds, 210)
+  })
+
+  it('never sends a legal name even when the bot supplies one', async () => {
+    const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), deps())
+    assert.ok(!('legalName' in (out.body.watermark as object)))
+    assert.ok(!JSON.stringify(out.body).includes('Example Customer'))
   })
 
   it('only lets a student play their own published recordings', async () => {
@@ -229,7 +250,7 @@ describe('runPlayback: member-access decisions', () => {
       })
     )
     assert.deepEqual(asked, [STUDENT_ID])
-    assert.deepEqual(out.body.watermark, { legalName: 'Example Customer', discordId: STUDENT_ID, sessionRef: 'ref123' })
+    assert.deepEqual(out.body.watermark, { discordId: STUDENT_ID, sessionRef: 'ref123' })
   })
 
   it('denies a paid member whose onboarding is unfinished, without a name', async () => {
@@ -267,18 +288,27 @@ describe('runPlayback: member-access decisions', () => {
         deps({ loadVideo: async () => video({ visibility: 'private', level: 3 }), checkMentorship: async () => staffAllowed() })
       )
       assert.equal(out.body.ok, true)
-      assert.deepEqual(out.body.watermark, { legalName: 'Staff Member', discordId: OTHER_ID, sessionRef: 'ref123' })
+      assert.deepEqual(out.body.watermark, { discordId: OTHER_ID, sessionRef: 'ref123' })
     }
   })
 
-  it('denies staff without an approved name record (a role alone is not a name)', async () => {
+  it('lets staff watch without a recorded legal name; the watermark is their Discord ID', async () => {
     const out = await runPlayback(
       { kind: 'video', id: VIDEO_ID },
       mentor(),
       deps({ checkMentorship: async () => deniedResult('identity_unresolved', OTHER_ID) })
     )
-    assert.equal(out.body.reasonCode, 'name_unavailable')
-    assert.ok(!('watermark' in out.body))
+    assert.equal(out.body.ok, true)
+    assert.deepEqual(out.body.watermark, { discordId: OTHER_ID, sessionRef: 'ref123' })
+  })
+
+  it('a missing name does not bypass the Discord-role checks', async () => {
+    const d = deps({ checkMentorship: async () => deniedResult('identity_unresolved') })
+    const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level1), d)
+    assert.equal(out.body.ok, true)
+    const noRole = await runPlayback({ kind: 'video', id: VIDEO_ID }, student([]), d)
+    assert.equal(noRole.body.ok, false)
+    assert.ok(!('embedUrl' in noRole.body))
   })
 
   it('refuses a staff_record identity when the viewer no longer holds a live staff role', async () => {

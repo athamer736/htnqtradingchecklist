@@ -113,6 +113,14 @@ membership — successful joining intentionally archives the enquiry.
 
 ### Legal name
 
+> **Update:** the platform no longer needs a legal name to play a video. The
+> watermark is the viewer's Discord ID. The platform treats `denied` +
+> `identity_unresolved` as "eligible, no name" and every other denial as a block,
+> so keep returning `identity_unresolved` **only** after suspension, membership,
+> payment, NDA and onboarding have all passed. A name is still returned when
+> available, but it is only a backup identifier for investigations and for the
+> Admin panel's audited lookup.
+
 Resolve from the customer’s **valid signed record** (e.g. NDA `signed_name`
 linked to the winning application). Do not claim a self-entered profile name is
 identity-verified. Conflicting names, multiple applications, and replaced/voided
@@ -128,7 +136,7 @@ access must **not** hard-code “paid £1,500”.
 
 Staff watch through the same playback check, so every playback, including staff
 previews of private videos and 1:1 recordings, needs `access: "allowed"` with a
-legal name for the watermark. The platform decides **who is staff** from live
+legal name (optional now: the watermark is the Discord ID). The platform decides **who is staff** from live
 Discord roles; the bot only answers "may this Discord ID watch, and under what
 name?". For staff who have no customer joining record, return:
 

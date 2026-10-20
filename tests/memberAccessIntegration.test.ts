@@ -93,7 +93,7 @@ describe('member-access integration (platform ↔ test-only bot mock)', () => {
   it('entitled customer gets their own watermark and a ≤300 s grant', async () => {
     const out = await play(student(IDS.entitled))
     assert.equal(out.status, 200)
-    assert.deepEqual(out.body.watermark, { legalName: 'Ada Example', discordId: IDS.entitled, sessionRef: 'ref-int' })
+    assert.deepEqual(out.body.watermark, { discordId: IDS.entitled, sessionRef: 'ref-int' })
     assert.ok((out.body.accessValidForSeconds as number) <= 300)
   })
 
@@ -108,14 +108,17 @@ describe('member-access integration (platform ↔ test-only bot mock)', () => {
     assert.equal((await play(student(IDS.inactive))).body.reasonCode, 'membership_inactive')
   })
 
-  it('staff with an approved name record are allowed under it', async () => {
+  it('staff with an approved name record are allowed, watermarked by Discord ID', async () => {
     const out = await play(mentor(IDS.staffWithRecord))
     assert.equal(out.body.ok, true)
-    assert.equal((out.body.watermark as { legalName: string }).legalName, 'Staff Example')
+    assert.deepEqual(out.body.watermark, { discordId: IDS.staffWithRecord, sessionRef: 'ref-int' })
+    assert.ok(!JSON.stringify(out.body).includes('Staff Example'), 'legal name is never sent to the client')
   })
 
-  it('staff without a name record are denied', async () => {
-    assert.equal((await play(mentor(IDS.staffWithoutRecord))).body.reasonCode, 'name_unavailable')
+  it('staff without a name record can still watch: the legal name is only a backup', async () => {
+    const out = await play(mentor(IDS.staffWithoutRecord))
+    assert.equal(out.body.ok, true)
+    assert.deepEqual(out.body.watermark, { discordId: IDS.staffWithoutRecord, sessionRef: 'ref-int' })
   })
 
   it('a staff_record name is refused when the viewer has no live staff role', async () => {

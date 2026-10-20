@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 
 export interface WatermarkIdentity {
-  legalName: string
+  /** The viewer's Discord ID (the watermark identifier). */
   discordId: string
   sessionRef?: string
 }
 
 /**
- * Moving personalised watermark. This is a deterrent / investigation aid only.
- * A determined user can remove a DOM overlay; it is not DRM and does not prove
- * a legal breach by itself.
+ * Moving personalised watermark showing the viewer's Discord ID. This is a
+ * deterrent / investigation aid only. A determined user can remove a DOM
+ * overlay; it is not DRM and does not prove a legal breach by itself.
  */
 export default function WatermarkOverlay({
   identity
@@ -28,9 +28,9 @@ export default function WatermarkOverlay({
     tick()
     const id = window.setInterval(tick, 12_000)
     return () => window.clearInterval(id)
-  }, [identity.legalName, identity.discordId])
+  }, [identity.discordId])
 
-  const line = `${identity.legalName} · ${identity.discordId}`
+  const line = `Discord ID ${identity.discordId}`
   const sub = identity.sessionRef ? `ref ${identity.sessionRef}` : null
 
   return (

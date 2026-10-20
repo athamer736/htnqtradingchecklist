@@ -14,8 +14,6 @@ import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
 import {
   MENTORSHIP_MAX_RECHECK_SECONDS,
   mapMentorshipDenyToPlayback,
-  normaliseLegalName,
-  usableLegalName,
   type MentorshipLookupResult
 } from './mentorshipApi.ts'
 import type { PlaybackRequest } from './validation.ts'
@@ -118,7 +116,24 @@ export async function runPlayback(
 
   // Always the Discord ID from the verified linked identity, never the request.
   const mentorship = await deps.checkMentorship(auth.discordId)
-  if (mentorship.kind !== 'allowed') {
+
+  // The watermark is the Discord ID, so a legal name is not needed to watch. The
+  // bot answers `identity_unresolved` only once every real access check has
+  // passed and the sole gap is a usable legal name (no single signed-NDA name,
+  // or staff without a recorded name). That is a backup identifier for
+  // investigations, not an access requirement, so it must not block playback.
+  let recheckAfterSeconds: number
+  if (mentorship.kind === 'allowed') {
+    // A staff_record name is only valid alongside a live staff role. Without
+    // one there is no customer entitlement either (the bot prefers signed_nda).
+    if (mentorship.body.identity_source === 'staff_record' && !auth.caps.isStaff) {
+      await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'staff_record_without_role' })
+      return denied('membership_inactive')
+    }
+    recheckAfterSeconds = mentorship.body.recheck_after_seconds
+  } else if (mentorship.kind === 'denied' && mentorship.body.reason_code === 'identity_unresolved') {
+    recheckAfterSeconds = mentorship.body.recheck_after_seconds
+  } else {
     const code: DenyCode =
       mentorship.kind === 'misconfigured'
         ? 'misconfigured'
@@ -133,20 +148,7 @@ export async function runPlayback(
     return out
   }
 
-  // A staff_record name is only valid alongside a live staff role. Without
-  // one there is no customer entitlement either (the bot prefers signed_nda).
-  if (mentorship.body.identity_source === 'staff_record' && !auth.caps.isStaff) {
-    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'staff_record_without_role' })
-    return denied('membership_inactive')
-  }
-
-  const legalName = mentorship.body.legal_name
-  if (!usableLegalName(legalName)) {
-    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'name_unavailable' })
-    return denied('name_unavailable')
-  }
-
-  const grant = playbackGrantWindow(mentorship.body.recheck_after_seconds, deps.ttlSeconds, deps.renewLeadSeconds)
+  const grant = playbackGrantWindow(recheckAfterSeconds, deps.ttlSeconds, deps.renewLeadSeconds)
   const expiresAt = Math.floor(deps.now() / 1000) + grant.embedTtlSeconds
   const embedUrl = await deps.signEmbed(bunnyVideoId, expiresAt)
   await deps.audit({
@@ -166,7 +168,8 @@ export async function runPlayback(
       expiresAt,
       renewAfterSeconds: grant.renewAfterSeconds,
       accessValidForSeconds: grant.accessValidForSeconds,
-      watermark: { legalName: normaliseLegalName(legalName), discordId: auth.discordId, sessionRef }
+      // The Discord ID is the watermark. Legal names are never sent to the client.
+      watermark: { discordId: auth.discordId, sessionRef }
     }
   }
 }

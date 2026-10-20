@@ -4,14 +4,14 @@
 
 Suggested addition for the owner’s privacy notice:
 
-> When you watch mentorship videos in HTNQ Trading Checklist, we retrieve your
-> legal name from your mentorship joining records (for example, the name on your
-> valid signed NDA) together with your Discord user ID. We display that
-> information on the video player as a personalised watermark to discourage
-> unauthorised sharing and to help investigate suspected misuse.
+> When you watch mentorship videos in HTNQ Trading Checklist, we display your
+> Discord user ID on the video player as a personalised watermark to discourage
+> unauthorised sharing and to help investigate suspected misuse. If misuse is
+> suspected, we can match that Discord ID to your mentorship joining records (for
+> example, the name on your valid signed NDA).
 >
-> We prefer to look up your current identity when playback is requested, rather
-> than keeping a permanent second copy of all legal names in the video system.
+> We do not keep a second copy of legal names in the video system, and your legal
+> name is not shown on the player.
 > Short-lived technical records of playback grants and denials may be kept so we
 > can operate and secure the service; HTNQ chooses how long those records are
 > retained.
