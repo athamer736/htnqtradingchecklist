@@ -141,13 +141,13 @@ Set these in **Supabase → Edge Functions → Secrets** (or with
 
 | Secret | What it is |
 | --- | --- |
-| `MENTORSHIP_API_BASE_URL` | Railway mentorship bot API base URL (`https://…`) |
-| `MENTORSHIP_API_TOKEN` | The dedicated token for `POST /api/v1/member-access` (not a Discord, Stripe, Checkout or Supabase key) |
+| `MENTORSHIP_API_BASE_URL` | The bot's HTTPS **origin** on Railway, without a path (e.g. `https://<service>.up.railway.app`) |
+| `MENTORSHIP_API_TOKEN` | The dedicated token for `POST /api/v1/member-access`; must equal the bot's `MEMBER_ACCESS_API_TOKEN` (not a Discord, Stripe, Checkout or Supabase key) |
 | `BUNNY_STREAM_LIBRARY_ID` | Bunny Stream video library ID |
 | `BUNNY_STREAM_TOKEN_KEY` | Library **Token Authentication** key (signs embed URLs) |
 | `BUNNY_STREAM_API_KEY` | Library **API key** (creates/deletes videos, signs TUS uploads, reads encoding status) |
 | `BUNNY_STREAM_CDN_HOSTNAME` | Optional: library CDN hostname (e.g. `vz-xxxx.b-cdn.net`) for thumbnails |
-| `PLAYBACK_TTL_SECONDS` | Optional: signed embed lifetime, 60-1800, default 720 |
+| `PLAYBACK_TTL_SECONDS` | Optional: upper bound on the signed embed lifetime, 60-1800, default 720. The bot's recheck interval (max 300 s) caps it further, so by default embeds last 390 s |
 
 Discord role IDs for owner, admin, mentor, student and Levels 1-3 are built in
 (see `functions/_shared/roles.ts`). Only set `DISCORD_ROLE_OWNER`,

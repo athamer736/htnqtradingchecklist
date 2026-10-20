@@ -18,6 +18,11 @@ type Fixture = {
   access: 'allowed' | 'denied'
   legal_name?: string
   reason_code?: string
+  identity_source?: 'signed_nda' | 'staff_record'
+  /** Simulate bot-side failures instead of a decision. */
+  status?: number
+  retryAfter?: string
+  delayMs?: number
 }
 
 const FIXTURES: Record<string, Fixture> = {
@@ -35,7 +40,16 @@ const FIXTURES: Record<string, Fixture> = {
   '100000000000000003': {
     access: 'denied',
     reason_code: 'identity_unresolved'
-  }
+  },
+  '100000000000000004': { access: 'denied', reason_code: 'suspended' },
+  '100000000000000005': { access: 'denied', reason_code: 'membership_inactive' },
+  // Staff member with an owner-approved staff record
+  '100000000000000006': { access: 'allowed', legal_name: 'Staff Example', identity_source: 'staff_record' },
+  // Staff role holder without a staff record
+  '100000000000000007': { access: 'denied', reason_code: 'identity_unresolved' },
+  '100000000000000008': { access: 'denied', status: 429, retryAfter: '9' },
+  '100000000000000009': { access: 'denied', status: 503, retryAfter: '5' },
+  '100000000000000010': { access: 'allowed', legal_name: 'Slow Example', delayMs: 2_000 }
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -79,12 +93,20 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
     return
   }
   const discordId = body.discord_id
-  if (typeof discordId !== 'string' || !/^\d{5,32}$/.test(discordId)) {
+  if (typeof discordId !== 'string' || !/^[1-9]\d{16,19}$/.test(discordId)) {
     res.statusCode = 400
     res.end(JSON.stringify({ error: 'bad-discord-id' }))
     return
   }
-  const fixture = FIXTURES[discordId] ?? { access: 'denied' as const, reason_code: 'not_found' }
+  const fixture: Fixture = FIXTURES[discordId] ?? { access: 'denied', reason_code: 'not_found' }
+  if (fixture.delayMs) await new Promise((r) => setTimeout(r, fixture.delayMs))
+  if (fixture.status) {
+    res.statusCode = fixture.status
+    res.setHeader('Content-Type', 'application/json')
+    if (fixture.retryAfter) res.setHeader('Retry-After', fixture.retryAfter)
+    res.end(JSON.stringify({ error: fixture.status === 429 ? 'rate_limited' : 'lookup_failed' }))
+    return
+  }
   if (fixture.access === 'allowed') {
     res.statusCode = 200
     res.setHeader('Content-Type', 'application/json')
@@ -94,7 +116,7 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
         discord_id: discordId,
         access: 'allowed',
         legal_name: fixture.legal_name,
-        identity_source: 'signed_nda',
+        identity_source: fixture.identity_source ?? 'signed_nda',
         checked_at: new Date().toISOString(),
         recheck_after_seconds: 300
       })

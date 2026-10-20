@@ -39,9 +39,13 @@ export default function WatermarkOverlay({
       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
       aria-hidden
     >
-      <div className="rounded bg-black/35 px-2 py-1 text-[11px] leading-snug text-white/80 shadow-sm backdrop-blur-[1px] sm:text-xs">
+      {/* Scales with the player (container query units), so it stays legible in fullscreen and small on phones. */}
+      <div
+        className="rounded bg-black/35 px-2 py-1 leading-snug text-white/80 shadow-sm backdrop-blur-[1px]"
+        style={{ fontSize: 'clamp(11px, 1.6cqw, 22px)', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+      >
         <div className="break-words font-medium tracking-wide">{line}</div>
-        {sub && <div className="mt-0.5 text-[10px] text-white/55">{sub}</div>}
+        {sub && <div className="mt-0.5 text-[0.8em] text-white/55">{sub}</div>}
       </div>
     </div>
   )

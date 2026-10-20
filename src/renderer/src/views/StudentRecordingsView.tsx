@@ -118,7 +118,7 @@ export default function StudentRecordingsView(): JSX.Element {
   const recordingsError = useMentorship((s) => s.recordingsError)
   const playing = useMentorship((s) => s.playing)
   const playError = useMentorship((s) => s.playError)
-  const renew = useMentorship((s) => s.renew)
+  const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
   const [student, setStudent] = useState<StudentSummary | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -145,9 +145,8 @@ export default function StudentRecordingsView(): JSX.Element {
         <VideoPlayer
           embedUrl={playing.embedUrl}
           watermark={playing.watermark}
-          expiresAt={playing.expiresAt}
           onClose={stop}
-          onRequestRenew={() => void renew()}
+          onTick={tick}
         />
       </div>
     )

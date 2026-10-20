@@ -7,7 +7,7 @@
 | Edge Functions, migrations, client views, upload flow | Implemented on this branch |
 | Unit tests (roles, permissions, validation, authorisation, playback pipeline, Bunny signing/API, Railway contract) | Tested with mocks (`npm test`) |
 | Supabase secrets, migrations applied, functions deployed | Not done: owner action (see [`launch-checklist.md`](launch-checklist.md)) |
-| Railway `POST /api/v1/member-access` | Specified in [`bot-handoff-member-access-api.md`](bot-handoff-member-access-api.md); not built or verified in the bot repo |
+| Railway `POST /api/v1/member-access` | Implemented in the bot's draft PR #10 (not merged or deployed). Platform client matched to the relayed contract; see [`bot-handoff-member-access-api.md`](bot-handoff-member-access-api.md) |
 | End-to-end (real Discord + Railway + Bunny) | Not verified |
 
 ## Architecture
@@ -82,9 +82,13 @@ Before any signed URL is issued, `issue-playback-token`:
 2. Takes the Discord ID from the **linked Discord identity**, never from the request body.
 3. Live-checks guild membership and roles. Discord rate limits or outages fail closed.
 4. Applies the role rules above (private / unfinished items look "not found" to students).
-5. Calls Railway mentorship access; requires `access: "allowed"` and a usable legal name.
-   This applies to staff too, so staff need a Railway `staff_record` with a legal name.
-6. Signs a short-lived Bunny **embed** URL and returns the watermark identity.
+5. Calls the bot's `POST /api/v1/member-access` for **that** Discord ID; requires
+   a strictly valid `access: "allowed"` response with a usable legal name. This
+   applies to staff too: staff need both a live staff role and a bot
+   `staff_record` name. A `staff_record` name without a live staff role is
+   refused. A Discord display name or editable profile name is never used.
+6. Signs a short-lived Bunny **embed** URL and returns the watermark identity
+   plus the access window (`accessValidForSeconds`, at most 300 s).
 
 Every grant and denial is written to `playback_audit`. Uploads, visibility
 changes, edits, deletes and status refreshes are written to `content_audit`.
@@ -120,17 +124,24 @@ failed Bunny delete never leaves a playable but unlisted file.
 | --- | --- |
 | Journal/sync RLS (`authorized_members`) | 7 days (unchanged) |
 | Mentorship listings and actions | Live Discord role check on every request |
-| Playback | Live Discord + Railway check on every issue and renewal |
-| Bunny embed token TTL | Default **12 minutes** (60 s-30 min) |
-| In-app renewal | About 90 s before expiry, while the player stays open |
+| Playback | Live Discord + bot check on every issue and renewal |
+| Allowed decision | Valid for the bot's `recheck_after_seconds`, **capped at 300 s** (floor 30 s) |
+| In-app revalidation | At 210 s by default (300 s minus 90 s); temporary failures retried after 5/10/20 s (or `Retry-After` if longer), never past the 300 s deadline |
+| Bunny embed token TTL | `min(PLAYBACK_TTL_SECONDS, access window + 90 s)`: **390 s** by default |
+
+The client measures the window from when it received the response (so server
+clock skew can't extend it), checks every 2 s and whenever the tab regains
+focus, and closes the player when the window lapses without a successful
+re-check. A denial on re-check (suspension, membership ended, role removed,
+name withdrawn) closes it immediately. "Temporarily unavailable" and "access
+expired" are shown differently from membership denials.
 
 **Revocation honesty:** after a role or mentorship change, new plays fail
-immediately. A player that is already open keeps playing until its next
-renewal (at most about 10-11 minutes with defaults); the renewal re-runs every
-check and closes the player if access was withdrawn. The renewal keeps the
-already-loaded embed so the video does not restart, which means this close is
-enforced by the app; a modified client could keep an open player running. We
-do **not** promise instant CDN revocation.
+immediately, and an open player stops at its next re-check (at most about
+3.5 minutes later with defaults; 5 minutes if the bot is unreachable). The re-check keeps the already-loaded embed so
+the video does not restart, which means this close is enforced by the app; a
+modified client could keep an open player running until Bunny's embed token
+expires. We do **not** promise instant CDN revocation.
 
 ## Bunny signing
 
@@ -144,11 +155,19 @@ do **not** promise instant CDN revocation.
 
 ## Watermark and fullscreen
 
-- Overlay text: `Full legal name · Discord user ID` (+ a short session reference).
+- Overlay text: `Full legal name · Discord user ID` (+ a short session reference),
+  taken only from the viewer's own allowed bot response and kept in memory.
+  It is never written to storage, logs or analytics, and never placed in URLs.
 - Applies to every video: Level, Lectures, Weekly Recaps and 1:1 recordings.
+- Moves every 12 s within the upper ~75% of the player so the Bunny controls
+  stay usable; text scales with the player width (11-22 px), so it stays
+  legible in fullscreen and small on phones.
 - Custom fullscreen on the **player shell** (iframe + overlay). The iframe is
   not granted fullscreen or picture-in-picture, so the native player cannot
-  eject the watermark.
+  eject the watermark. Where element fullscreen isn't available (iPhone
+  Safari) or is blocked, the shell expands to fill the page instead, with an
+  in-player exit button. That isn't true OS fullscreen: the browser UI may
+  stay visible.
 - Electron `setContentProtection` is best-effort and **not DRM**.
 - The watermark is a deterrent and investigation aid. A DOM overlay can be
   removed by a determined user, and it does not prevent all screen recording
@@ -163,13 +182,13 @@ frontend JS, localStorage, git or screenshots.
 ```
 DISCORD_BOT_TOKEN
 DISCORD_GUILD_ID
-MENTORSHIP_API_BASE_URL          # https://… Railway service
-MENTORSHIP_API_TOKEN             # dedicated high-entropy credential
+MENTORSHIP_API_BASE_URL          # bot's HTTPS origin on Railway, no path
+MENTORSHIP_API_TOKEN             # = the bot's MEMBER_ACCESS_API_TOKEN
 BUNNY_STREAM_LIBRARY_ID
 BUNNY_STREAM_TOKEN_KEY           # Token Authentication key (embed signing)
 BUNNY_STREAM_API_KEY             # Library API key (create/delete, TUS signing, status)
 BUNNY_STREAM_CDN_HOSTNAME        # optional, thumbnails
-PLAYBACK_TTL_SECONDS             # optional, default 720
+PLAYBACK_TTL_SECONDS             # optional upper bound, default 720 (capped to access window + 90 s)
 DISCORD_ROLE_*                   # optional overrides of the built-in role IDs
 MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1   # local mock testing only; never in production
 ```
@@ -198,5 +217,7 @@ The owner chooses audit retention.
 
 ## Price context
 
-Advertised price changes are **not** encoded here. Video access depends on the
-bot's agreement-aware Railway decision, not a hard-coded amount.
+Prices are **not** encoded in the platform (the current advertised price of
+£2,000 lives with the bot's onboarding). Video access depends on the bot's
+agreement-aware decision, so existing members keep access under the prices
+they agreed, and no amount is hard-coded here.

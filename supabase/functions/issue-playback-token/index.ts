@@ -10,8 +10,9 @@
 // Required secrets: DISCORD_BOT_TOKEN, DISCORD_GUILD_ID,
 //   MENTORSHIP_API_BASE_URL, MENTORSHIP_API_TOKEN,
 //   BUNNY_STREAM_LIBRARY_ID, BUNNY_STREAM_TOKEN_KEY
-// Optional: PLAYBACK_TTL_SECONDS (default 720, max 1800), DISCORD_ROLE_* overrides,
-//   MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1 (test-only mock)
+// Optional: PLAYBACK_TTL_SECONDS (upper bound on the signed embed lifetime,
+//   default 720, max 1800; the bot's recheck interval caps it further),
+//   DISCORD_ROLE_* overrides, MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1 (test-only mock)
 
 import { authorize } from '../_shared/authz.ts'
 import { buildBunnyEmbedUrl, signBunnyEmbedToken } from '../_shared/bunnyAuth.ts'
@@ -105,5 +106,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
     renewLeadSeconds: RENEW_LEAD_SECONDS
   })
 
-  return json(outcome.body, outcome.status)
+  const retryAfter = outcome.body.retryAfterSeconds
+  return json(outcome.body, outcome.status, typeof retryAfter === 'number' ? { 'Retry-After': String(retryAfter) } : {})
 })

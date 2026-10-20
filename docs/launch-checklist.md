@@ -13,15 +13,21 @@
 - [x] Sidebar Mentorship group, section views, Student Recordings / My Recordings, upload dialog
 - [x] Desktop CSP allows the Bunny player, TUS endpoint and thumbnails
 - [x] macOS desktop build removed; web app workflow for `app.htnq.org`
+- [x] Bot member-access client matched to the implemented contract: strict schema_version 1
+      validation, ≤300 s allowed-decision window, in-player revalidation with bounded retries,
+      `staff_record` names only with a live staff role, Retry-After pass-through
 
 ## Tested
 
 - [x] `npm test`: roles, permission matrix, request validation, authorisation pipeline,
       playback pipeline (Railway denied / outage / mismatch / missing name, private, level, not ready),
       Bunny embed + TUS signing, Bunny API helpers, Railway contract (all mocked)
+- [x] Member-access integration against the **test-only** bot mock over localhost
+      (`tests/memberAccessIntegration.test.ts`), revalidation/expiry/revocation logic,
+      client-bundle secret and log guards
 - [x] `npm run typecheck`, `npm run build:web`, `deno check` on every Edge Function
 - [ ] Real Supabase Edge Function deploy
-- [ ] Real Railway endpoint
+- [ ] Real bot endpoint (bot PR #10 is a draft, not deployed)
 - [ ] Real Bunny library: upload, encode, signed embed playback
 - [ ] Two-account sandbox: watermark identity, denial, recording isolation
 - [ ] Mobile capture blocking / DRM (not claimed)
@@ -87,10 +93,34 @@ supabase functions delete list-videos
 
 ### Railway bot
 
-1. Implement `POST /api/v1/member-access` per `docs/bot-handoff-member-access-api.md`,
-   including `staff_record` names for owner/admin/mentor accounts.
-2. Issue dedicated prod/test credentials.
-3. Point `MENTORSHIP_API_BASE_URL` / `MENTORSHIP_API_TOKEN` at production.
+1. Done in the bot's draft PR #10 (`member-access-api`); review, then deploy a
+   **sandbox** bot service first (requires deployment authorisation).
+2. Generate separate sandbox and production credentials (e.g. `openssl rand -hex 32`).
+   On the bot service set `MEMBER_ACCESS_API_TOKEN`; on Supabase set
+   `MENTORSHIP_API_TOKEN` to the same value. Never reuse other secrets.
+3. `MENTORSHIP_API_BASE_URL` = the bot service's HTTPS origin, no path.
+4. Record legal names in the bot's staff table for every owner/admin/mentor who
+   will watch or preview videos.
+
+### Sandbox test (before production)
+
+Use a sandbox Supabase project (or the production one with sandbox secrets only
+after explicit approval), a sandbox bot deployment and its own credential.
+
+1. Secrets: `MENTORSHIP_API_BASE_URL`, `MENTORSHIP_API_TOKEN` (sandbox values),
+   plus the Discord and Bunny secrets above. Do **not** set
+   `MENTORSHIP_API_ALLOW_HTTP_LOCALHOST`.
+2. Deploy `issue-playback-token` (and the other functions) to the sandbox.
+3. Accounts to prepare in the bot's sandbox data: an entitled customer, a paid
+   member with onboarding unfinished, a suspended member, a staff member with a
+   staff-table name, and a staff member without one.
+4. Check each account sees only its own name and Discord ID on the watermark, the
+   unfinished, suspended and nameless-staff accounts are refused with the right
+   message, and a wrong token shows "not configured" rather than a denial.
+5. Revoke the entitled customer in the bot while their player is open: it must
+   close within about 3.5 minutes. Stop the bot service: the open player must show
+   "temporarily unavailable" and close within 5 minutes.
+6. Fullscreen on desktop, browser and a phone: watermark stays visible.
 
 ### Web app
 
@@ -99,4 +129,5 @@ Supabase redirect URLs, Squarespace URL mapping, old-address redirect.
 
 ## Verified end to end
 
-Not yet. Blocked on the bot API, cloud secrets, function deploys and a Bunny library.
+Not yet. Blocked on deploying the bot's member-access API to a sandbox, cloud
+secrets, function deploys and a Bunny library.
