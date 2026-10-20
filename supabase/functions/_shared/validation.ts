@@ -34,6 +34,25 @@ function cleanText(v: unknown, max: number): string | null {
   return t.slice(0, max)
 }
 
+/**
+ * Descriptions are multi-line, lightly formatted text (see
+ * src/shared/richText.ts), so line breaks must survive. Everything else that
+ * is a control or bidi-override character is dropped, so a description can
+ * neither smuggle control codes nor visually reorder the text around it.
+ */
+function cleanDescription(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null
+  const t = v
+    .replace(/\r\n?/g, '\n')
+    .replace(/\t/g, '  ')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '')
+    .replace(/[ \u00a0]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  if (!t) return null
+  return t.slice(0, max)
+}
+
 // --- issue-playback-token ---------------------------------------------------
 
 export type PlaybackRequest = { kind: 'video'; id: string } | { kind: 'recording'; id: string }
@@ -77,7 +96,7 @@ export function parseUploadRequest(body: unknown): Parsed<UploadRequest> {
 
   const title = cleanText(o.title, 200)
   if (!title) return { ok: false, error: 'title-required' }
-  const description = cleanText(o.description, 2000)
+  const description = cleanDescription(o.description, 2000)
 
   const t = asObject(o.target)
   if (!t) return { ok: false, error: 'target-required' }
@@ -157,7 +176,7 @@ export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
       return { ok: true, value: { ...base, action: 'set_visibility', visibility: o.visibility } }
     case 'update_metadata': {
       const title = o.title === undefined ? null : cleanText(o.title, 200)
-      const description = o.description === undefined ? undefined : cleanText(o.description, 2000)
+      const description = o.description === undefined ? undefined : cleanDescription(o.description, 2000)
       if (o.title !== undefined && !title) return { ok: false, error: 'title-required' }
       if (title === null && o.description === undefined) return { ok: false, error: 'nothing-to-update' }
       return { ok: true, value: { ...base, action: 'update_metadata', title, description } }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { EncodingStatus, ItemPermissions, Visibility } from '../../../../shared/video'
+import { stripFormatting } from '../../../../shared/richText'
 import { useMentorship, type ManageAction } from '../../store/useMentorship'
 import { useConfirm } from '../ConfirmProvider'
 import EditDetailsDialog from './EditDetailsDialog'
@@ -120,7 +121,7 @@ export default function ContentCard({
       <div className="flex flex-1 flex-col gap-2 p-3">
         <h3 className="text-sm font-semibold text-slate-100">{item.title}</h3>
         {item.description && (
-          <p className="line-clamp-3 whitespace-pre-line text-xs leading-relaxed text-muted">{item.description}</p>
+          <p className="line-clamp-3 text-xs leading-relaxed text-muted">{stripFormatting(item.description)}</p>
         )}
         {error && <p className="text-xs text-rose-300">{error}</p>}
         <div className="mt-auto flex items-center justify-between gap-2 pt-1">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import RichText from './RichText'
 import WatermarkOverlay, { type WatermarkIdentity } from './WatermarkOverlay'
 
 const ACCESS_TICK_MS = 2_000
@@ -203,9 +204,7 @@ export default function VideoPlayer({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
               {details.description ? (
-                <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-300">
-                  {details.description}
-                </p>
+                <RichText text={details.description} />
               ) : (
                 <p className="text-sm text-muted">No description for this video.</p>
               )}

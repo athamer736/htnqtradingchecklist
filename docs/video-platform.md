@@ -67,6 +67,13 @@ mentor) see every level.
 | Admin panel: members list (live roles and levels) | Yes | No | No |
 | Admin panel: look up a member's legal name (live from the bot, audited) | Yes | No | No |
 
+Descriptions are multi-line. The server keeps line breaks (and drops other
+control and bidi characters; cap 2000 characters). The player shows the title and
+description in a side panel that viewers can close, rendered as React elements,
+never HTML, with a small set of marks: blank line = new paragraph, `# Heading`,
+`## Heading`, `- bullet`, `1. numbered`, `**bold**`, `*italic*`. Links and images
+are not supported (`src/shared/richText.ts`).
+
 The client only receives per-item permission flags. Every action is re-checked
 on the server; sidebar locks are hints.
 
