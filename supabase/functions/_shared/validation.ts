@@ -3,6 +3,7 @@
 // Supabase identity, and legal names only from the Railway API.
 
 import { isContentSection, isVisibility, type ContentSection, type Visibility } from './decisions.ts'
+import { normaliseLegalName, usableLegalName } from './mentorshipApi.ts'
 import type { MoveDirection } from './ordering.ts'
 import type { VideoLevel } from './roles.ts'
 
@@ -188,6 +189,39 @@ export function parseMemberIdentityRequest(body: unknown): Parsed<{ memberDiscor
   if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
   if (!isSnowflake(o.memberDiscordId)) return { ok: false, error: 'invalid-member' }
   return { ok: true, value: { memberDiscordId: o.memberDiscordId } }
+}
+
+// --- admin-member-name ------------------------------------------------------
+
+export type MemberNameRequest =
+  | { memberDiscordId: string; action: 'set'; legalName: string }
+  | { memberDiscordId: string; action: 'clear' }
+
+/**
+ * Owner/admin sets or removes the admin-entered legal name for one member. This
+ * is the only request that accepts a `legalName`, and only to store it: the name
+ * is normalised and must pass the same rules as names from the bot (letters,
+ * 2-200 characters, no placeholders, no control or bidi characters). The target
+ * is a validated Discord snowflake; a caller can never name themselves via
+ * `discordId`/`userId`.
+ */
+export function parseMemberNameRequest(body: unknown): Parsed<MemberNameRequest> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (['discord_id', 'discordId', 'legal_name', 'user_id', 'userId'].some((k) => k in o)) {
+    return { ok: false, error: 'identity-not-accepted' }
+  }
+  if (!isSnowflake(o.memberDiscordId)) return { ok: false, error: 'invalid-member' }
+  if (o.action === 'clear') {
+    if ('legalName' in o) return { ok: false, error: 'name-not-allowed' }
+    return { ok: true, value: { memberDiscordId: o.memberDiscordId, action: 'clear' } }
+  }
+  if (o.action !== 'set') return { ok: false, error: 'invalid-action' }
+  if (!usableLegalName(o.legalName)) return { ok: false, error: 'invalid-name' }
+  return {
+    ok: true,
+    value: { memberDiscordId: o.memberDiscordId, action: 'set', legalName: normaliseLegalName(o.legalName) }
+  }
 }
 
 // --- list-students / list-recordings ---------------------------------------

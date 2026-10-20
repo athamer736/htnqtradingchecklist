@@ -3,17 +3,18 @@ import { useAdmin, type IdentityEntry } from '../../store/useAdmin'
 import {
   IDENTITY_DENY_LABELS,
   type AdminMember,
+  type MemberIdentity,
   type PrimaryRole,
   type VideoLevel
 } from '../../../../shared/video'
 
 // Members of the mentorship server with their LIVE Discord-derived access. This
-// is read-only: levels and staff roles are granted in Discord, not here. Legal
-// names are never listed; a manager asks for one member at a time, it is fetched
-// live from the bot, shown only while this panel is open, and the lookup is
-// audited server-side.
+// is read-only for roles: levels and staff roles are granted in Discord, not
+// here. Legal names are never listed; a manager opens one member at a time, sees
+// what the bot reports plus the name an admin recorded, and can add, change or
+// remove the recorded one. Lookups and changes are audited server-side.
 
-type Filter = 'all' | 'staff' | 'students' | 'attention'
+type Filter = 'all' | 'staff' | 'students' | 'attention' | 'unnamed'
 
 const ROLE_CHIP: Record<PrimaryRole, { label: string; className: string }> = {
   owner: { label: 'Owner', className: 'bg-amber-400/15 text-amber-200' },
@@ -45,24 +46,127 @@ function LevelChips({ member }: { member: AdminMember }): JSX.Element {
   )
 }
 
-function Identity({ entry }: { entry: IdentityEntry | undefined }): JSX.Element | null {
-  if (!entry) return null
-  if (entry.state === 'loading') return <span className="text-xs text-muted">Asking the bot…</span>
-  if (entry.state === 'error') return <span className="text-xs text-rose-300">{entry.message}</span>
-  if (entry.identity.access === 'denied') {
-    return (
-      <span className="text-xs text-amber-200">
-        {IDENTITY_DENY_LABELS[entry.identity.reason] ?? 'Access denied by the bot'}
-      </span>
-    )
-  }
+const sameName = (a: string, b: string): boolean =>
+  a.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase() ===
+  b.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
+
+/** What the bot says, one line. The bot is asked live and nothing is kept. */
+function BotLine({ identity }: { identity: MemberIdentity }): JSX.Element {
   return (
-    <span className="text-xs text-slate-100">
-      <span className="font-medium">{entry.identity.legalName}</span>
-      <span className="ml-2 text-muted">
-        {entry.identity.identitySource === 'staff_record' ? '(staff record)' : '(signed NDA)'}
-      </span>
-    </span>
+    <div className="text-xs">
+      <span className="mr-2 text-muted">From the bot:</span>
+      {identity.access === 'allowed' ? (
+        <span className="text-slate-100">
+          <span className="font-medium">{identity.legalName}</span>
+          <span className="ml-2 text-muted">
+            {identity.identitySource === 'staff_record' ? '(staff record)' : '(signed NDA)'}
+          </span>
+        </span>
+      ) : (
+        <span className="text-amber-200">
+          {IDENTITY_DENY_LABELS[identity.reason] ?? 'No name available from the bot'}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Add, change or remove the legal name an admin records for this member. */
+function NameEditor({ member, identity }: { member: AdminMember; identity: MemberIdentity }): JSX.Element {
+  const saveName = useAdmin((s) => s.saveName)
+  const clearName = useAdmin((s) => s.clearName)
+  const stored = identity.storedLegalName
+  const [value, setValue] = useState(stored ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  const trimmed = value.trim()
+  const unchanged = stored !== null && sameName(trimmed, stored)
+  const differsFromBot =
+    stored !== null && identity.access === 'allowed' && !sameName(stored, identity.legalName)
+
+  const run = async (action: () => Promise<string | null>, nextValue: string | null): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    setSaved(false)
+    const failure = await action()
+    setBusy(false)
+    if (failure) {
+      setError(failure)
+      return
+    }
+    if (nextValue !== null) setValue(nextValue)
+    setSaved(true)
+  }
+
+  return (
+    <div className="mt-2">
+      <label className="mb-1 block text-xs text-muted" htmlFor={`legal-name-${member.discordId}`}>
+        Legal name added by an admin
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id={`legal-name-${member.discordId}`}
+          className="field max-w-xs"
+          placeholder="Full legal name"
+          maxLength={200}
+          autoComplete="off"
+          spellCheck={false}
+          value={value}
+          disabled={busy}
+          onChange={(e) => {
+            setValue(e.target.value)
+            setSaved(false)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && trimmed && !unchanged && !busy) {
+              void run(() => saveName(member.discordId, trimmed), null)
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="btn-primary px-3 py-1 text-xs"
+          disabled={busy || !trimmed || unchanged}
+          onClick={() => void run(() => saveName(member.discordId, trimmed), null)}
+        >
+          {busy ? 'Saving…' : stored === null ? 'Save name' : 'Update name'}
+        </button>
+        {stored !== null && (
+          <button
+            type="button"
+            className="btn-ghost px-2.5 py-1 text-xs text-rose-200"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm(`Remove the saved legal name for ${member.displayName}?`)) {
+                void run(() => clearName(member.discordId), '')
+              }
+            }}
+          >
+            Remove name
+          </button>
+        )}
+        {saved && <span className="text-xs text-emerald-300">Saved</span>}
+      </div>
+      {error && <p className="mt-1 text-xs text-rose-300">{error}</p>}
+      {differsFromBot && (
+        <p className="mt-1 text-[11px] text-amber-200">
+          This differs from the name the bot has. The bot&apos;s name is not changed by this.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function IdentityPanel({ member, entry }: { member: AdminMember; entry: IdentityEntry }): JSX.Element {
+  if (entry.state === 'loading') return <span className="text-xs text-muted">Looking up…</span>
+  if (entry.state === 'error') return <span className="text-xs text-rose-300">{entry.message}</span>
+  return (
+    <div>
+      <BotLine identity={entry.identity} />
+      <NameEditor member={member} identity={entry.identity} />
+    </div>
   )
 }
 
@@ -89,16 +193,19 @@ export default function MembersTab(): JSX.Element {
       if (filter === 'staff' && !m.isStaff) return false
       if (filter === 'students' && !(m.isStudent && !m.isStaff)) return false
       if (filter === 'attention' && !m.levelWithoutStudent) return false
+      if (filter === 'unnamed' && m.hasStoredName !== false) return false
       if (!q) return true
       return [m.displayName, m.username, m.discordId].some((v) => v.toLowerCase().includes(q))
     })
   }, [members, query, filter])
 
   const attention = members.filter((m) => m.levelWithoutStudent).length
+  const unnamed = members.filter((m) => m.hasStoredName === false).length
   const filters: { id: Filter; label: string }[] = [
     { id: 'all', label: `All (${members.length})` },
     { id: 'staff', label: 'Staff' },
     { id: 'students', label: 'Students' },
+    { id: 'unnamed', label: `No name added (${unnamed})` },
     { id: 'attention', label: `Needs attention (${attention})` }
   ]
 
@@ -131,9 +238,10 @@ export default function MembersTab(): JSX.Element {
       </div>
 
       <p className="mb-3 text-[11px] leading-relaxed text-muted">
-        Roles and levels come live from Discord and can only be changed there. Legal names are not listed: use{' '}
-        <span className="text-slate-300">Show legal name</span> to fetch one from the bot; it is not stored and each
-        lookup is logged.
+        Roles and levels come live from Discord and can only be changed there. Legal names are not listed: open{' '}
+        <span className="text-slate-300">Legal name</span> on a member to see what the bot has and to add one yourself.
+        A name you add is saved on the server for admins only (it is not used for video access or the watermark), and
+        every lookup and change is logged.
       </p>
 
       {status === 'loading' && <div className="text-sm text-muted">Loading members…</div>}
@@ -168,6 +276,10 @@ export default function MembersTab(): JSX.Element {
                     <span className="truncate text-sm font-medium text-slate-100">{m.displayName}</span>
                     <span className={`chip ${chip.className}`}>{chip.label}</span>
                     <LevelChips member={m} />
+                    {m.hasStoredName === true && (
+                      <span className="chip bg-emerald-400/10 text-emerald-200">Name on file</span>
+                    )}
+                    {m.hasStoredName === false && <span className="chip bg-bg-soft text-muted">No name added</span>}
                   </div>
                   <div className="truncate text-[11px] text-muted">
                     @{m.username} · {m.discordId}
@@ -184,7 +296,7 @@ export default function MembersTab(): JSX.Element {
                     disabled={entry?.state === 'loading'}
                     onClick={() => void lookupIdentity(m.discordId)}
                   >
-                    Show legal name
+                    Legal name
                   </button>
                 )}
               </div>
@@ -195,7 +307,7 @@ export default function MembersTab(): JSX.Element {
               )}
               {entry && (
                 <div className="mt-2 border-t border-line pt-2">
-                  <Identity entry={entry} />
+                  <IdentityPanel member={m} entry={entry} />
                 </div>
               )}
             </div>

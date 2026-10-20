@@ -1,17 +1,22 @@
 // admin-member-identity
 //
-// Owner/admin only. Fetches ONE member's legal name live from the mentorship
-// bot's member-access API so the Admin panel can show it on request. Nothing is
-// stored: the name is returned to the caller and never written anywhere. Every
-// lookup (not the name itself) is recorded in content_audit, so there is a trail
-// of which manager looked up whom.
+// Owner/admin only. Looks up ONE member's legal name for the Admin panel, from
+// two independent sources reported side by side:
+//   * the mentorship bot's member-access API (signed NDA / staff record), asked
+//     live and never stored here;
+//   * the admin-entered name in `member_legal_names` (see admin-member-name).
+// Either source can be missing or down without hiding the other. Every lookup
+// (never the name itself) is recorded in content_audit, so there is a trail of
+// which manager looked up whom.
 
 import { authorize } from '../_shared/authz.ts'
 import { loadContext, writeContentAudit } from '../_shared/context.ts'
 import { canViewMemberIdentity } from '../_shared/decisions.ts'
 import { handleOptions, json, readJsonBody } from '../_shared/http.ts'
+import { readStoredName } from '../_shared/memberNameStore.ts'
+import { buildIdentityBody, lookupAuditOutcome, type BotAnswer } from '../_shared/memberNames.ts'
 import { fetchMentorshipAccess } from '../_shared/mentorshipApi.ts'
-import { denyBody, deny, DENY_STATUS } from '../_shared/messages.ts'
+import { deny } from '../_shared/messages.ts'
 import { parseMemberIdentityRequest } from '../_shared/validation.ts'
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -22,7 +27,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const ctx = loadContext()
   if (!ctx) return deny('misconfigured')
   const { admin, env } = ctx
-  if (!env.mentorshipBaseUrl || !env.mentorshipToken) return deny('misconfigured')
 
   const body = await readJsonBody(req)
   if (!body.ok) return deny('invalid_request')
@@ -34,51 +38,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!auth.ok) return deny(auth.reasonCode)
   if (!canViewMemberIdentity(auth.caps)) return deny('forbidden')
 
-  const audit = (outcome: string) =>
-    writeContentAudit(admin, {
-      actor_user_id: auth.userId,
-      actor_discord_id: auth.discordId,
-      action: 'member_name_viewed',
-      target_kind: 'member',
-      target_id: null,
-      target_discord_id: memberDiscordId,
-      detail: { outcome }
-    })
+  const stored = await readStoredName(admin, memberDiscordId)
+  if (!stored.ok) return deny('upstream_failed')
 
-  const result = await fetchMentorshipAccess({
-    baseUrl: env.mentorshipBaseUrl,
-    token: env.mentorshipToken,
-    discordId: memberDiscordId,
-    allowLocalHttp: env.allowLocalHttp
+  const bot: BotAnswer =
+    env.mentorshipBaseUrl && env.mentorshipToken
+      ? await fetchMentorshipAccess({
+          baseUrl: env.mentorshipBaseUrl,
+          token: env.mentorshipToken,
+          discordId: memberDiscordId,
+          allowLocalHttp: env.allowLocalHttp
+        })
+      : { kind: 'not_configured' }
+
+  const result = buildIdentityBody(memberDiscordId, bot, stored.value)
+
+  await writeContentAudit(admin, {
+    actor_user_id: auth.userId,
+    actor_discord_id: auth.discordId,
+    action: 'member_name_viewed',
+    target_kind: 'member',
+    target_id: null,
+    target_discord_id: memberDiscordId,
+    detail: { outcome: lookupAuditOutcome(result) }
   })
 
-  switch (result.kind) {
-    case 'allowed':
-      await audit('name_shown')
-      return json({
-        ok: true,
-        memberDiscordId,
-        access: 'allowed',
-        legalName: result.body.legal_name,
-        identitySource: result.body.identity_source
-      })
-    case 'denied':
-      await audit(`denied:${result.body.reason_code}`)
-      return json({ ok: true, memberDiscordId, access: 'denied', reason: result.body.reason_code })
-    case 'misconfigured':
-      return deny('misconfigured')
-    default: {
-      await audit('unavailable')
-      const headers =
-        typeof result.retryAfterSeconds === 'number' ? { 'Retry-After': String(result.retryAfterSeconds) } : {}
-      return json(
-        {
-          ...denyBody('service_unavailable'),
-          ...(typeof result.retryAfterSeconds === 'number' ? { retryAfterSeconds: result.retryAfterSeconds } : {})
-        },
-        DENY_STATUS.service_unavailable,
-        headers
-      )
-    }
-  }
+  return json(result)
 })

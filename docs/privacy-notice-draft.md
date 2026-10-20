@@ -10,8 +10,11 @@ Suggested addition for the owner’s privacy notice:
 > suspected, we can match that Discord ID to your mentorship joining records (for
 > example, the name on your valid signed NDA).
 >
-> We do not keep a second copy of legal names in the video system, and your legal
-> name is not shown on the player.
+> Your legal name is not shown on the player. Our admins may record your legal
+> name in the app's admin area as a reference for the mentorship team; it is
+> stored on our servers, visible only to owners and admins, never used to decide
+> whether you can watch, and every time an admin views, adds, changes or removes
+> it is logged (without the name itself). You can ask us to correct or remove it.
 > Short-lived technical records of playback grants and denials may be kept so we
 > can operate and secure the service; HTNQ chooses how long those records are
 > retained.

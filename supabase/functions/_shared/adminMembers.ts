@@ -25,6 +25,8 @@ export interface AdminMember {
   levelRoles: VideoLevel[]
   /** Holds a Level role but not the Student role, so those levels don't unlock. */
   levelWithoutStudent: boolean
+  /** An admin has recorded a legal name for them (set by the function, not Discord). */
+  hasStoredName?: boolean
 }
 
 const ROLE_RANK: Record<PrimaryRole, number> = { owner: 0, admin: 1, mentor: 2, student: 3, none: 4 }

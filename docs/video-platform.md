@@ -18,7 +18,7 @@ Customer app (Windows desktop or https://app.htnq.org)
   → Edge Functions
        list-content | list-recordings | list-students     (listings, no playback URLs)
        create-upload | manage-content | set-thumbnail     (staff)
-       admin-members | admin-member-identity              (owner/admin: Admin panel)
+       admin-members | admin-member-identity | admin-member-name   (owner/admin: Admin panel)
        issue-playback-token                               (every play and renewal)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
@@ -86,10 +86,18 @@ Owners and admins also get an **Admin** item (shown from the server-computed
   Level role (`admin-members`). Roles and effective levels come live from
   Discord and are read-only: levels and staff roles are changed in Discord. A
   member with a Level role but no Student role is flagged because none of their
-  levels unlock. Legal names are **not** listed. **Show legal name** calls
-  `admin-member-identity`, which asks the bot for that one member, returns the
-  name without storing it, and records the lookup (Discord IDs only, never the
-  name) in `content_audit`. The name lives in memory while the panel is open.
+  levels unlock. Legal names are **not** listed (only a "Name on file" /
+  "No name added" flag, with a filter for members still missing one).
+  **Legal name** on a member calls `admin-member-identity`, which returns two
+  things side by side: what the bot reports for that one member (live, never
+  stored here) and the name an admin recorded. It records the lookup (Discord IDs
+  only, never a name) in `content_audit`. Names live in memory while the panel
+  is open. The admin-entered name is added, changed or removed from the same
+  panel via `admin-member-name`; it is stored in `member_legal_names`
+  (service-role only, Discord ID -> name), is an admin reference only, is never
+  sent to the player or used for any access decision, and each change is audited
+  with who/whom but never the name. It works for any member, including those the
+  bot has no name for, and does not change anything in the bot.
 - **Library**: every video grouped by Level 1-3, Lectures and Weekly Recaps, in
   the order members see, with **Up / Down** (`manage-content` `move`),
   publish / make private, edit and delete. Upload still happens on each
@@ -241,6 +249,9 @@ Apply in order (all idempotent, all appended to `schema.sql`):
 - `20261018_admin_panel.sql`: widens `content_audit` for the `reordered` and
   `member_name_viewed` actions and a `member` target (Discord id in the new
   `target_discord_id` column; `target_id` becomes nullable).
+- `20261019_member_legal_names.sql`: `member_legal_names` (Discord id -> admin-entered
+  legal name, RLS on, no client policies, client grants revoked) and the
+  `member_name_set` / `member_name_cleared` audit actions.
 
 All mentorship tables are read and written only by Edge Functions (service role).
 The owner chooses audit retention.

@@ -97,6 +97,11 @@ export function canViewMemberIdentity(caps: Capabilities): boolean {
   return caps.isManager
 }
 
+/** Recording or removing a member's legal name: owner/admin only, always audited. */
+export function canManageMemberNames(caps: Capabilities): boolean {
+  return caps.isManager
+}
+
 // --- 1:1 student recordings -------------------------------------------------
 
 export function canListRecording(

@@ -132,7 +132,8 @@ the app.)
 Protected videos need additional server secrets and the tables from
 `migrations/20261008_video_platform.sql` and
 `migrations/20261016_roles_sections_recordings.sql` and
-`migrations/20261018_admin_panel.sql` (all also appended to `schema.sql`; all
+`migrations/20261018_admin_panel.sql` and
+`migrations/20261019_member_legal_names.sql` (all also appended to `schema.sql`; all
 are safe to re-run).
 
 ## 10. Extra secrets for videos
@@ -170,6 +171,7 @@ supabase functions deploy manage-content
 supabase functions deploy set-thumbnail
 supabase functions deploy admin-members
 supabase functions deploy admin-member-identity
+supabase functions deploy admin-member-name
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos   # replaced by list-content
 ```
@@ -178,9 +180,13 @@ supabase functions delete list-videos   # replaced by list-content
 to 2 MB; same permission as publishing: owner/admin anywhere, mentors in Level
 videos). The thumbnail only shows on cards when `BUNNY_STREAM_CDN_HOSTNAME` is set.
 
-`admin-members` and `admin-member-identity` back the Admin panel (owner/admin
-only). The member list needs the bot's **Server Members Intent**; the legal-name
-lookup also needs `MENTORSHIP_API_BASE_URL` / `MENTORSHIP_API_TOKEN`.
+`admin-members`, `admin-member-identity` and `admin-member-name` back the Admin
+panel (owner/admin only). The member list needs the bot's **Server Members
+Intent**; the bot half of the legal-name lookup also needs
+`MENTORSHIP_API_BASE_URL` / `MENTORSHIP_API_TOKEN` (without them the lookup still
+shows names admins recorded). Run `migrations/20261019_member_legal_names.sql`
+first: it creates the service-role-only `member_legal_names` table that
+`admin-member-name` writes.
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep

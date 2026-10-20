@@ -136,6 +136,8 @@ export interface AdminMember {
   levelRoles: VideoLevel[]
   /** Holds a Level role but not the Student role, so those levels stay locked. */
   levelWithoutStudent: boolean
+  /** An admin has recorded a legal name for them. Unset if the server could not tell. */
+  hasStoredName?: boolean
 }
 
 export interface AdminMembersResponse {
@@ -145,10 +147,16 @@ export interface AdminMembersResponse {
   truncated: boolean
 }
 
-/** One member's identity as the bot reports it. Fetched on request, never persisted. */
-export type MemberIdentity =
+/**
+ * One member's legal name from both sources. The bot's answer is fetched live and
+ * never persisted by this app; `storedLegalName` is the name an admin recorded
+ * (null if none). They are shown side by side and never merged.
+ */
+export type MemberIdentity = (
   | { access: 'allowed'; legalName: string; identitySource: 'signed_nda' | 'staff_record' }
   | { access: 'denied'; reason: string }
+  | { access: 'unavailable'; reason: string }
+) & { storedLegalName: string | null }
 
 export const IDENTITY_DENY_LABELS: Record<string, string> = {
   onboarding_incomplete: 'Onboarding incomplete',
@@ -157,7 +165,10 @@ export const IDENTITY_DENY_LABELS: Record<string, string> = {
   membership_inactive: 'Membership inactive',
   suspended: 'Suspended',
   not_found: 'Not found in the bot',
-  identity_unresolved: 'Legal name could not be resolved'
+  identity_unresolved: 'Legal name could not be resolved',
+  not_configured: 'The bot connection is not set up yet',
+  misconfigured: 'The bot connection is misconfigured',
+  service_unavailable: 'The bot could not be reached right now'
 }
 
 export type PlaybackTarget = { kind: 'video'; id: string } | { kind: 'recording'; id: string }

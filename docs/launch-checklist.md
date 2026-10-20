@@ -41,6 +41,7 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
 1. `supabase/migrations/20261008_video_platform.sql`
 2. `supabase/migrations/20261016_roles_sections_recordings.sql`
 3. `supabase/migrations/20261018_admin_panel.sql` (Admin panel: wider `content_audit`)
+4. `supabase/migrations/20261019_member_legal_names.sql` (admin-entered legal names)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -75,6 +76,7 @@ supabase functions deploy manage-content
 supabase functions deploy set-thumbnail
 supabase functions deploy admin-members
 supabase functions deploy admin-member-identity
+supabase functions deploy admin-member-name
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos
 ```
@@ -105,7 +107,10 @@ supabase functions delete list-videos
 3. `MENTORSHIP_API_BASE_URL` = the bot service's HTTPS origin, no path.
 4. Optional: record legal names in the bot's staff table for owners/admins/mentors.
    Watching does not need a name (the watermark is the Discord ID); a recorded name
-   is only a backup identifier and what the Admin panel's **Show legal name** returns.
+   is only a backup identifier. Owners/admins can also record any member's name in
+   Admin -> Members -> **Legal name** (stored in this project's `member_legal_names`;
+   needs migration `20261019_member_legal_names.sql` and the `admin-member-name`
+   function). Update the privacy notice before using it (see `privacy-notice-draft.md`).
 
 ### Sandbox test (before production)
 
