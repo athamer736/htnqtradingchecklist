@@ -29,7 +29,14 @@ function buildGroups(videos: ContentVideo[]): Group[] {
     })
   }
   // Further Studying sits right after Level 3, the same place it has in the sidebar.
-  for (const section of ['further_studying', 'lectures', 'weekly_recaps'] as ContentSection[]) {
+  for (const section of [
+    'further_studying',
+    'lectures',
+    'weekly_recaps',
+    'july_batch',
+    'sept_batch',
+    'batch_5'
+  ] as ContentSection[]) {
     groups.push({
       key: section,
       label: SECTION_LABELS[section],

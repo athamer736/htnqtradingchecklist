@@ -9,6 +9,7 @@ import { useMentorship } from '../store/useMentorship'
 import {
   FURTHER_STUDYING_LEVEL,
   SECTION_LABELS,
+  isBatchSection,
   levelsInclude,
   type ContentSection,
   type MentorshipCapabilities,
@@ -19,7 +20,10 @@ const INTRO: Record<ContentSection, string> = {
   level: 'Lessons for this mentorship level.',
   lectures: 'Full-length mentorship lectures.',
   weekly_recaps: 'Weekly market recaps and the outlook for the week ahead.',
-  further_studying: 'Extra material for Level 3 members who want to keep going.'
+  further_studying: 'Extra material for Level 3 members who want to keep going.',
+  july_batch: 'Material for the 1st Of July Batch.',
+  sept_batch: 'Material for the 1st Of September Batch.',
+  batch_5: 'Material for Batch 5.0.'
 }
 
 function sectionTitle(section: ContentSection, level: VideoLevel | null): string {
@@ -42,6 +46,9 @@ export function lockReason(
   }
   if (section === 'further_studying' && !levelsInclude(caps.levels, FURTHER_STUDYING_LEVEL)) {
     return 'Further Studying unlocks with the Level 3 Discord role.'
+  }
+  if (isBatchSection(section) && !(caps.batches ?? []).includes(section)) {
+    return `${SECTION_LABELS[section]} unlocks with the ${SECTION_LABELS[section]} Discord role.`
   }
   return null
 }
@@ -234,7 +241,9 @@ export default function ContentSectionView({
               ? `Students with Level ${level} access`
               : section === 'further_studying'
                 ? 'Students with the Level 3 role'
-                : 'Students'
+                : isBatchSection(section)
+                  ? `Students in the ${SECTION_LABELS[section]}`
+                  : 'Students'
           }
           fieldId={`${section}-${level ?? 'page'}-description`}
           initial={descriptionText ?? ''}

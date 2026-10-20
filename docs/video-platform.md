@@ -39,7 +39,8 @@ by owners and admins on request.
 Every request resolves capabilities from the caller's **live** Discord roles
 (`supabase/functions/_shared/roles.ts`). Role IDs are built in and can be
 overridden per environment with `DISCORD_ROLE_OWNER`, `DISCORD_ROLE_ADMIN`,
-`DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT`, `DISCORD_ROLE_LEVEL_1..3`.
+`DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT`, `DISCORD_ROLE_LEVEL_1..3`. The batch
+roles use `JULY_BATCH`, `SEPT_BATCH` and `BATCH_5`.
 
 | Role | Discord role ID |
 | --- | --- |
@@ -59,9 +60,10 @@ mentor) see every level.
 | --- | --- | --- | --- |
 | Level 1-3 tabs | All, including private and processing | All, including private and processing | Published + ready, up to their highest Level role |
 | Further Studying | All, including private and processing | All, including private and processing | Published + ready, with the Level 3 role |
+| 1st Of July Batch, 1st Of September Batch, Batch 5.0 | All, including private and processing | All, including private and processing | Published + ready, only the batch(es) whose Discord role they hold |
 | Lectures, Weekly Recaps & Outlooks | All | All | Published + ready |
 | 1:1 recordings | Any student's | Any student's | Their own, published + ready |
-| Upload | Every section; any student's recordings | Level 1-3 and Further Studying; any student's recordings | No |
+| Upload | Every section; any student's recordings | Level 1-3, Further Studying and the batch sections; any student's recordings | No |
 | Publish / make private | Everything | Level 1-3 and recordings | No |
 | Edit title / description | Yes | No | No |
 | Delete (also deletes in Bunny) | Yes | No | No |
@@ -87,7 +89,7 @@ mentorship content. The earlier `video_staff_access` email bypass is removed.
 ## Sidebar
 
 After **Learn**, a **Mentorship** group: Level 1, Level 2, Level 3, Further Studying, Lectures,
-Weekly Recaps & Outlooks, then **Student Recordings** (staff: searchable
+Weekly Recaps & Outlooks, 1st Of July Batch, 1st Of September Batch, Batch 5.0, then **Student Recordings** (staff: searchable
 picker of Discord members with the Student role, then that student's
 recordings and an upload button) or **My Recordings** (students). Learn is
 unchanged.
@@ -243,6 +245,7 @@ BUNNY_STREAM_API_KEY             # Library API key (create/delete, TUS signing, 
 BUNNY_STREAM_CDN_HOSTNAME        # optional, thumbnails
 PLAYBACK_TTL_SECONDS             # optional upper bound, default 720 (capped to access window + 90 s)
 DISCORD_ROLE_*                   # optional overrides of the built-in role IDs
+JULY_BATCH / SEPT_BATCH / BATCH_5   # batch role IDs (built in; set here too)
 MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1   # local mock testing only; never in production
 ```
 

@@ -1,8 +1,15 @@
+import { useState } from 'react'
 import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { useConfirm } from './ConfirmProvider'
 import { useMentorship } from '../store/useMentorship'
-import { FURTHER_STUDYING_LEVEL, SECTION_LABELS, levelsInclude, type VideoLevel } from '../../../shared/video'
+import {
+  FURTHER_STUDYING_LEVEL,
+  SECTION_LABELS,
+  levelsInclude,
+  type BatchId,
+  type VideoLevel
+} from '../../../shared/video'
 import SyncStatus from './SyncStatus'
 import logo from '../assets/htnq-logo.png'
 
@@ -15,6 +22,9 @@ export type ViewId =
   | 'furtherStudying'
   | 'lectures'
   | 'weekly'
+  | 'julyBatch'
+  | 'septBatch'
+  | 'batch5'
   | 'recordings'
   | 'points'
   | 'reference'
@@ -120,6 +130,12 @@ const MENTORSHIP_LEVELS: { id: ViewId; level: VideoLevel }[] = [
   { id: 'level3', level: 3 }
 ]
 
+const MENTORSHIP_BATCHES: { id: ViewId; section: BatchId }[] = [
+  { id: 'julyBatch', section: 'july_batch' },
+  { id: 'septBatch', section: 'sept_batch' },
+  { id: 'batch5', section: 'batch_5' }
+]
+
 const playIcon = (
   <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.6">
     <rect x="3" y="6" width="18" height="12" rx="2" />
@@ -173,6 +189,8 @@ function MentorshipNav({
 }): JSX.Element {
   const caps = useMentorship((s) => s.capabilities)
   const isStaff = Boolean(caps?.isStaff)
+  // Open by default each launch; the member can fold the group away.
+  const [expanded, setExpanded] = useState(true)
   // Locks are a hint only; every list and playback request is re-checked server-side.
   const sectionLocked = Boolean(caps && !caps.isStaff && !caps.isStudent)
   const entries: { id: ViewId; label: string; locked: boolean }[] = [
@@ -190,16 +208,40 @@ function MentorshipNav({
     },
     { id: 'lectures', label: 'Lectures', locked: sectionLocked },
     { id: 'weekly', label: 'Weekly Recaps & Outlooks', locked: sectionLocked },
+    ...MENTORSHIP_BATCHES.map(({ id, section }) => ({
+      id,
+      label: SECTION_LABELS[section],
+      locked: Boolean(caps && !caps.isStaff && (!caps.isStudent || !caps.batches?.includes(section)))
+    })),
     { id: 'recordings', label: isStaff ? 'Student Recordings' : 'My Recordings', locked: sectionLocked }
   ]
 
   return (
     <div className="mt-1 flex flex-col gap-0.5">
-      <div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted/80">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-controls="mentorship-nav-list"
+        title={expanded ? 'Collapse Mentorship' : 'Expand Mentorship'}
+        className={`flex items-center gap-2 rounded-lg px-3 pb-1 pt-2 text-left text-[11px] font-semibold uppercase tracking-wide transition-colors hover:text-slate-200 ${
+          !expanded && entries.some((e) => e.id === active) ? 'text-accent' : 'text-muted/80'
+        }`}
+      >
         {playIcon}
-        Mentorship
-      </div>
-      {entries.map((e) => {
+        <span className="flex-1">Mentorship</span>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          className={`h-3.5 w-3.5 transition-transform duration-150 ${expanded ? '' : '-rotate-90'}`}
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {expanded && <div id="mentorship-nav-list" className="flex flex-col gap-0.5">{entries.map((e) => {
         const isActive = active === e.id
         return (
           <button
@@ -216,7 +258,7 @@ function MentorshipNav({
             {e.locked && <span className="text-muted/70">{lockIcon}</span>}
           </button>
         )
-      })}
+      })}</div>}
     </div>
   )
 }

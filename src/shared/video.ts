@@ -7,7 +7,21 @@ export type VideoLevel = 1 | 2 | 3
 
 export const VIDEO_LEVELS: VideoLevel[] = [1, 2, 3]
 
-export type ContentSection = 'level' | 'lectures' | 'weekly_recaps' | 'further_studying'
+/** Batch (cohort) sections, each unlocked by its own Discord role. */
+export type BatchId = 'july_batch' | 'sept_batch' | 'batch_5'
+
+export const BATCH_IDS: BatchId[] = ['july_batch', 'sept_batch', 'batch_5']
+
+export type ContentSection =
+  | 'level'
+  | 'lectures'
+  | 'weekly_recaps'
+  | 'further_studying'
+  | BatchId
+
+export function isBatchSection(section: ContentSection): section is BatchId {
+  return (BATCH_IDS as string[]).includes(section)
+}
 
 /** Further Studying opens for members whose roles unlock this Level (and staff). */
 export const FURTHER_STUDYING_LEVEL: VideoLevel = 3
@@ -59,7 +73,10 @@ export const SECTION_LABELS: Record<ContentSection, string> = {
   level: 'Level',
   lectures: 'Lectures',
   weekly_recaps: 'Weekly Recaps & Outlooks',
-  further_studying: 'Further Studying'
+  further_studying: 'Further Studying',
+  july_batch: '1st Of July Batch',
+  sept_batch: '1st Of September Batch',
+  batch_5: 'Batch 5.0'
 }
 
 /** Per-item permission flags computed server-side from live Discord roles. */
@@ -91,12 +108,15 @@ export interface LevelDescription {
 }
 
 /** Mentorship pages besides the Levels that carry an owner/admin-written description. */
-export type DescribedSection = 'further_studying' | 'lectures' | 'weekly_recaps' | 'recordings'
+export type DescribedSection = Exclude<ContentSection, 'level'> | 'recordings'
 
 export const DESCRIBED_SECTION_LABELS: Record<DescribedSection, string> = {
   further_studying: 'Further Studying',
   lectures: 'Lectures',
   weekly_recaps: 'Weekly Recaps & Outlooks',
+  july_batch: SECTION_LABELS.july_batch,
+  sept_batch: SECTION_LABELS.sept_batch,
+  batch_5: SECTION_LABELS.batch_5,
   recordings: 'Recordings'
 }
 
@@ -130,11 +150,16 @@ export interface MentorshipCapabilities {
   isManager: boolean
   isStudent: boolean
   levels: VideoLevel[]
+  /** Batch sections they may open (staff: all). */
+  batches: BatchId[]
   canUpload: {
     level: boolean
     lectures: boolean
     weekly_recaps: boolean
     further_studying: boolean
+    july_batch: boolean
+    sept_batch: boolean
+    batch_5: boolean
     recordings: boolean
   }
 }

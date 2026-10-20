@@ -2,13 +2,33 @@
 // these with capabilities resolved from LIVE Discord roles; the client only
 // receives the resulting flags and never decides access itself.
 
-import type { Capabilities, VideoLevel } from './roles.ts'
+import type { BatchId, Capabilities, VideoLevel } from './roles.ts'
 
-export type ContentSection = 'level' | 'lectures' | 'weekly_recaps' | 'further_studying'
+export type ContentSection =
+  | 'level'
+  | 'lectures'
+  | 'weekly_recaps'
+  | 'further_studying'
+  | 'july_batch'
+  | 'sept_batch'
+  | 'batch_5'
 export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 
-export const CONTENT_SECTIONS: ContentSection[] = ['level', 'lectures', 'weekly_recaps', 'further_studying']
+export const CONTENT_SECTIONS: ContentSection[] = [
+  'level',
+  'lectures',
+  'weekly_recaps',
+  'further_studying',
+  'july_batch',
+  'sept_batch',
+  'batch_5'
+]
+
+/** A batch section is open to staff and to students holding that batch's Discord role. */
+export function isBatchSection(section: unknown): section is BatchId {
+  return section === 'july_batch' || section === 'sept_batch' || section === 'batch_5'
+}
 
 /** Further Studying is for members whose roles unlock Level 3 (and staff). */
 export const FURTHER_STUDYING_LEVEL: VideoLevel = 3
@@ -27,7 +47,13 @@ export interface RecordingItem {
 }
 
 export function isContentSection(v: unknown): v is ContentSection {
-  return v === 'level' || v === 'lectures' || v === 'weekly_recaps' || v === 'further_studying'
+  return (
+    v === 'level' ||
+    v === 'lectures' ||
+    v === 'weekly_recaps' ||
+    v === 'further_studying' ||
+    isBatchSection(v)
+  )
 }
 
 export function isVisibility(v: unknown): v is Visibility {
@@ -43,6 +69,7 @@ export function canListVideo(caps: Capabilities, item: VideoItem): boolean {
   if (item.visibility !== 'published' || item.encodingStatus !== 'ready') return false
   if (item.section === 'level') return item.level !== null && caps.levels.includes(item.level)
   if (item.section === 'further_studying') return caps.levels.includes(FURTHER_STUDYING_LEVEL)
+  if (isBatchSection(item.section)) return caps.batches.includes(item.section)
   return true
 }
 
@@ -50,6 +77,11 @@ export function canListVideo(caps: Capabilities, item: VideoItem): boolean {
 export function canPlayVideo(caps: Capabilities, item: VideoItem): boolean {
   if (item.encodingStatus !== 'ready') return false
   return canListVideo(caps, item)
+}
+
+/** Mentors work in the Level, Further Studying and batch sections; Lectures and Weekly Recaps are owner/admin. */
+function mentorSection(section: ContentSection): boolean {
+  return section === 'level' || section === 'further_studying' || isBatchSection(section)
 }
 
 export function canUploadVideo(
@@ -60,14 +92,14 @@ export function canUploadVideo(
   if (section === 'level' && (level === null || ![1, 2, 3].includes(level))) return false
   if (section !== 'level' && level !== null) return false
   if (caps.isManager) return true
-  if (caps.isMentor) return section === 'level' || section === 'further_studying'
+  if (caps.isMentor) return mentorSection(section)
   return false
 }
 
 /** Mentors may hide or republish Level and Further Studying videos; owner/admin may for every section. */
 export function canSetVideoVisibility(caps: Capabilities, item: VideoItem): boolean {
   if (caps.isManager) return true
-  if (caps.isMentor) return item.section === 'level' || item.section === 'further_studying'
+  if (caps.isMentor) return mentorSection(item.section)
   return false
 }
 
@@ -117,9 +149,24 @@ export function canEditLevelDescriptions(caps: Capabilities): boolean {
 }
 
 /** Mentorship pages besides the Levels that have an owner/admin-written description. */
-export type DescribedSection = 'further_studying' | 'lectures' | 'weekly_recaps' | 'recordings'
+export type DescribedSection =
+  | 'further_studying'
+  | 'lectures'
+  | 'weekly_recaps'
+  | 'july_batch'
+  | 'sept_batch'
+  | 'batch_5'
+  | 'recordings'
 
-export const DESCRIBED_SECTIONS: DescribedSection[] = ['further_studying', 'lectures', 'weekly_recaps', 'recordings']
+export const DESCRIBED_SECTIONS: DescribedSection[] = [
+  'further_studying',
+  'lectures',
+  'weekly_recaps',
+  'july_batch',
+  'sept_batch',
+  'batch_5',
+  'recordings'
+]
 
 export function isDescribedSection(v: unknown): v is DescribedSection {
   return typeof v === 'string' && (DESCRIBED_SECTIONS as string[]).includes(v)
@@ -133,6 +180,7 @@ export function canViewSectionDescription(caps: Capabilities, section: Described
   if (caps.isStaff) return true
   if (!caps.isStudent) return false
   if (section === 'further_studying') return caps.levels.includes(FURTHER_STUDYING_LEVEL)
+  if (isBatchSection(section)) return caps.batches.includes(section)
   return true
 }
 
@@ -197,6 +245,9 @@ export interface UploadCapabilities {
   lectures: boolean
   weekly_recaps: boolean
   further_studying: boolean
+  july_batch: boolean
+  sept_batch: boolean
+  batch_5: boolean
   recordings: boolean
 }
 
@@ -206,6 +257,9 @@ export function uploadCapabilities(caps: Capabilities): UploadCapabilities {
     lectures: canUploadVideo(caps, 'lectures', null),
     weekly_recaps: canUploadVideo(caps, 'weekly_recaps', null),
     further_studying: canUploadVideo(caps, 'further_studying', null),
+    july_batch: canUploadVideo(caps, 'july_batch', null),
+    sept_batch: canUploadVideo(caps, 'sept_batch', null),
+    batch_5: canUploadVideo(caps, 'batch_5', null),
     recordings: canUploadRecording(caps)
   }
 }

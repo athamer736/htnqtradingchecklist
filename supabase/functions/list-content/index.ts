@@ -103,6 +103,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       isManager: caps.isManager,
       isStudent: caps.isStudent,
       levels: caps.levels,
+      batches: caps.batches,
       canUpload: uploadCapabilities(caps)
     },
     videos

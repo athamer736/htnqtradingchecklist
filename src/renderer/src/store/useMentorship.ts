@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
+  DESCRIBED_SECTION_LABELS,
   PLAYBACK_MESSAGES,
   type ContentVideo,
   type DescribedSection,
@@ -219,7 +220,7 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
       if ((d.level === 1 || d.level === 2 || d.level === 3) && typeof d.description === 'string') levels[d.level] = d
     }
     const sections: Partial<Record<DescribedSection, SectionDescription>> = {}
-    const known: string[] = ['further_studying', 'lectures', 'weekly_recaps', 'recordings']
+    const known = Object.keys(DESCRIBED_SECTION_LABELS)
     for (const d of Array.isArray(body.sections) ? (body.sections as SectionDescription[]) : []) {
       if (known.includes(d.section) && typeof d.description === 'string') sections[d.section] = d
     }

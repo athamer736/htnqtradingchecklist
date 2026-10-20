@@ -3,7 +3,7 @@
 ## Implemented (this branch)
 
 - [x] Live Discord role capabilities: owner, admin, mentor, student, inclusive Levels 1-3
-- [x] Sections: Level 1-3, Further Studying (Level 3), Lectures, Weekly Recaps & Outlooks; private/published; encoding status
+- [x] Sections: Level 1-3, Further Studying (Level 3), Lectures, Weekly Recaps & Outlooks, 1st Of July / 1st Of September / Batch 5.0 batch sections; private/published; encoding status
 - [x] 1:1 student recordings (staff upload and browse; students see only their own)
 - [x] Edge Functions: `list-content`, `list-recordings`, `list-students`, `create-upload`,
       `manage-content`, `issue-playback-token`, `verify-membership` (`list-videos` removed)
@@ -43,7 +43,8 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
 3. `supabase/migrations/20261018_admin_panel.sql` (Admin panel: wider `content_audit`)
 4. `supabase/migrations/20261019_member_legal_names.sql` (admin-entered legal names)
    and `20261020_level_descriptions.sql` (Level page descriptions + audit widening),
-   `20261020_section_descriptions.sql` (descriptions for the other Mentorship pages)
+   `20261020_section_descriptions.sql` (descriptions for the other Mentorship pages),
+   `20261020_batch_sections.sql` (the three batch sections)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -58,6 +59,7 @@ own terminal). Do not paste secrets into chat.
 - Optional: `BUNNY_STREAM_CDN_HOSTNAME` (thumbnails), `PLAYBACK_TTL_SECONDS`
 - Optional: `DISCORD_ROLE_OWNER` / `_ADMIN` / `_MENTOR` / `_STUDENT` / `_LEVEL_1..3`
   only to override the built-in role IDs (for example for a sandbox server)
+- `JULY_BATCH`, `SEPT_BATCH`, `BATCH_5`: the batch role IDs (built in; also set as secrets)
 
 Remove `DISCORD_ROLE_LEVEL_*` secrets that only duplicate the built-in IDs, and
 `VIDEO_ROLE_MAX_AGE_SECONDS` (no longer used).
