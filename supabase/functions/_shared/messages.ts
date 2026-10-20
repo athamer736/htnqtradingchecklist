@@ -13,6 +13,7 @@ export type DenyCode =
   | 'forbidden'
   | 'onboarding_incomplete'
   | 'membership_inactive'
+  | 'no_joining_record'
   | 'suspended'
   | 'name_unavailable'
   | 'service_unavailable'
@@ -39,6 +40,8 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
     'Your mentorship onboarding is incomplete. Finish joining in Discord (documents and payment) before watching videos.',
   membership_inactive:
     'Your mentorship access is not active. Open a ticket in Discord or message staff for help.',
+  no_joining_record:
+    "We couldn't find your mentorship joining record. Open a ticket in Discord or message staff for help.",
   suspended: 'Video access is currently restricted on your account. Contact staff for details.',
   name_unavailable:
     'Staff still need to complete your account details (legal name on file) before videos can play with your watermark.',
@@ -63,6 +66,7 @@ export const DENY_STATUS: Record<DenyCode, number> = {
   forbidden: 403,
   onboarding_incomplete: 403,
   membership_inactive: 403,
+  no_joining_record: 403,
   suspended: 403,
   name_unavailable: 403,
   service_unavailable: 503,

@@ -126,6 +126,12 @@ export async function runPlayback(
   // signed-NDA name, or staff without a recorded name). A name is an extra
   // identifier for investigations, not an access requirement, so it must not
   // block playback.
+  //
+  // `not_found` means the bot has no record at all (e.g. members who joined
+  // before the enquiry bot, or were added by hand): the live Student or staff
+  // role is then enough, and every role check above still applies. A record
+  // the bot refuses (suspended, ended, unpaid, onboarding unfinished) still blocks.
+  const noBotRecord = mentorship.kind === 'denied' && mentorship.body.reason_code === 'not_found'
   let recheckAfterSeconds: number
   if (mentorship.kind === 'allowed') {
     // A staff_record name is only valid alongside a live staff role. Without
@@ -136,6 +142,8 @@ export async function runPlayback(
     }
     recheckAfterSeconds = mentorship.body.recheck_after_seconds
   } else if (mentorship.kind === 'denied' && mentorship.body.reason_code === 'identity_unresolved') {
+    recheckAfterSeconds = mentorship.body.recheck_after_seconds
+  } else if (mentorship.kind === 'denied' && noBotRecord && (auth.caps.isStudent || auth.caps.isStaff)) {
     recheckAfterSeconds = mentorship.body.recheck_after_seconds
   } else {
     const code: DenyCode =

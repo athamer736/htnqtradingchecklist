@@ -1,7 +1,11 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AuthzResult } from '../supabase/functions/_shared/authz.ts'
-import type { MentorshipDenyReason, MentorshipLookupResult } from '../supabase/functions/_shared/mentorshipApi.ts'
+import {
+  mapMentorshipDenyToPlayback,
+  type MentorshipDenyReason,
+  type MentorshipLookupResult
+} from '../supabase/functions/_shared/mentorshipApi.ts'
 import {
   playbackGrantWindow,
   runPlayback,
@@ -390,11 +394,42 @@ describe('runPlayback: member-access decisions', () => {
     }
   })
 
+  it('lets Student and staff role holders watch when the bot has no record of them', async () => {
+    for (const who of [student(R.level1), mentor()]) {
+      const d = deps({
+        checkMentorship: async () => deniedResult('not_found', who.ok ? who.discordId : STUDENT_ID),
+        readStoredName: async () => 'Admin Entered'
+      })
+      const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, who, d)
+      assert.equal(out.body.ok, true)
+      assert.deepEqual(out.body.watermark, {
+        discordId: who.ok ? who.discordId : '',
+        sessionRef: 'ref123',
+        legalName: 'Admin Entered'
+      })
+      assert.equal(d.audits.at(-1)?.outcome, 'issued')
+    }
+  })
+
+  it('maps a missing bot record to its own "no joining record" message', () => {
+    assert.equal(mapMentorshipDenyToPlayback('not_found'), 'no_joining_record')
+    assert.equal(mapMentorshipDenyToPlayback('membership_inactive'), 'membership_inactive')
+  })
+
+  it('a missing bot record does not bypass the Discord-role checks', async () => {
+    const d = deps({
+      loadVideo: async () => video({ level: 3 }),
+      checkMentorship: async () => deniedResult('not_found')
+    })
+    const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level1), d)
+    assert.equal(out.body.reasonCode, 'level_insufficient')
+    assert.ok(!('embedUrl' in out.body))
+  })
+
   it('denies suspended and inactive memberships', async () => {
     const cases: [MentorshipDenyReason, string][] = [
       ['suspended', 'suspended'],
-      ['membership_inactive', 'membership_inactive'],
-      ['not_found', 'membership_inactive']
+      ['membership_inactive', 'membership_inactive']
     ]
     for (const [reason, code] of cases) {
       const d = deps({ checkMentorship: async () => deniedResult(reason) })

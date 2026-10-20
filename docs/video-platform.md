@@ -135,7 +135,13 @@ Before any signed URL is issued, `issue-playback-token`:
    `identity_unresolved` denial. `identity_unresolved` is returned only after
    every real check (suspension, membership, payment, NDA, onboarding) has passed
    and the only gap is a usable legal name, so it is treated as "eligible": the
-   watermark does not need a name. Every other denial still blocks playback.
+   watermark does not need a name. The bot's `not_found` (no record at all, for
+   example members who joined before the enquiry bot or were added by hand) is
+   also treated as eligible for anyone holding the Student role or a staff role;
+   the Discord-role checks above still decide what they can open. Anyone else
+   gets "We couldn't find your mentorship joining record". Every other denial
+   (suspended, membership ended, payment, NDA or onboarding incomplete) still
+   blocks playback.
    This applies to staff too (they need a live staff role; a `staff_record`
    without a live staff role is refused).
 6. Picks the watermark name: the bot's `legal_name` if it supplied one, otherwise
