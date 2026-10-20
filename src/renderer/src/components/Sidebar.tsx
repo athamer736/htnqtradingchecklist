@@ -3,13 +3,8 @@ import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { useConfirm } from './ConfirmProvider'
 import { useMentorship } from '../store/useMentorship'
-import {
-  FURTHER_STUDYING_LEVEL,
-  SECTION_LABELS,
-  levelsInclude,
-  type BatchId,
-  type VideoLevel
-} from '../../../shared/video'
+import { SECTION_LABELS, type BatchId, type VideoLevel } from '../../../shared/video'
+import { canSeeMentorshipPage, type MentorshipPageId } from '../../../shared/mentorshipNav'
 import SyncStatus from './SyncStatus'
 import logo from '../assets/htnq-logo.png'
 
@@ -124,13 +119,13 @@ const adminItem: NavItem = {
   )
 }
 
-const MENTORSHIP_LEVELS: { id: ViewId; level: VideoLevel }[] = [
+const MENTORSHIP_LEVELS: { id: MentorshipPageId; level: VideoLevel }[] = [
   { id: 'level1', level: 1 },
   { id: 'level2', level: 2 },
   { id: 'level3', level: 3 }
 ]
 
-const MENTORSHIP_BATCHES: { id: ViewId; section: BatchId }[] = [
+const MENTORSHIP_BATCHES: { id: MentorshipPageId; section: BatchId }[] = [
   { id: 'julyBatch', section: 'july_batch' },
   { id: 'septBatch', section: 'sept_batch' },
   { id: 'batch5', section: 'batch_5' }
@@ -140,13 +135,6 @@ const playIcon = (
   <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.6">
     <rect x="3" y="6" width="18" height="12" rx="2" />
     <path d="M10 9.5v5l4.5-2.5z" fill="currentColor" stroke="none" />
-  </svg>
-)
-
-const lockIcon = (
-  <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" stroke="currentColor" strokeWidth="1.8" aria-label="Locked">
-    <rect x="5" y="11" width="14" height="9" rx="2" />
-    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
   </svg>
 )
 
@@ -186,35 +174,25 @@ function MentorshipNav({
 }: {
   active: ViewId
   onChange: (v: ViewId) => void
-}): JSX.Element {
+}): JSX.Element | null {
   const caps = useMentorship((s) => s.capabilities)
+  const status = useMentorship((s) => s.status)
+  const retry = useMentorship((s) => s.load)
   const isStaff = Boolean(caps?.isStaff)
   // Open by default each launch; the member can fold the group away.
   const [expanded, setExpanded] = useState(true)
-  // Locks are a hint only; every list and playback request is re-checked server-side.
-  const sectionLocked = Boolean(caps && !caps.isStaff && !caps.isStudent)
-  const entries: { id: ViewId; label: string; locked: boolean }[] = [
-    ...MENTORSHIP_LEVELS.map(({ id, level }) => ({
-      id,
-      label: `Level ${level}`,
-      locked: Boolean(caps && !caps.isStaff && (!caps.isStudent || !levelsInclude(caps.levels, level)))
-    })),
-    {
-      id: 'furtherStudying',
-      label: SECTION_LABELS.further_studying,
-      locked: Boolean(
-        caps && !caps.isStaff && (!caps.isStudent || !levelsInclude(caps.levels, FURTHER_STUDYING_LEVEL))
-      )
-    },
-    { id: 'lectures', label: 'Lectures', locked: sectionLocked },
-    { id: 'weekly', label: 'Weekly Recaps & Outlooks', locked: sectionLocked },
-    ...MENTORSHIP_BATCHES.map(({ id, section }) => ({
-      id,
-      label: SECTION_LABELS[section],
-      locked: Boolean(caps && !caps.isStaff && (!caps.isStudent || !caps.batches?.includes(section)))
-    })),
-    { id: 'recordings', label: isStaff ? 'Student Recordings' : 'My Recordings', locked: sectionLocked }
+  const allEntries: { id: MentorshipPageId; label: string }[] = [
+    ...MENTORSHIP_LEVELS.map(({ id, level }) => ({ id, label: `Level ${level}` })),
+    { id: 'furtherStudying', label: SECTION_LABELS.further_studying },
+    { id: 'lectures', label: 'Lectures' },
+    { id: 'weekly', label: 'Weekly Recaps & Outlooks' },
+    ...MENTORSHIP_BATCHES.map(({ id, section }) => ({ id, label: SECTION_LABELS[section] })),
+    { id: 'recordings', label: isStaff ? 'Student Recordings' : 'My Recordings' }
   ]
+  const entries = allEntries.filter((e) => canSeeMentorshipPage(caps, e.id))
+  const checking = !caps && status === 'loading'
+  const failed = !caps && status === 'error'
+  if (entries.length === 0 && !checking && !failed) return null
 
   return (
     <div className="mt-1 flex flex-col gap-0.5">
@@ -241,12 +219,23 @@ function MentorshipNav({
           <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {expanded && <div id="mentorship-nav-list" className="flex flex-col gap-0.5">{entries.map((e) => {
+      {expanded && <div id="mentorship-nav-list" className="flex flex-col gap-0.5">
+        {checking && <div className="py-1.5 pl-9 pr-3 text-sm text-muted/70">Checking your roles…</div>}
+        {failed && (
+          <button
+            type="button"
+            onClick={() => void retry()}
+            className="py-1.5 pl-9 pr-3 text-left text-sm text-muted transition-colors hover:text-slate-200"
+          >
+            Couldn&apos;t check your roles. <span className="text-accent">Try again</span>
+          </button>
+        )}
+        {entries.map((e) => {
         const isActive = active === e.id
         return (
           <button
             key={e.id}
-            title={e.locked ? `${e.label} (locked)` : e.label}
+            title={e.label}
             onClick={() => onChange(e.id)}
             className={`flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-left text-sm transition-all duration-150 active:scale-[0.98] ${
               isActive
@@ -255,7 +244,6 @@ function MentorshipNav({
             } ${e.id === 'recordings' ? 'mt-1' : ''}`}
           >
             <span className="flex-1 truncate">{e.label}</span>
-            {e.locked && <span className="text-muted/70">{lockIcon}</span>}
           </button>
         )
       })}</div>}

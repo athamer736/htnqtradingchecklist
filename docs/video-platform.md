@@ -81,7 +81,11 @@ never HTML, with a small set of marks: blank line = new paragraph, `# Heading`,
 are not supported (`src/shared/richText.ts`).
 
 The client only receives per-item permission flags. Every action is re-checked
-on the server; sidebar locks are hints.
+on the server. The sidebar only lists the Mentorship pages the member's Discord
+roles open (`src/shared/mentorshipNav.ts`), so someone without Level 3 never
+sees the Level 3 tab and members without the Student role see no Mentorship
+group. That is navigation only: a hidden page's videos are still refused by the
+server.
 
 Email/password accounts have no Discord identity and cannot watch or manage
 mentorship content. The earlier `video_staff_access` email bypass is removed.
