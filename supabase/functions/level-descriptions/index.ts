@@ -1,28 +1,37 @@
 // level-descriptions
 //
-// The text shown at the top of each mentorship Level page.
+// The text shown at the top of each Mentorship page: the three Level pages, and
+// Further Studying, Lectures, Weekly Recaps & Outlooks and Recordings.
 //
-//   { action: 'list' }                      any signed-in member; returns only the
-//                                           Levels they may see (staff: all three;
-//                                           students: the Levels their roles unlock)
-//   { action: 'set', level, description }   owner/admin only; description null
-//                                           (or blank) removes it
+//   { action: 'list' }                        any signed-in member; returns only the
+//                                             pages they may see (staff: all; students:
+//                                             the Levels their roles unlock, Further
+//                                             Studying with Level 3, the rest with the
+//                                             Student role)
+//   { action: 'set', level, description }     owner/admin only; description null
+//   { action: 'set', section, description }   (or blank) removes it
 //
 // Permissions come from LIVE Discord roles. Changes are audited (who and which
-// Level; the text is not copied into the audit row). The client never sends or
+// page; the text is not copied into the audit row). The client never sends or
 // chooses an identity.
 
 import { authorize } from '../_shared/authz.ts'
 import { loadContext, writeContentAudit } from '../_shared/context.ts'
-import { canEditLevelDescriptions, canViewLevelDescription } from '../_shared/decisions.ts'
+import {
+  canEditLevelDescriptions,
+  canViewLevelDescription,
+  canViewSectionDescription
+} from '../_shared/decisions.ts'
 import { handleOptions, json, readJsonBody } from '../_shared/http.ts'
 import {
   deleteLevelDescription,
+  deleteSectionDescription,
   listLevelDescriptions,
-  saveLevelDescription
+  listSectionDescriptions,
+  saveLevelDescription,
+  saveSectionDescription
 } from '../_shared/levelDescriptionStore.ts'
 import { deny } from '../_shared/messages.ts'
-import type { VideoLevel } from '../_shared/roles.ts'
 import { parseLevelDescriptionRequest } from '../_shared/validation.ts'
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -46,41 +55,61 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const canEdit = canEditLevelDescriptions(caps)
 
   if (request.action === 'list') {
-    const listed = await listLevelDescriptions(admin)
-    if (!listed.ok) return deny('upstream_failed')
-    const levels = listed.value
+    const [levelRows, sectionRows] = await Promise.all([listLevelDescriptions(admin), listSectionDescriptions(admin)])
+    if (!levelRows.ok || !sectionRows.ok) return deny('upstream_failed')
+    const levels = levelRows.value
       .filter((d) => canViewLevelDescription(caps, d.level))
       .map((d) => ({ level: d.level, description: d.description, updatedAt: d.updatedAt }))
-    return json({ ok: true, canEdit, levels })
+    const sections = sectionRows.value
+      .filter((d) => canViewSectionDescription(caps, d.section))
+      .map((d) => ({ section: d.section, description: d.description, updatedAt: d.updatedAt }))
+    return json({ ok: true, canEdit, levels, sections })
   }
 
   if (!canEdit) return deny('forbidden')
-  const level: VideoLevel = request.level
-  const audit = (action: 'level_description_set' | 'level_description_cleared', detail: Record<string, unknown>) =>
-    writeContentAudit(admin, {
-      actor_user_id: auth.userId,
-      actor_discord_id: auth.discordId,
-      action,
-      target_kind: 'level',
-      target_id: null,
-      target_level: level,
-      detail
-    })
+  const { target, description } = request
 
-  if (request.description === null) {
-    const removed = await deleteLevelDescription(admin, level)
+  const audit = (suffix: 'set' | 'cleared', detail: Record<string, unknown>) =>
+    writeContentAudit(
+      admin,
+      target.kind === 'level'
+        ? {
+            actor_user_id: auth.userId,
+            actor_discord_id: auth.discordId,
+            action: `level_description_${suffix}`,
+            target_kind: 'level',
+            target_id: null,
+            target_level: target.level,
+            detail
+          }
+        : {
+            actor_user_id: auth.userId,
+            actor_discord_id: auth.discordId,
+            action: `section_description_${suffix}`,
+            target_kind: 'section',
+            target_id: null,
+            target_section: target.section,
+            detail
+          }
+    )
+  const echo = target.kind === 'level' ? { level: target.level } : { section: target.section }
+
+  if (description === null) {
+    const removed =
+      target.kind === 'level'
+        ? await deleteLevelDescription(admin, target.level)
+        : await deleteSectionDescription(admin, target.section)
     if (!removed.ok) return deny('upstream_failed')
-    await audit('level_description_cleared', { removed: removed.value.removed })
-    return json({ ok: true, level, description: null })
+    await audit('cleared', { removed: removed.value.removed })
+    return json({ ok: true, ...echo, description: null })
   }
 
-  const saved = await saveLevelDescription(admin, {
-    level,
-    description: request.description,
-    actorUserId: auth.userId,
-    actorDiscordId: auth.discordId
-  })
+  const actor = { actorUserId: auth.userId, actorDiscordId: auth.discordId }
+  const saved =
+    target.kind === 'level'
+      ? await saveLevelDescription(admin, { level: target.level, description, ...actor })
+      : await saveSectionDescription(admin, { section: target.section, description, ...actor })
   if (!saved.ok) return deny('upstream_failed')
-  await audit('level_description_set', { replaced: saved.value.replaced, length: request.description.length })
-  return json({ ok: true, level, description: request.description, updatedAt: saved.value.updatedAt })
+  await audit('set', { replaced: saved.value.replaced, length: description.length })
+  return json({ ok: true, ...echo, description, updatedAt: saved.value.updatedAt })
 })

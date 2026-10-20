@@ -42,7 +42,8 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
 2. `supabase/migrations/20261016_roles_sections_recordings.sql`
 3. `supabase/migrations/20261018_admin_panel.sql` (Admin panel: wider `content_audit`)
 4. `supabase/migrations/20261019_member_legal_names.sql` (admin-entered legal names)
-   and `20261020_level_descriptions.sql` (Level page descriptions + audit widening)
+   and `20261020_level_descriptions.sql` (Level page descriptions + audit widening),
+   `20261020_section_descriptions.sql` (descriptions for the other Mentorship pages)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 

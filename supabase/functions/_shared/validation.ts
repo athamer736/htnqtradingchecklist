@@ -2,7 +2,14 @@
 // never accepted from clients: the Discord ID always comes from the linked
 // Supabase identity, and legal names only from the Railway API.
 
-import { isContentSection, isVisibility, type ContentSection, type Visibility } from './decisions.ts'
+import {
+  isContentSection,
+  isDescribedSection,
+  isVisibility,
+  type ContentSection,
+  type DescribedSection,
+  type Visibility
+} from './decisions.ts'
 import { normaliseLegalName, usableLegalName } from './mentorshipApi.ts'
 import type { MoveDirection } from './ordering.ts'
 import type { VideoLevel } from './roles.ts'
@@ -248,10 +255,15 @@ export function parseMemberNameRequest(body: unknown): Parsed<MemberNameRequest>
 /** Longer than a video description: it introduces a whole Level. */
 export const LEVEL_DESCRIPTION_MAX = 4000
 
+/** A page whose description is being written: a Level, or one of the other Mentorship pages. */
+export type DescriptionTarget =
+  | { kind: 'level'; level: VideoLevel }
+  | { kind: 'section'; section: DescribedSection }
+
 export type LevelDescriptionRequest =
   | { action: 'list' }
   /** description null = clear it. */
-  | { action: 'set'; level: VideoLevel; description: string | null }
+  | { action: 'set'; target: DescriptionTarget; description: string | null }
 
 export function parseLevelDescriptionRequest(body: unknown): Parsed<LevelDescriptionRequest> {
   const o = asObject(body)
@@ -259,7 +271,16 @@ export function parseLevelDescriptionRequest(body: unknown): Parsed<LevelDescrip
   if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
   if (o.action === undefined || o.action === 'list') return { ok: true, value: { action: 'list' } }
   if (o.action !== 'set') return { ok: false, error: 'invalid-action' }
-  if (o.level !== 1 && o.level !== 2 && o.level !== 3) return { ok: false, error: 'invalid-level' }
+  // Exactly one of `level` or `section` names the page.
+  let target: DescriptionTarget
+  if (o.level !== undefined && o.section !== undefined) return { ok: false, error: 'invalid-target' }
+  if (o.section !== undefined) {
+    if (!isDescribedSection(o.section)) return { ok: false, error: 'invalid-section' }
+    target = { kind: 'section', section: o.section }
+  } else {
+    if (o.level !== 1 && o.level !== 2 && o.level !== 3) return { ok: false, error: 'invalid-level' }
+    target = { kind: 'level', level: o.level }
+  }
   if (o.description !== null && typeof o.description !== 'string') return { ok: false, error: 'invalid-description' }
   // Over-long text is rejected rather than silently cut, so an admin never loses the end of it.
   if (typeof o.description === 'string' && o.description.length > LEVEL_DESCRIPTION_MAX * 2) {
@@ -269,7 +290,7 @@ export function parseLevelDescriptionRequest(body: unknown): Parsed<LevelDescrip
   if (description !== null && description.length > LEVEL_DESCRIPTION_MAX) {
     return { ok: false, error: 'description-too-long' }
   }
-  return { ok: true, value: { action: 'set', level: o.level, description } }
+  return { ok: true, value: { action: 'set', target, description } }
 }
 
 // --- list-students / list-recordings ---------------------------------------

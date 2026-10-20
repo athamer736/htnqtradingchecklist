@@ -90,6 +90,23 @@ export interface LevelDescription {
   updatedAt: string
 }
 
+/** Mentorship pages besides the Levels that carry an owner/admin-written description. */
+export type DescribedSection = 'further_studying' | 'lectures' | 'weekly_recaps' | 'recordings'
+
+export const DESCRIBED_SECTION_LABELS: Record<DescribedSection, string> = {
+  further_studying: 'Further Studying',
+  lectures: 'Lectures',
+  weekly_recaps: 'Weekly Recaps & Outlooks',
+  recordings: 'Recordings'
+}
+
+/** The text at the top of one of those pages. */
+export interface SectionDescription {
+  section: DescribedSection
+  description: string
+  updatedAt: string
+}
+
 /** Same limit the server enforces. */
 export const LEVEL_DESCRIPTION_MAX = 4000
 

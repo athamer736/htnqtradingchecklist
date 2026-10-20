@@ -134,7 +134,8 @@ Protected videos need additional server secrets and the tables from
 `migrations/20261016_roles_sections_recordings.sql` and
 `migrations/20261018_admin_panel.sql` and
 `migrations/20261019_member_legal_names.sql` and
-`migrations/20261020_level_descriptions.sql` (all also appended to `schema.sql`; all
+`migrations/20261020_level_descriptions.sql` and
+`migrations/20261020_section_descriptions.sql` (all also appended to `schema.sql`; all
 are safe to re-run).
 
 ## 10. Extra secrets for videos
@@ -190,11 +191,12 @@ shows names admins recorded). Run `migrations/20261019_member_legal_names.sql`
 first: it creates the service-role-only `member_legal_names` table that
 `admin-member-name` writes.
 
-`level-descriptions` serves the text at the top of each Level page: any signed-in
-member reads the Levels their roles unlock (staff all three), only owner/admin can
-write it, and changes are audited without copying the text. Run
-`migrations/20261020_level_descriptions.sql` first (service-role-only
-`level_descriptions` table; it also widens the `content_audit` checks).
+`level-descriptions` serves the text at the top of each Level page and of Further
+Studying, Lectures, Weekly Recaps and Recordings: any signed-in member reads the pages
+their roles unlock (staff all of them), only owner/admin can write it, and changes are audited without copying the text. Run
+`migrations/20261020_level_descriptions.sql` and `20261020_section_descriptions.sql`
+first (service-role-only `level_descriptions` and `section_descriptions` tables; they
+also widen the `content_audit` checks).
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep

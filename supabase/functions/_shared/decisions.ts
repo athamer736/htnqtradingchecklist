@@ -111,9 +111,29 @@ export function canViewLevelDescription(caps: Capabilities, level: VideoLevel): 
   return caps.isStaff || (caps.isStudent && caps.levels.includes(level))
 }
 
-/** Writing what every student reads on a Level page is a manager action. */
+/** Writing what every student reads on a Level or section page is a manager action. */
 export function canEditLevelDescriptions(caps: Capabilities): boolean {
   return caps.isManager
+}
+
+/** Mentorship pages besides the Levels that have an owner/admin-written description. */
+export type DescribedSection = 'further_studying' | 'lectures' | 'weekly_recaps' | 'recordings'
+
+export const DESCRIBED_SECTIONS: DescribedSection[] = ['further_studying', 'lectures', 'weekly_recaps', 'recordings']
+
+export function isDescribedSection(v: unknown): v is DescribedSection {
+  return typeof v === 'string' && (DESCRIBED_SECTIONS as string[]).includes(v)
+}
+
+/**
+ * Staff, or a student who may open that page, may read its description. Further
+ * Studying needs the Level 3 unlock; the other pages need the Student role.
+ */
+export function canViewSectionDescription(caps: Capabilities, section: DescribedSection): boolean {
+  if (caps.isStaff) return true
+  if (!caps.isStudent) return false
+  if (section === 'further_studying') return caps.levels.includes(FURTHER_STUDYING_LEVEL)
+  return true
 }
 
 // --- 1:1 student recordings -------------------------------------------------

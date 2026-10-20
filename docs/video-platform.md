@@ -19,7 +19,7 @@ Customer app (Windows desktop or https://app.htnq.org)
        list-content | list-recordings | list-students     (listings, no playback URLs)
        create-upload | manage-content | set-thumbnail     (staff)
        admin-members | admin-member-identity | admin-member-name   (owner/admin: Admin panel)
-        level-descriptions                                 (text at the top of each Level page)
+        level-descriptions                                 (text at the top of each Mentorship page)
         issue-playback-token                                (every play and renewal)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
@@ -66,7 +66,7 @@ mentor) see every level.
 | Edit title / description | Yes | No | No |
 | Delete (also deletes in Bunny) | Yes | No | No |
 | Reorder videos within a section / Level | Yes | No | No |
-| Write the description shown on a Level page | Yes | No | No |
+| Write the description shown on a Level or section page | Yes | No | No |
 | Read a Level's description | All Levels | All Levels | Levels their roles unlock |
 | Admin panel: members list (live roles and levels) | Yes | No | No |
 | Admin panel: look up a member's legal name (live from the bot, audited) | Yes | No | No |

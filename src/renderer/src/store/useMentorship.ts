@@ -3,12 +3,14 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   PLAYBACK_MESSAGES,
   type ContentVideo,
+  type DescribedSection,
   type LevelDescription,
   type MentorshipCapabilities,
   type PlaybackDenied,
   type PlaybackDenyReason,
   type PlaybackSuccess,
   type PlaybackTarget,
+  type SectionDescription,
   type StudentRecording,
   type StudentSummary,
   type UploadCredentials,
@@ -110,7 +112,9 @@ interface MentorshipState {
 
   /** Level page descriptions the caller may read, keyed by Level. */
   levelDescriptions: Partial<Record<VideoLevel, LevelDescription>>
-  /** True for owner/admin: may write Level descriptions. */
+  /** Descriptions of the other Mentorship pages the caller may read. */
+  sectionDescriptions: Partial<Record<DescribedSection, SectionDescription>>
+  /** True for owner/admin: may write page descriptions. */
   canEditLevelDescriptions: boolean
 
   /** Staff: students who already have recordings (picker shortcuts). */
@@ -129,9 +133,11 @@ interface MentorshipState {
   playLoading: boolean
 
   load: () => Promise<void>
-  loadLevelDescriptions: () => Promise<void>
+  /** Loads every Level and page description the caller may read. */
+  loadDescriptions: () => Promise<void>
   /** Owner/admin. A blank text removes the description. Resolves to an error message, or null on success. */
   saveLevelDescription: (level: VideoLevel, text: string) => Promise<string | null>
+  saveSectionDescription: (section: DescribedSection, text: string) => Promise<string | null>
   loadStudentSummaries: () => Promise<void>
   loadRecordings: (studentDiscordId: string | null) => Promise<void>
   searchStudents: (query: string) => Promise<Result<{ students: StudentSummary[] }>>
@@ -153,6 +159,7 @@ const initial = {
   capabilities: null,
   videos: [],
   levelDescriptions: {},
+  sectionDescriptions: {},
   canEditLevelDescriptions: false,
   studentSummaries: [],
   recordingsStatus: 'idle' as LoadStatus,
@@ -203,15 +210,20 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
     })
   },
 
-  loadLevelDescriptions: async () => {
+  loadDescriptions: async () => {
     const body = await invoke('level-descriptions', { action: 'list' })
     // A failure just means no description is shown; the videos still work.
     if (body?.ok !== true || !Array.isArray(body.levels)) return
-    const next: Partial<Record<VideoLevel, LevelDescription>> = {}
+    const levels: Partial<Record<VideoLevel, LevelDescription>> = {}
     for (const d of body.levels as LevelDescription[]) {
-      if ((d.level === 1 || d.level === 2 || d.level === 3) && typeof d.description === 'string') next[d.level] = d
+      if ((d.level === 1 || d.level === 2 || d.level === 3) && typeof d.description === 'string') levels[d.level] = d
     }
-    set({ levelDescriptions: next, canEditLevelDescriptions: body.canEdit === true })
+    const sections: Partial<Record<DescribedSection, SectionDescription>> = {}
+    const known: string[] = ['further_studying', 'lectures', 'weekly_recaps', 'recordings']
+    for (const d of Array.isArray(body.sections) ? (body.sections as SectionDescription[]) : []) {
+      if (known.includes(d.section) && typeof d.description === 'string') sections[d.section] = d
+    }
+    set({ levelDescriptions: levels, sectionDescriptions: sections, canEditLevelDescriptions: body.canEdit === true })
   },
 
   saveLevelDescription: async (level, text) => {
@@ -228,6 +240,23 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
       delete rest[level]
     }
     set({ levelDescriptions: rest })
+    return null
+  },
+
+  saveSectionDescription: async (section, text) => {
+    const body = await invoke('level-descriptions', { action: 'set', section, description: text.trim() ? text : null })
+    if (body?.ok !== true) return toFailure(body, 'The description could not be saved.').message
+    const rest = { ...get().sectionDescriptions }
+    if (typeof body.description === 'string') {
+      rest[section] = {
+        section,
+        description: body.description,
+        updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : new Date().toISOString()
+      }
+    } else {
+      delete rest[section]
+    }
+    set({ sectionDescriptions: rest })
     return null
   },
 

@@ -2,7 +2,9 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   canEditLevelDescriptions,
-  canViewLevelDescription
+  canViewLevelDescription,
+  canViewSectionDescription,
+  type DescribedSection
 } from '../supabase/functions/_shared/decisions.ts'
 import { DEFAULT_ROLE_IDS as R, resolveCapabilities } from '../supabase/functions/_shared/roles.ts'
 import {
@@ -60,21 +62,21 @@ describe('parseLevelDescriptionRequest', () => {
 
   it('accepts a set and keeps line breaks', () => {
     const r = parseLevelDescriptionRequest({ action: 'set', level: 2, description: '# Welcome\r\n\r\n\r\n\r\n- one\n- two  ' })
-    assert.deepEqual(r, { ok: true, value: { action: 'set', level: 2, description: '# Welcome\n\n- one\n- two' } })
+    assert.deepEqual(r, { ok: true, value: { action: 'set', target: { kind: 'level', level: 2 }, description: '# Welcome\n\n- one\n- two' } })
   })
 
   it('treats a blank description as clearing it', () => {
     for (const d of ['', '   ', '\n\n', null]) {
       assert.deepEqual(parseLevelDescriptionRequest({ action: 'set', level: 1, description: d }), {
         ok: true,
-        value: { action: 'set', level: 1, description: null }
+        value: { action: 'set', target: { kind: 'level', level: 1 }, description: null }
       })
     }
   })
 
   it('drops control and bidi characters', () => {
     const r = parseLevelDescriptionRequest({ action: 'set', level: 3, description: 'a\u0000b\u202ec' })
-    assert.deepEqual(r, { ok: true, value: { action: 'set', level: 3, description: 'abc' } })
+    assert.deepEqual(r, { ok: true, value: { action: 'set', target: { kind: 'level', level: 3 }, description: 'abc' } })
   })
 
   it('rejects bad levels, missing or non-string descriptions, and unknown actions', () => {
@@ -106,5 +108,68 @@ describe('parseLevelDescriptionRequest', () => {
     assert.deepEqual(tooLong, { ok: false, error: 'description-too-long' })
     const huge = parseLevelDescriptionRequest({ action: 'set', level: 1, description: 'x'.repeat(LEVEL_DESCRIPTION_MAX * 3) })
     assert.deepEqual(huge, { ok: false, error: 'description-too-long' })
+  })
+})
+
+const SECTIONS: DescribedSection[] = ['further_studying', 'lectures', 'weekly_recaps', 'recordings']
+
+describe('who may read a section description', () => {
+  it('staff read every page', () => {
+    for (const roles of [[R.owner], [R.admin], [R.mentor]]) {
+      for (const s of SECTIONS) assert.equal(canViewSectionDescription(as(...roles), s), true)
+    }
+  })
+
+  it('Level 3 students read all of them; Level 1 and 2 students all but Further Studying', () => {
+    for (const s of SECTIONS) assert.equal(canViewSectionDescription(as(R.student, R.level3), s), true)
+    for (const lvl of [R.level1, R.level2]) {
+      assert.deepEqual(
+        SECTIONS.map((s) => canViewSectionDescription(as(R.student, lvl), s)),
+        [false, true, true, true]
+      )
+    }
+  })
+
+  it('a Level role without the Student role, or no role at all, reads nothing', () => {
+    for (const roles of [[R.level3], []]) {
+      for (const s of SECTIONS) assert.equal(canViewSectionDescription(as(...roles), s), false)
+    }
+  })
+})
+
+describe('parseLevelDescriptionRequest for sections', () => {
+  it('accepts each described page', () => {
+    for (const section of SECTIONS) {
+      assert.deepEqual(parseLevelDescriptionRequest({ action: 'set', section, description: ' Hi ' }), {
+        ok: true,
+        value: { action: 'set', target: { kind: 'section', section }, description: 'Hi' }
+      })
+    }
+  })
+
+  it('blank text clears a page description', () => {
+    assert.deepEqual(parseLevelDescriptionRequest({ action: 'set', section: 'lectures', description: '  ' }), {
+      ok: true,
+      value: { action: 'set', target: { kind: 'section', section: 'lectures' }, description: null }
+    })
+  })
+
+  it('rejects unknown pages, the plain "level" section, and naming a Level and a page together', () => {
+    const bad: unknown[] = [
+      { action: 'set', section: 'level', description: 'x' },
+      { action: 'set', section: 'journal', description: 'x' },
+      { action: 'set', section: 5, description: 'x' },
+      { action: 'set', section: 'lectures', level: 1, description: 'x' }
+    ]
+    for (const b of bad) assert.equal(parseLevelDescriptionRequest(b).ok, false, JSON.stringify(b))
+  })
+
+  it('applies the same length limit', () => {
+    const tooLong = parseLevelDescriptionRequest({
+      action: 'set',
+      section: 'lectures',
+      description: 'x'.repeat(LEVEL_DESCRIPTION_MAX + 1)
+    })
+    assert.deepEqual(tooLong, { ok: false, error: 'description-too-long' })
   })
 })

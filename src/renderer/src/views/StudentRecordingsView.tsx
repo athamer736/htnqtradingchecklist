@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
+import PageDescriptionDialog, { DescriptionCard } from '../components/video/PageDescriptionDialog'
 import PlaybackNotice from '../components/video/PlaybackNotice'
 import UploadDialog from '../components/video/UploadDialog'
 import VideoPlayer from '../components/video/VideoPlayer'
@@ -123,11 +124,17 @@ export default function StudentRecordingsView(): JSX.Element {
   const stop = useMentorship((s) => s.stop)
   const [student, setStudent] = useState<StudentSummary | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [editingDescription, setEditingDescription] = useState(false)
+  const recordingsDescription = useMentorship((s) => s.sectionDescriptions.recordings)
+  const canEditDescriptions = useMentorship((s) => s.canEditLevelDescriptions)
+  const loadDescriptions = useMentorship((s) => s.loadDescriptions)
+  const saveSectionDescription = useMentorship((s) => s.saveSectionDescription)
 
   useEffect(() => {
     void load()
+    void loadDescriptions()
     return () => stop()
-  }, [load, stop])
+  }, [load, loadDescriptions, stop])
 
   const isStaff = Boolean(caps?.isStaff)
   const canView = Boolean(caps && (caps.isStaff || caps.isStudent))
@@ -211,14 +218,25 @@ export default function StudentRecordingsView(): JSX.Element {
               : 'Your private 1:1 calls with the mentorship team. Only you and staff can see these.'}
           </p>
         </div>
-        {(!isStaff || student) && (
-          <button type="button" className="btn-ghost" onClick={refresh}>
-            Refresh
-          </button>
-        )}
+        <div className="flex gap-2">
+          {(!isStaff || student) && (
+            <button type="button" className="btn-ghost" onClick={refresh}>
+              Refresh
+            </button>
+          )}
+          {canView && canEditDescriptions && (
+            <button type="button" className="btn-ghost" onClick={() => setEditingDescription(true)}>
+              {recordingsDescription ? 'Edit description' : 'Add description'}
+            </button>
+          )}
+        </div>
       </div>
 
       {playError && <PlaybackNotice error={playError} onDismiss={stop} />}
+
+      {canView && recordingsDescription && (
+        <DescriptionCard label="About Recordings" text={recordingsDescription.description} />
+      )}
 
       {!canView ? (
         <p className="rounded-xl border border-line bg-bg-card px-4 py-4 text-sm text-muted">
@@ -247,6 +265,17 @@ export default function StudentRecordingsView(): JSX.Element {
         </div>
       ) : (
         list
+      )}
+
+      {editingDescription && (
+        <PageDescriptionDialog
+          title="Recordings description"
+          audience="Students and staff"
+          fieldId="recordings-page-description"
+          initial={recordingsDescription?.description ?? ''}
+          onSave={(text) => saveSectionDescription('recordings', text)}
+          onClose={() => setEditingDescription(false)}
+        />
       )}
 
       {uploading && student && (

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
-import LevelDescriptionDialog from '../components/video/LevelDescriptionDialog'
+import PageDescriptionDialog, { DescriptionCard } from '../components/video/PageDescriptionDialog'
 import PlaybackNotice from '../components/video/PlaybackNotice'
-import RichText from '../components/video/RichText'
 import UploadDialog from '../components/video/UploadDialog'
 import VideoPlayer from '../components/video/VideoPlayer'
 import { isSupabaseConfigured } from '../lib/supabase'
@@ -102,9 +101,11 @@ export default function ContentSectionView({
   const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
   const levelDescriptions = useMentorship((s) => s.levelDescriptions)
+  const sectionDescriptions = useMentorship((s) => s.sectionDescriptions)
   const canEditDescriptions = useMentorship((s) => s.canEditLevelDescriptions)
-  const loadLevelDescriptions = useMentorship((s) => s.loadLevelDescriptions)
+  const loadDescriptions = useMentorship((s) => s.loadDescriptions)
   const saveLevelDescription = useMentorship((s) => s.saveLevelDescription)
+  const saveSectionDescription = useMentorship((s) => s.saveSectionDescription)
   const [uploading, setUploading] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
 
@@ -114,8 +115,8 @@ export default function ContentSectionView({
   }, [load, stop])
 
   useEffect(() => {
-    if (section === 'level') void loadLevelDescriptions()
-  }, [section, level, loadLevelDescriptions])
+    void loadDescriptions()
+  }, [section, level, loadDescriptions])
 
   const title = sectionTitle(section, level)
   const gate = <MentorshipStatus />
@@ -149,8 +150,17 @@ export default function ContentSectionView({
   const locked = lockReason(caps, section, level)
   const items = videos.filter((v) => v.section === section && (section !== 'level' || v.level === level))
   const canUpload = caps.canUpload[section]
-  const levelText = section === 'level' && level !== null && !locked ? levelDescriptions[level] : undefined
-  const canWriteLevelText = section === 'level' && level !== null && !locked && canEditDescriptions
+  // A Level page and each other section page carry their own owner/admin-written text.
+  const describable = section !== 'level' || level !== null
+  const descriptionText = !describable || locked
+    ? undefined
+    : section === 'level'
+      ? levelDescriptions[level as VideoLevel]?.description
+      : sectionDescriptions[section]?.description
+  const canWriteDescription = describable && !locked && canEditDescriptions
+  const descriptionLabel = section === 'level' ? `About Level ${level}` : `About ${SECTION_LABELS[section]}`
+  const saveDescription = (text: string): Promise<string | null> =>
+    section === 'level' ? saveLevelDescription(level as VideoLevel, text) : saveSectionDescription(section, text)
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6">
@@ -167,14 +177,14 @@ export default function ContentSectionView({
             className="btn-ghost"
             onClick={() => {
               void load()
-              if (section === 'level') void loadLevelDescriptions()
+              void loadDescriptions()
             }}
           >
             Refresh
           </button>
-          {canWriteLevelText && (
+          {canWriteDescription && (
             <button type="button" className="btn-ghost" onClick={() => setEditingDescription(true)}>
-              {levelText ? 'Edit description' : 'Add description'}
+              {descriptionText ? 'Edit description' : 'Add description'}
             </button>
           )}
           {canUpload && (
@@ -187,15 +197,7 @@ export default function ContentSectionView({
 
       {playError && <PlaybackNotice error={playError} onDismiss={stop} />}
 
-      {levelText && (
-        <section
-          aria-label={`About Level ${level}`}
-          className="mb-6 rounded-xl border border-line bg-bg-card p-4 md:p-5"
-        >
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">About Level {level}</h2>
-          <RichText text={levelText.description} />
-        </section>
-      )}
+      {descriptionText && <DescriptionCard label={descriptionLabel} text={descriptionText} />}
 
       {locked ? (
         <div className="flex items-start gap-3 rounded-xl border border-line bg-bg-card px-4 py-4 text-sm text-muted">
@@ -224,11 +226,19 @@ export default function ContentSectionView({
         </div>
       )}
 
-      {editingDescription && level !== null && (
-        <LevelDescriptionDialog
-          level={level}
-          initial={levelText?.description ?? ''}
-          onSave={(text) => saveLevelDescription(level, text)}
+      {editingDescription && describable && (
+        <PageDescriptionDialog
+          title={`${sectionTitle(section, level)} description`}
+          audience={
+            section === 'level'
+              ? `Students with Level ${level} access`
+              : section === 'further_studying'
+                ? 'Students with the Level 3 role'
+                : 'Students'
+          }
+          fieldId={`${section}-${level ?? 'page'}-description`}
+          initial={descriptionText ?? ''}
+          onSave={saveDescription}
           onClose={() => setEditingDescription(false)}
         />
       )}
