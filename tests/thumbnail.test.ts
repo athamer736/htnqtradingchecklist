@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 import { describe, it } from 'node:test'
 import { setBunnyThumbnail } from '../supabase/functions/_shared/bunnyApi'
+import { signBunnyCdnFileUrl } from '../supabase/functions/_shared/bunnyAuth'
 import { canSetVideoThumbnail } from '../supabase/functions/_shared/decisions'
 import { resolveCapabilities } from '../supabase/functions/_shared/roles'
 import {
   detectImageType,
   MAX_THUMBNAIL_BYTES,
   parseThumbnailQuery,
-  thumbnailCdnUrl
+  thumbnailCdnUrl,
+  thumbnailExpiry
 } from '../supabase/functions/_shared/thumbnail'
 import { MAX_THUMBNAIL_BYTES as CLIENT_MAX, thumbnailFileProblem } from '../src/shared/video'
 
@@ -63,6 +66,38 @@ describe('thumbnailCdnUrl', () => {
 
   it('encodes the video id', () => {
     assert.equal(thumbnailCdnUrl('h', 'a/b'), 'https://h/a%2Fb/thumbnail.jpg')
+  })
+})
+
+describe('signed thumbnail URLs (Bunny CDN token authentication)', () => {
+  it('signs path, expiry and existing query params with HMAC-SHA256, per the Bunny spec', async () => {
+    const signed = new URL(
+      await signBunnyCdnFileUrl('https://vz-1.b-cdn.net/abc/thumbnail.jpg?v=123', 'key-1', 1_800_000_000)
+    )
+    const expected =
+      'HS256-' +
+      createHmac('sha256', 'key-1').update('/abc/thumbnail.jpg1800000000v=123').digest('base64url')
+    assert.equal(signed.searchParams.get('token'), expected)
+    assert.equal(signed.searchParams.get('expires'), '1800000000')
+    assert.equal(signed.searchParams.get('v'), '123')
+    assert.equal(signed.pathname, '/abc/thumbnail.jpg')
+  })
+
+  it('signs a URL with no query params using just path and expiry', async () => {
+    const signed = new URL(await signBunnyCdnFileUrl('https://h/abc/thumbnail.jpg', 'k', 100))
+    const expected = 'HS256-' + createHmac('sha256', 'k').update('/abc/thumbnail.jpg100').digest('base64url')
+    assert.equal(signed.searchParams.get('token'), expected)
+  })
+
+  it('keeps the expiry stable within a 6-hour window and at least 6 hours ahead', () => {
+    const six = 6 * 3600
+    const start = Date.UTC(2026, 9, 20, 12, 0, 0)
+    const a = thumbnailExpiry(start)
+    assert.equal(thumbnailExpiry(start + 5 * 3600 * 1000), a)
+    assert.equal(a % six, 0)
+    for (const t of [start, start + 5 * 3600 * 1000 + 3599 * 1000]) {
+      assert.ok(thumbnailExpiry(t) - t / 1000 >= six)
+    }
   })
 })
 

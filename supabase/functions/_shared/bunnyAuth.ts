@@ -87,6 +87,40 @@ export type SignHlsOptions = {
   userIp?: string
 }
 
+async function hmacSha256Base64Url(key: string, message: string): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  return base64Url(await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(message)))
+}
+
+/**
+ * Advanced Bunny CDN token for one file (query-string form), e.g. a thumbnail
+ * when the library has CDN token authentication on. Existing query params are
+ * part of the signature, so nothing may be added to the URL afterwards.
+ *   token = "HS256-" + Base64URL(HMAC-SHA256(key, path + expires + sorted_params))
+ */
+export async function signBunnyCdnFileUrl(
+  fileUrl: string,
+  securityKey: string,
+  expiresUnixSeconds: number
+): Promise<string> {
+  const url = new URL(fileUrl)
+  const signingData = [...url.searchParams.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('&')
+  const expires = String(expiresUnixSeconds)
+  const token = `HS256-${await hmacSha256Base64Url(securityKey, `${url.pathname}${expires}${signingData}`)}`
+  url.searchParams.set('token', token)
+  url.searchParams.set('expires', expires)
+  return url.toString()
+}
+
 /**
  * Advanced Bunny CDN directory token (path-based) for HLS.
  * NOT returned by the production playback endpoint today.

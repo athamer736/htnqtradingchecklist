@@ -6,7 +6,8 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import type { AuthzDeps } from './authz.ts'
 import { fetchGuildMember } from './discord.ts'
 import { loadRoleConfig, type RoleConfig } from './roles.ts'
-import { thumbnailCdnUrl } from './thumbnail.ts'
+import { signBunnyCdnFileUrl } from './bunnyAuth.ts'
+import { thumbnailCdnUrl, thumbnailExpiry } from './thumbnail.ts'
 
 export interface MentorshipEnv {
   botToken: string
@@ -113,8 +114,18 @@ export async function writeContentAudit(
   }
 }
 
-/** Optional Bunny CDN thumbnail URL (only when a CDN hostname is configured). */
-export function thumbnailUrl(env: MentorshipEnv, bunnyVideoId: string, version?: string | null): string | null {
+/**
+ * Optional Bunny CDN thumbnail URL (only when a CDN hostname is configured),
+ * signed for CDN token authentication when the token key is set.
+ */
+export async function thumbnailUrl(
+  env: MentorshipEnv,
+  bunnyVideoId: string,
+  version?: string | null,
+  nowMs = Date.now()
+): Promise<string | null> {
   if (!env.bunnyCdnHostname) return null
-  return thumbnailCdnUrl(env.bunnyCdnHostname, bunnyVideoId, version)
+  const url = thumbnailCdnUrl(env.bunnyCdnHostname, bunnyVideoId, version)
+  if (!env.bunnyTokenKey) return url
+  return signBunnyCdnFileUrl(url, env.bunnyTokenKey, thumbnailExpiry(nowMs))
 }

@@ -65,7 +65,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
-  const videos = (rows ?? [])
+  const videos = await Promise.all((rows ?? [])
     .filter((r) => isContentSection(r.section))
     .map((r) => {
       const item = {
@@ -77,14 +77,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return { r, item }
     })
     .filter(({ item }) => canListVideo(caps, item))
-    .map(({ r, item }) => ({
+    .map(async ({ r, item }) => ({
       id: r.id as string,
       section: item.section,
       level: item.level,
       title: r.title as string,
       description: (r.description as string | null) ?? null,
       durationSeconds: (r.duration_seconds as number | null) ?? null,
-      thumbnailUrl: item.encodingStatus === 'ready' ? thumbnailUrl(env, r.bunny_video_id as string, r.updated_at as string | null) : null,
+      thumbnailUrl:
+        item.encodingStatus === 'ready'
+          ? await thumbnailUrl(env, r.bunny_video_id as string, r.updated_at as string | null)
+          : null,
       visibility: item.visibility,
       encodingStatus: item.encodingStatus,
       createdAt: r.created_at as string,
@@ -92,7 +95,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       canSetVisibility: canSetVideoVisibility(caps, item),
       canEdit: canEditVideo(caps),
       canDelete: canDeleteVideo(caps)
-    }))
+    })))
 
   return json({
     ok: true,

@@ -247,7 +247,7 @@ DISCORD_GUILD_ID
 MENTORSHIP_API_BASE_URL          # bot's HTTPS origin on Railway, no path
 MENTORSHIP_API_TOKEN             # = the bot's MEMBER_ACCESS_API_TOKEN
 BUNNY_STREAM_LIBRARY_ID
-BUNNY_STREAM_TOKEN_KEY           # Token Authentication key (embed signing)
+BUNNY_STREAM_TOKEN_KEY           # Token Authentication key (embed + thumbnail signing)
 BUNNY_STREAM_API_KEY             # Library API key (create/delete, TUS signing, status)
 BUNNY_STREAM_CDN_HOSTNAME        # optional, thumbnails
 PLAYBACK_TTL_SECONDS             # optional upper bound, default 720 (capped to access window + 90 s)
@@ -257,6 +257,15 @@ MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1   # local mock testing only; never in prod
 ```
 
 The Discord bot needs **Server Members Intent** for the student search.
+
+Bunny library **Security** settings:
+
+- **Embed view token authentication**: on (every embed URL is signed).
+- **CDN token authentication**: on. The embedded player signs its own video
+  requests, and `list-content` signs thumbnail URLs (valid 6-12 hours).
+- **Block direct url file access**: off. It relies on a `Referer` header, which
+  iPhone/iPad Safari's built-in video player doesn't send, so every video fails
+  there with "This video is not available". CDN tokens protect the files instead.
 
 Client env (public by design) only has:
 

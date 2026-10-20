@@ -60,6 +60,18 @@ export function parseThumbnailQuery(url: string): { ok: true; id: string } | { o
  * Bunny CDN thumbnail URL. `version` (the row's updated_at) busts browser caches
  * after a replacement so the new image shows straight away.
  */
+const THUMBNAIL_TOKEN_WINDOW_SECONDS = 6 * 60 * 60
+
+/**
+ * Expiry for a signed thumbnail URL: the end of the next 6-hour window, so the
+ * URL stays identical (and browser-cacheable) for hours and is always valid
+ * for at least 6 hours after the list is fetched.
+ */
+export function thumbnailExpiry(nowMs: number): number {
+  const window = THUMBNAIL_TOKEN_WINDOW_SECONDS
+  return (Math.floor(nowMs / 1000 / window) + 2) * window
+}
+
 export function thumbnailCdnUrl(hostname: string, bunnyVideoId: string, version?: string | null): string {
   const base = `https://${hostname}/${encodeURIComponent(bunnyVideoId)}/thumbnail.jpg`
   const stamp = version ? Date.parse(version) : NaN
