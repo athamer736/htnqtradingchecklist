@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import DescriptionField from './DescriptionField'
 import Modal from './Modal'
 
 export default function EditDetailsDialog({
@@ -47,16 +48,7 @@ export default function EditDetailsDialog({
             autoFocus
           />
         </div>
-        <div>
-          <label className="label" htmlFor="edit-description">Description</label>
-          <textarea
-            id="edit-description"
-            className="field min-h-[96px] resize-y"
-            value={description}
-            maxLength={2000}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
+        <DescriptionField id="edit-description" value={description} onChange={setDescription} />
         {error && <p className="text-xs text-rose-300">{error}</p>}
         <div className="mt-1 flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>

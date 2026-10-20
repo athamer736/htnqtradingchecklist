@@ -7,15 +7,76 @@ export type VideoLevel = 1 | 2 | 3
 
 export const VIDEO_LEVELS: VideoLevel[] = [1, 2, 3]
 
-export type ContentSection = 'level' | 'lectures' | 'weekly_recaps'
+/** Batch (cohort) sections, each unlocked by its own Discord role. */
+export type BatchId = 'july_batch' | 'sept_batch' | 'batch_5'
+
+export const BATCH_IDS: BatchId[] = ['july_batch', 'sept_batch', 'batch_5']
+
+export type ContentSection =
+  | 'level'
+  | 'lectures'
+  | 'weekly_recaps'
+  | 'further_studying'
+  | BatchId
+
+export function isBatchSection(section: ContentSection): section is BatchId {
+  return (BATCH_IDS as string[]).includes(section)
+}
+
+/** Further Studying opens for members whose roles unlock this Level (and staff). */
+export const FURTHER_STUDYING_LEVEL: VideoLevel = 3
 export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'none'
 
+/**
+ * File picker filter for uploads. `video/*` alone hides .mkv on Windows, where
+ * the system has no registered MIME type for Matroska, so list it explicitly.
+ */
+export const UPLOAD_ACCEPT = 'video/*,.mkv,.mp4,.mov,.m4v,.webm,.avi'
+
+const EXTENSION_MIME: Record<string, string> = {
+  mkv: 'video/x-matroska',
+  mp4: 'video/mp4',
+  m4v: 'video/x-m4v',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+  avi: 'video/x-msvideo'
+}
+
+/**
+ * MIME type to tell Bunny. Browsers leave File.type empty for formats the OS
+ * doesn't know (typically .mkv), so fall back to the extension, then to mp4.
+ */
+export function uploadMimeType(fileName: string, reportedType: string): string {
+  if (reportedType.startsWith('video/')) return reportedType
+  const ext = /\.([a-z0-9]+)$/i.exec(fileName)?.[1]?.toLowerCase() ?? ''
+  return EXTENSION_MIME[ext] ?? 'video/mp4'
+}
+
+/** Custom thumbnails: JPEG, PNG or WebP up to 2 MB (the server enforces the same). */
+export const THUMBNAIL_ACCEPT = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
+export const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
+
+/** A readable message when the file can't be used as a thumbnail, otherwise null. */
+export function thumbnailFileProblem(file: { name: string; size: number; type: string }): string | null {
+  const okType = /^image\/(jpeg|png|webp)$/.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name)
+  if (!okType) return 'Choose a JPEG, PNG or WebP image.'
+  if (file.size <= 0) return 'That image file is empty.'
+  if (file.size > MAX_THUMBNAIL_BYTES) {
+    return `That image is ${(file.size / 1024 ** 2).toFixed(1)} MB. Thumbnails can be up to 2 MB.`
+  }
+  return null
+}
+
 export const SECTION_LABELS: Record<ContentSection, string> = {
   level: 'Level',
   lectures: 'Lectures',
-  weekly_recaps: 'Weekly Recaps & Outlooks'
+  weekly_recaps: 'Weekly Recaps & Outlooks',
+  further_studying: 'Further Studying',
+  july_batch: '1st Of July Batch',
+  sept_batch: '1st Of September Batch',
+  batch_5: 'Batch 5.0'
 }
 
 /** Per-item permission flags computed server-side from live Discord roles. */
@@ -39,6 +100,36 @@ export interface ContentVideo extends ItemPermissions {
   sortOrd: number
 }
 
+/** The text at the top of a Level page, written by an owner/admin. */
+export interface LevelDescription {
+  level: VideoLevel
+  description: string
+  updatedAt: string
+}
+
+/** Mentorship pages besides the Levels that carry an owner/admin-written description. */
+export type DescribedSection = Exclude<ContentSection, 'level'> | 'recordings'
+
+export const DESCRIBED_SECTION_LABELS: Record<DescribedSection, string> = {
+  further_studying: 'Further Studying',
+  lectures: 'Lectures',
+  weekly_recaps: 'Weekly Recaps & Outlooks',
+  july_batch: SECTION_LABELS.july_batch,
+  sept_batch: SECTION_LABELS.sept_batch,
+  batch_5: SECTION_LABELS.batch_5,
+  recordings: 'Recordings'
+}
+
+/** The text at the top of one of those pages. */
+export interface SectionDescription {
+  section: DescribedSection
+  description: string
+  updatedAt: string
+}
+
+/** Same limit the server enforces. */
+export const LEVEL_DESCRIPTION_MAX = 4000
+
 export interface StudentRecording extends ItemPermissions {
   id: string
   studentDiscordId: string
@@ -59,10 +150,16 @@ export interface MentorshipCapabilities {
   isManager: boolean
   isStudent: boolean
   levels: VideoLevel[]
+  /** Batch sections they may open (staff: all). */
+  batches: BatchId[]
   canUpload: {
     level: boolean
     lectures: boolean
     weekly_recaps: boolean
+    further_studying: boolean
+    july_batch: boolean
+    sept_batch: boolean
+    batch_5: boolean
     recordings: boolean
   }
 }
@@ -79,6 +176,56 @@ export interface StudentSummary {
   username?: string
   avatarUrl?: string | null
   recordingCount?: number
+}
+
+/** A mentorship server member as listed in the Admin panel (Discord data only). */
+export interface AdminMember {
+  discordId: string
+  displayName: string
+  username: string
+  avatarUrl: string | null
+  role: PrimaryRole
+  isStaff: boolean
+  isStudent: boolean
+  /** What they can actually open: staff all, students inclusive, others none. */
+  levels: VideoLevel[]
+  /** What their Level roles would grant, ignoring the Student requirement. */
+  levelRoles: VideoLevel[]
+  /** Holds a Level role but not the Student role, so those levels stay locked. */
+  levelWithoutStudent: boolean
+  /** An admin has recorded a legal name for them. Unset if the server could not tell. */
+  hasStoredName?: boolean
+}
+
+export interface AdminMembersResponse {
+  ok: true
+  members: AdminMember[]
+  /** More members existed than the server scanned. */
+  truncated: boolean
+}
+
+/**
+ * One member's legal name from both sources. The bot's answer is fetched live and
+ * never persisted by this app; `storedLegalName` is the name an admin recorded
+ * (null if none). They are shown side by side and never merged.
+ */
+export type MemberIdentity = (
+  | { access: 'allowed'; legalName: string; identitySource: 'signed_nda' | 'staff_record' }
+  | { access: 'denied'; reason: string }
+  | { access: 'unavailable'; reason: string }
+) & { storedLegalName: string | null }
+
+export const IDENTITY_DENY_LABELS: Record<string, string> = {
+  onboarding_incomplete: 'Onboarding incomplete',
+  nda_missing: 'NDA not signed',
+  payment_incomplete: 'Payment incomplete',
+  membership_inactive: 'Membership inactive',
+  suspended: 'Suspended',
+  not_found: 'Not found in the bot',
+  identity_unresolved: 'Legal name could not be resolved',
+  not_configured: 'The bot connection is not set up yet',
+  misconfigured: 'The bot connection is misconfigured',
+  service_unavailable: 'The bot could not be reached right now'
 }
 
 export type PlaybackTarget = { kind: 'video'; id: string } | { kind: 'recording'; id: string }
@@ -120,8 +267,12 @@ export type PlaybackDenyReason =
   | 'access_expired'
 
 export interface PlaybackWatermark {
-  legalName: string
+  /** The viewer's own Discord ID: always shown, the primary watermark identifier. */
   discordId: string
+  /** The viewer's own legal name, only when one is on file (bot first, else admin-entered). */
+  legalName?: string
+  /** The viewer's current Discord username, from the server's live member lookup. */
+  username?: string
   /** Short server-generated reference for investigation (not PII). */
   sessionRef: string
 }

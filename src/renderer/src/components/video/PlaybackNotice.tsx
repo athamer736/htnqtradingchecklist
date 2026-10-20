@@ -32,11 +32,6 @@ export default function PlaybackNotice({
           agreement). An archived enquiry thread alone is not enough.
         </p>
       )}
-      {error.reasonCode === 'name_unavailable' && (
-        <p className="mt-2 text-xs text-amber-100/80">
-          Ask staff to complete your legal name on file from your valid signed record.
-        </p>
-      )}
       {temporary && (
         <p className="mt-2 text-xs text-sky-100/80">
           This is not a decision about your membership, and nothing has changed on your account.

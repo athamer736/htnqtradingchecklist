@@ -87,6 +87,26 @@ export async function deleteBunnyVideo(
   return Boolean(res && (res.ok || res.status === 404))
 }
 
+/** Replaces the video's thumbnail with raw image bytes (Bunny "Set Thumbnail"). */
+export async function setBunnyThumbnail(
+  libraryId: string,
+  apiKey: string,
+  guid: string,
+  image: Uint8Array,
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  const res = await call(
+    `${API_BASE}/${libraryId}/videos/${encodeURIComponent(guid)}/thumbnail`,
+    {
+      method: 'POST',
+      headers: { AccessKey: apiKey, Accept: 'application/json', 'Content-Type': 'application/octet-stream' },
+      body: image as BodyInit
+    },
+    fetchImpl
+  )
+  return Boolean(res && res.ok)
+}
+
 /**
  * Bunny video status codes: 0 created, 1 uploaded, 2 processing,
  * 3 transcoding, 4 finished, 5 error, 6 upload failed.

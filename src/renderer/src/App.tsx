@@ -11,6 +11,7 @@ import PointsView from './views/PointsView'
 import ReferenceView from './views/ReferenceView'
 import JournalView from './views/JournalView'
 import DataView from './views/DataView'
+import AdminView from './views/AdminView'
 import ContentSectionView from './views/ContentSectionView'
 import StudentRecordingsView from './views/StudentRecordingsView'
 import { useTrades } from './store/useTrades'
@@ -90,6 +91,10 @@ export default function App(): JSX.Element {
           {view === 'level1' && <ContentSectionView section="level" level={1} />}
           {view === 'level2' && <ContentSectionView section="level" level={2} />}
           {view === 'level3' && <ContentSectionView section="level" level={3} />}
+          {view === 'furtherStudying' && <ContentSectionView section="further_studying" />}
+          {view === 'julyBatch' && <ContentSectionView section="july_batch" />}
+          {view === 'septBatch' && <ContentSectionView section="sept_batch" />}
+          {view === 'batch5' && <ContentSectionView section="batch_5" />}
           {view === 'lectures' && <ContentSectionView section="lectures" />}
           {view === 'weekly' && <ContentSectionView section="weekly_recaps" />}
           {view === 'recordings' && <StudentRecordingsView />}
@@ -97,6 +102,7 @@ export default function App(): JSX.Element {
           {view === 'reference' && <ReferenceView />}
           {view === 'journal' && <JournalView />}
           {view === 'data' && <DataView />}
+          {view === 'admin' && <AdminView />}
         </div>
       </main>
       {/* <LogConsole /> */}

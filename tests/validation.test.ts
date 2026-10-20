@@ -92,6 +92,27 @@ describe('parseUploadRequest', () => {
     }
   })
 
+  it('keeps line breaks in descriptions but drops other control and bidi characters', () => {
+    const r = parseUploadRequest({
+      target: { kind: 'video', section: 'lectures' },
+      title: 'T',
+      description: '# Plan\r\n- one\r\n- two  \n\n\n\n**Key**\u0000 \u202eidea\tx'
+    })
+    assert.ok(r.ok && r.value.mode === 'create')
+    if (r.ok && r.value.mode === 'create') {
+      assert.equal(r.value.description, '# Plan\n- one\n- two\n\n**Key** idea  x')
+    }
+    const m = parseManageRequest({ kind: 'video', id: UUID, action: 'update_metadata', description: 'a\nb' })
+    assert.ok(m.ok && m.value.action === 'update_metadata')
+    if (m.ok && m.value.action === 'update_metadata') assert.equal(m.value.description, 'a\nb')
+  })
+
+  it('still flattens line breaks in titles', () => {
+    const r = parseUploadRequest({ target: { kind: 'video', section: 'lectures' }, title: 'a\nb' })
+    assert.ok(r.ok && r.value.mode === 'create')
+    if (r.ok && r.value.mode === 'create') assert.equal(r.value.title, 'a b')
+  })
+
   it('parses resume mode', () => {
     assert.deepEqual(parseUploadRequest({ resumeItemId: UUID, kind: 'recording' }), {
       ok: true,

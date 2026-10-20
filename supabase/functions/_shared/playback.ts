@@ -10,12 +10,11 @@ import {
   type RecordingItem,
   type VideoItem
 } from './decisions.ts'
+import { pickWatermarkName } from './memberNames.ts'
 import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
 import {
   MENTORSHIP_MAX_RECHECK_SECONDS,
   mapMentorshipDenyToPlayback,
-  normaliseLegalName,
-  usableLegalName,
   type MentorshipLookupResult
 } from './mentorshipApi.ts'
 import type { PlaybackRequest } from './validation.ts'
@@ -47,6 +46,8 @@ export interface PlaybackDeps {
   loadVideo: (id: string) => Promise<LoadedVideo | null>
   loadRecording: (id: string) => Promise<LoadedRecording | null>
   checkMentorship: (discordId: string) => Promise<MentorshipLookupResult>
+  /** The admin-entered legal name for this member, or null (also null if it can't be read). */
+  readStoredName: (discordId: string) => Promise<string | null>
   signEmbed: (bunnyVideoId: string, expiresAt: number) => Promise<string>
   audit: (row: AuditRow) => Promise<void>
   newSessionRef: () => string
@@ -118,7 +119,25 @@ export async function runPlayback(
 
   // Always the Discord ID from the verified linked identity, never the request.
   const mentorship = await deps.checkMentorship(auth.discordId)
-  if (mentorship.kind !== 'allowed') {
+
+  // The watermark always carries the Discord ID, so a legal name is not needed to
+  // watch. The bot answers `identity_unresolved` only once every real access
+  // check has passed and the sole gap is a usable legal name (no single
+  // signed-NDA name, or staff without a recorded name). A name is an extra
+  // identifier for investigations, not an access requirement, so it must not
+  // block playback.
+  let recheckAfterSeconds: number
+  if (mentorship.kind === 'allowed') {
+    // A staff_record name is only valid alongside a live staff role. Without
+    // one there is no customer entitlement either (the bot prefers signed_nda).
+    if (mentorship.body.identity_source === 'staff_record' && !auth.caps.isStaff) {
+      await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'staff_record_without_role' })
+      return denied('membership_inactive')
+    }
+    recheckAfterSeconds = mentorship.body.recheck_after_seconds
+  } else if (mentorship.kind === 'denied' && mentorship.body.reason_code === 'identity_unresolved') {
+    recheckAfterSeconds = mentorship.body.recheck_after_seconds
+  } else {
     const code: DenyCode =
       mentorship.kind === 'misconfigured'
         ? 'misconfigured'
@@ -133,20 +152,17 @@ export async function runPlayback(
     return out
   }
 
-  // A staff_record name is only valid alongside a live staff role. Without
-  // one there is no customer entitlement either (the bot prefers signed_nda).
-  if (mentorship.body.identity_source === 'staff_record' && !auth.caps.isStaff) {
-    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'staff_record_without_role' })
-    return denied('membership_inactive')
+  // Name shown beside the Discord ID: the bot's, else the admin-entered one. It is
+  // only ever sent back to this same verified viewer (it is their own watermark),
+  // never written to the audit log, and a failed read just means "no name".
+  const botName = mentorship.kind === 'allowed' ? mentorship.body.legal_name : null
+  let legalName = pickWatermarkName(botName, null)
+  if (!legalName) {
+    const stored = await deps.readStoredName(auth.discordId).catch(() => null)
+    legalName = pickWatermarkName(null, stored)
   }
 
-  const legalName = mentorship.body.legal_name
-  if (!usableLegalName(legalName)) {
-    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'name_unavailable' })
-    return denied('name_unavailable')
-  }
-
-  const grant = playbackGrantWindow(mentorship.body.recheck_after_seconds, deps.ttlSeconds, deps.renewLeadSeconds)
+  const grant = playbackGrantWindow(recheckAfterSeconds, deps.ttlSeconds, deps.renewLeadSeconds)
   const expiresAt = Math.floor(deps.now() / 1000) + grant.embedTtlSeconds
   const embedUrl = await deps.signEmbed(bunnyVideoId, expiresAt)
   await deps.audit({
@@ -166,7 +182,14 @@ export async function runPlayback(
       expiresAt,
       renewAfterSeconds: grant.renewAfterSeconds,
       accessValidForSeconds: grant.accessValidForSeconds,
-      watermark: { legalName: normaliseLegalName(legalName), discordId: auth.discordId, sessionRef }
+      // The Discord ID is always shown; the viewer's own legal name and current
+      // Discord username (from this request's live member lookup) are added when known.
+      watermark: {
+        discordId: auth.discordId,
+        sessionRef,
+        ...(legalName ? { legalName } : {}),
+        ...(auth.username ? { username: auth.username } : {})
+      }
     }
   }
 }

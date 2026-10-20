@@ -17,8 +17,10 @@ Customer app (Windows desktop or https://app.htnq.org)
   → Supabase Auth (Discord)
   → Edge Functions
        list-content | list-recordings | list-students     (listings, no playback URLs)
-       create-upload | manage-content                     (staff)
-       issue-playback-token                               (every play and renewal)
+       create-upload | manage-content | set-thumbnail     (staff)
+       admin-members | admin-member-identity | admin-member-name   (owner/admin: Admin panel)
+        level-descriptions                                 (text at the top of each Mentorship page)
+        issue-playback-token                                (every play and renewal)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
      → Railway mentorship API (POST /api/v1/member-access) on every playback
@@ -26,15 +28,19 @@ Customer app (Windows desktop or https://app.htnq.org)
   → Bunny TUS endpoint (browser uploads files directly; never via Supabase)
 ```
 
-The app never talks to Railway's database. Legal names are fetched at playback
-time for the watermark and kept in memory only.
+The app never talks to Railway's database. The playback watermark always shows the
+viewer's own Discord ID and current Discord username, plus their legal name when one is on file (the bot's name
+first, else the one an admin entered), so no legal name is needed to watch. Names
+are only ever sent back to that same verified viewer, and are listed or looked up
+by owners and admins on request.
 
 ## Roles
 
 Every request resolves capabilities from the caller's **live** Discord roles
 (`supabase/functions/_shared/roles.ts`). Role IDs are built in and can be
 overridden per environment with `DISCORD_ROLE_OWNER`, `DISCORD_ROLE_ADMIN`,
-`DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT`, `DISCORD_ROLE_LEVEL_1..3`.
+`DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT`, `DISCORD_ROLE_LEVEL_1..3`. The batch
+roles use `JULY_BATCH`, `SEPT_BATCH` and `BATCH_5`.
 
 | Role | Discord role ID |
 | --- | --- |
@@ -53,12 +59,26 @@ mentor) see every level.
 | | Owner / Admin | Mentor | Student |
 | --- | --- | --- | --- |
 | Level 1-3 tabs | All, including private and processing | All, including private and processing | Published + ready, up to their highest Level role |
+| Further Studying | All, including private and processing | All, including private and processing | Published + ready, with the Level 3 role |
+| 1st Of July Batch, 1st Of September Batch, Batch 5.0 | All, including private and processing | All, including private and processing | Published + ready, only the batch(es) whose Discord role they hold |
 | Lectures, Weekly Recaps & Outlooks | All | All | Published + ready |
 | 1:1 recordings | Any student's | Any student's | Their own, published + ready |
-| Upload | Every section; any student's recordings | Level 1-3; any student's recordings | No |
+| Upload | Every section; any student's recordings | Level 1-3, Further Studying and the batch sections; any student's recordings | No |
 | Publish / make private | Everything | Level 1-3 and recordings | No |
 | Edit title / description | Yes | No | No |
 | Delete (also deletes in Bunny) | Yes | No | No |
+| Reorder videos within a section / Level | Yes | No | No |
+| Write the description shown on a Level or section page | Yes | No | No |
+| Read a Level's description | All Levels | All Levels | Levels their roles unlock |
+| Admin panel: members list (live roles and levels) | Yes | No | No |
+| Admin panel: look up a member's legal name (live from the bot, audited) | Yes | No | No |
+
+Descriptions are multi-line. The server keeps line breaks (and drops other
+control and bidi characters; cap 2000 characters). The player shows the title and
+description in a side panel that viewers can close, rendered as React elements,
+never HTML, with a small set of marks: blank line = new paragraph, `# Heading`,
+`## Heading`, `- bullet`, `1. numbered`, `**bold**`, `*italic*`. Links and images
+are not supported (`src/shared/richText.ts`).
 
 The client only receives per-item permission flags. Every action is re-checked
 on the server; sidebar locks are hints.
@@ -68,11 +88,35 @@ mentorship content. The earlier `video_staff_access` email bypass is removed.
 
 ## Sidebar
 
-After **Learn**, a **Mentorship** group: Level 1, Level 2, Level 3, Lectures,
-Weekly Recaps & Outlooks, then **Student Recordings** (staff: searchable
+After **Learn**, a **Mentorship** group: Level 1, Level 2, Level 3, Further Studying, Lectures,
+Weekly Recaps & Outlooks, 1st Of July Batch, 1st Of September Batch, Batch 5.0, then **Student Recordings** (staff: searchable
 picker of Discord members with the Student role, then that student's
 recordings and an upload button) or **My Recordings** (students). Learn is
 unchanged.
+
+Owners and admins also get an **Admin** item (shown from the server-computed
+`isManager` capability) with two tabs:
+
+- **Members**: everyone in the mentorship server who holds a staff, Student or
+  Level role (`admin-members`). Roles and effective levels come live from
+  Discord and are read-only: levels and staff roles are changed in Discord. A
+  member with a Level role but no Student role is flagged because none of their
+  levels unlock. Legal names are **not** listed (only a "Name on file" /
+  "No name added" flag, with a filter for members still missing one).
+  **Legal name** on a member calls `admin-member-identity`, which returns two
+  things side by side: what the bot reports for that one member (live, never
+  stored here) and the name an admin recorded. It records the lookup (Discord IDs
+  only, never a name) in `content_audit`. Names live in memory while the panel
+  is open. The admin-entered name is added, changed or removed from the same
+  panel via `admin-member-name`; it is stored in `member_legal_names`
+  (service-role only, Discord ID -> name), is an admin reference only, is never
+  sent to the player or used for any access decision, and each change is audited
+  with who/whom but never the name. It works for any member, including those the
+  bot has no name for, and does not change anything in the bot.
+- **Library**: every video grouped by Level 1-3, Further Studying, Lectures and Weekly Recaps, in
+  the order members see, with **Up / Down** (`manage-content` `move`),
+  publish / make private, edit and delete. Upload still happens on each
+  section's page.
 
 ## Authorisation chain (playback)
 
@@ -82,16 +126,27 @@ Before any signed URL is issued, `issue-playback-token`:
 2. Takes the Discord ID from the **linked Discord identity**, never from the request body.
 3. Live-checks guild membership and roles. Discord rate limits or outages fail closed.
 4. Applies the role rules above (private / unfinished items look "not found" to students).
-5. Calls the bot's `POST /api/v1/member-access` for **that** Discord ID; requires
-   a strictly valid `access: "allowed"` response with a usable legal name. This
-   applies to staff too: staff need both a live staff role and a bot
-   `staff_record` name. A `staff_record` name without a live staff role is
-   refused. A Discord display name or editable profile name is never used.
-6. Signs a short-lived Bunny **embed** URL and returns the watermark identity
-   plus the access window (`accessValidForSeconds`, at most 300 s).
+5. Calls the bot's `POST /api/v1/member-access` for **that** Discord ID and
+   requires either a strictly valid `access: "allowed"` response or the bot's
+   `identity_unresolved` denial. `identity_unresolved` is returned only after
+   every real check (suspension, membership, payment, NDA, onboarding) has passed
+   and the only gap is a usable legal name, so it is treated as "eligible": the
+   watermark does not need a name. Every other denial still blocks playback.
+   This applies to staff too (they need a live staff role; a `staff_record`
+   without a live staff role is refused).
+6. Picks the watermark name: the bot's `legal_name` if it supplied one, otherwise
+   the admin-entered name in `member_legal_names` for that same verified Discord
+   ID (re-validated; an unusable value is skipped, and a failed read just means no
+   name). A stored name never changes an access decision.
+7. Signs a short-lived Bunny **embed** URL and returns the watermark (Discord ID,
+   current Discord username from the live member lookup, the viewer's own legal
+   name when there is one, and a session reference) and the
+   access window (`accessValidForSeconds`, at most 300 s). The name is never put in
+   the URL, `playback_audit` or logs.
 
 Every grant and denial is written to `playback_audit`. Uploads, visibility
-changes, edits, deletes and status refreshes are written to `content_audit`.
+changes, edits, deletes, reorders, status refreshes and Admin-panel legal-name
+lookups are written to `content_audit`.
 
 ## Uploads
 
@@ -155,9 +210,12 @@ expires. We do **not** promise instant CDN revocation.
 
 ## Watermark and fullscreen
 
-- Overlay text: `Full legal name · Discord user ID` (+ a short session reference),
-  taken only from the viewer's own allowed bot response and kept in memory.
-  It is never written to storage, logs or analytics, and never placed in URLs.
+- Overlay text: the viewer's legal name (when one is on file), their current
+  Discord username as `@username`, and `Discord ID <viewer's ID>` (+ a short
+  session reference). The ID comes from the verified linked Discord identity,
+  never from the request. The username comes from the live guild member lookup
+  done on every play, so a rename shows up on the next play; if Discord doesn't
+  return a usable one it is simply left out. None of these are placed in URLs.
 - Applies to every video: Level, Lectures, Weekly Recaps and 1:1 recordings.
 - Moves every 12 s within the upper ~75% of the player so the Bunny controls
   stay usable; text scales with the player width (11-22 px), so it stays
@@ -190,6 +248,7 @@ BUNNY_STREAM_API_KEY             # Library API key (create/delete, TUS signing, 
 BUNNY_STREAM_CDN_HOSTNAME        # optional, thumbnails
 PLAYBACK_TTL_SECONDS             # optional upper bound, default 720 (capped to access window + 90 s)
 DISCORD_ROLE_*                   # optional overrides of the built-in role IDs
+JULY_BATCH / SEPT_BATCH / BATCH_5   # batch role IDs (built in; set here too)
 MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1   # local mock testing only; never in production
 ```
 
@@ -204,13 +263,19 @@ VITE_SUPABASE_ANON_KEY=
 
 ## Database
 
-Apply in order (both idempotent, both appended to `schema.sql`):
+Apply in order (all idempotent, all appended to `schema.sql`):
 
 - `20261008_video_platform.sql`: `videos`, `member_levels`, `video_staff_access` (now unused), `playback_audit`.
 - `20261016_roles_sections_recordings.sql`: adds `section`, `visibility`, `encoding_status`,
   `uploaded_by_discord_id`, `deleted_at` to `videos`; makes `level` nullable for
   Lectures / Weekly Recaps; adds `student_recordings`, `content_audit` and
   `playback_audit.recording_id`; drops the client select policy on `videos`.
+- `20261018_admin_panel.sql`: widens `content_audit` for the `reordered` and
+  `member_name_viewed` actions and a `member` target (Discord id in the new
+  `target_discord_id` column; `target_id` becomes nullable).
+- `20261019_member_legal_names.sql`: `member_legal_names` (Discord id -> admin-entered
+  legal name, RLS on, no client policies, client grants revoked) and the
+  `member_name_set` / `member_name_cleared` audit actions.
 
 All mentorship tables are read and written only by Edge Functions (service role).
 The owner chooses audit retention.

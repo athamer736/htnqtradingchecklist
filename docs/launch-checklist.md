@@ -3,7 +3,7 @@
 ## Implemented (this branch)
 
 - [x] Live Discord role capabilities: owner, admin, mentor, student, inclusive Levels 1-3
-- [x] Sections: Level 1-3, Lectures, Weekly Recaps & Outlooks; private/published; encoding status
+- [x] Sections: Level 1-3, Further Studying (Level 3), Lectures, Weekly Recaps & Outlooks, 1st Of July / 1st Of September / Batch 5.0 batch sections; private/published; encoding status
 - [x] 1:1 student recordings (staff upload and browse; students see only their own)
 - [x] Edge Functions: `list-content`, `list-recordings`, `list-students`, `create-upload`,
       `manage-content`, `issue-playback-token`, `verify-membership` (`list-videos` removed)
@@ -36,10 +36,15 @@
 
 ### Supabase SQL
 
-Apply in order (both idempotent; both are also appended to `schema.sql`):
+Apply in order (all idempotent; all are also appended to `schema.sql`):
 
 1. `supabase/migrations/20261008_video_platform.sql`
 2. `supabase/migrations/20261016_roles_sections_recordings.sql`
+3. `supabase/migrations/20261018_admin_panel.sql` (Admin panel: wider `content_audit`)
+4. `supabase/migrations/20261019_member_legal_names.sql` (admin-entered legal names)
+   and `20261020_level_descriptions.sql` (Level page descriptions + audit widening),
+   `20261020_section_descriptions.sql` (descriptions for the other Mentorship pages),
+   `20261020_batch_sections.sql` (the three batch sections)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -54,6 +59,7 @@ own terminal). Do not paste secrets into chat.
 - Optional: `BUNNY_STREAM_CDN_HOSTNAME` (thumbnails), `PLAYBACK_TTL_SECONDS`
 - Optional: `DISCORD_ROLE_OWNER` / `_ADMIN` / `_MENTOR` / `_STUDENT` / `_LEVEL_1..3`
   only to override the built-in role IDs (for example for a sandbox server)
+- `JULY_BATCH`, `SEPT_BATCH`, `BATCH_5`: the batch role IDs (built in; also set as secrets)
 
 Remove `DISCORD_ROLE_LEVEL_*` secrets that only duplicate the built-in IDs, and
 `VIDEO_ROLE_MAX_AGE_SECONDS` (no longer used).
@@ -71,7 +77,12 @@ supabase functions deploy list-recordings
 supabase functions deploy list-students
 supabase functions deploy create-upload
 supabase functions deploy manage-content
-supabase functions deploy issue-playback-token
+supabase functions deploy set-thumbnail
+supabase functions deploy admin-members
+supabase functions deploy admin-member-identity
+supabase functions deploy admin-member-name
+supabase functions deploy level-descriptions
+supabase functions deploy issue-playback-token   # also reads member_legal_names
 supabase functions delete list-videos
 ```
 
@@ -99,8 +110,14 @@ supabase functions delete list-videos
    On the bot service set `MEMBER_ACCESS_API_TOKEN`; on Supabase set
    `MENTORSHIP_API_TOKEN` to the same value. Never reuse other secrets.
 3. `MENTORSHIP_API_BASE_URL` = the bot service's HTTPS origin, no path.
-4. Record legal names in the bot's staff table for every owner/admin/mentor who
-   will watch or preview videos.
+4. Optional: record legal names in the bot's staff table for owners/admins/mentors.
+   Watching does not need a name (the watermark always has the Discord ID); when a
+   name is on file it is shown too (bot's name first, else the admin-entered one).
+   Owners/admins can also record any member's name in
+   Admin -> Members -> **Legal name** (stored in this project's `member_legal_names`;
+   needs migration `20261019_member_legal_names.sql` and the `admin-member-name`
+   function). The owner approved the privacy wording on 2026-10-20 (see
+   `privacy-notice-draft.md`); add it to the published privacy notice before using it.
 
 ### Sandbox test (before production)
 
@@ -114,9 +131,10 @@ after explicit approval), a sandbox bot deployment and its own credential.
 3. Accounts to prepare in the bot's sandbox data: an entitled customer, a paid
    member with onboarding unfinished, a suspended member, a staff member with a
    staff-table name, and a staff member without one.
-4. Check each account sees only its own name and Discord ID on the watermark, the
-   unfinished, suspended and nameless-staff accounts are refused with the right
-   message, and a wrong token shows "not configured" rather than a denial.
+4. Check each account sees only its own Discord ID (and its own legal name, if on
+   file) on the watermark, the
+   unfinished and suspended accounts are refused with the right message, a
+   nameless staff account can still watch, and a wrong token shows "not configured" rather than a denial.
 5. Revoke the entitled customer in the bot while their player is open: it must
    close within about 3.5 minutes. Stop the bot service: the open player must show
    "temporarily unavailable" and close within 5 minutes.

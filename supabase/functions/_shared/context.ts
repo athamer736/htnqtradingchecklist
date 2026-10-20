@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import type { AuthzDeps } from './authz.ts'
 import { fetchGuildMember } from './discord.ts'
 import { loadRoleConfig, type RoleConfig } from './roles.ts'
+import { thumbnailCdnUrl } from './thumbnail.ts'
 
 export interface MentorshipEnv {
   botToken: string
@@ -93,8 +94,15 @@ export async function writeContentAudit(
     actor_user_id: string
     actor_discord_id: string
     action: string
-    target_kind: 'video' | 'recording'
-    target_id: string
+    target_kind: 'video' | 'recording' | 'member' | 'level' | 'section'
+    /** Null for member, level and section targets, which are identified another way. */
+    target_id: string | null
+    /** Set for 'member' targets (an id, never a name). */
+    target_discord_id?: string
+    /** Set for 'level' targets (1-3). */
+    target_level?: number
+    /** Set for 'section' targets (further_studying, lectures, weekly_recaps, recordings). */
+    target_section?: string
     detail?: Record<string, unknown>
   }
 ): Promise<void> {
@@ -106,7 +114,7 @@ export async function writeContentAudit(
 }
 
 /** Optional Bunny CDN thumbnail URL (only when a CDN hostname is configured). */
-export function thumbnailUrl(env: MentorshipEnv, bunnyVideoId: string): string | null {
+export function thumbnailUrl(env: MentorshipEnv, bunnyVideoId: string, version?: string | null): string | null {
   if (!env.bunnyCdnHostname) return null
-  return `https://${env.bunnyCdnHostname}/${encodeURIComponent(bunnyVideoId)}/thumbnail.jpg`
+  return thumbnailCdnUrl(env.bunnyCdnHostname, bunnyVideoId, version)
 }

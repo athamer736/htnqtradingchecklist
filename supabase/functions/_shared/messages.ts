@@ -20,6 +20,7 @@ export type DenyCode =
   | 'not_ready'
   | 'misconfigured'
   | 'invalid_request'
+  | 'invalid_name'
   | 'upstream_failed'
 
 export const DENY_MESSAGES: Record<DenyCode, string> = {
@@ -47,6 +48,8 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
   not_ready: 'This video is still processing. Try again in a few minutes.',
   misconfigured: 'Video playback is not configured on the server yet. Contact staff.',
   invalid_request: 'That request was not valid.',
+  invalid_name:
+    'That is not a valid legal name. Enter the full name using letters (2 to 200 characters), with no placeholders.',
   upstream_failed: 'The video service could not complete that request. Try again shortly.'
 }
 
@@ -67,6 +70,7 @@ export const DENY_STATUS: Record<DenyCode, number> = {
   not_ready: 409,
   misconfigured: 500,
   invalid_request: 400,
+  invalid_name: 400,
   upstream_failed: 502
 }
 

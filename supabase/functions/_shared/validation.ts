@@ -2,7 +2,16 @@
 // never accepted from clients: the Discord ID always comes from the linked
 // Supabase identity, and legal names only from the Railway API.
 
-import { isContentSection, isVisibility, type ContentSection, type Visibility } from './decisions.ts'
+import {
+  isContentSection,
+  isDescribedSection,
+  isVisibility,
+  type ContentSection,
+  type DescribedSection,
+  type Visibility
+} from './decisions.ts'
+import { normaliseLegalName, usableLegalName } from './mentorshipApi.ts'
+import type { MoveDirection } from './ordering.ts'
 import type { VideoLevel } from './roles.ts'
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -28,6 +37,25 @@ function hasForbiddenIdentity(o: Record<string, unknown>): boolean {
 function cleanText(v: unknown, max: number): string | null {
   if (typeof v !== 'string') return null
   const t = v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim()
+  if (!t) return null
+  return t.slice(0, max)
+}
+
+/**
+ * Descriptions are multi-line, lightly formatted text (see
+ * src/shared/richText.ts), so line breaks must survive. Everything else that
+ * is a control or bidi-override character is dropped, so a description can
+ * neither smuggle control codes nor visually reorder the text around it.
+ */
+function cleanDescription(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null
+  const t = v
+    .replace(/\r\n?/g, '\n')
+    .replace(/\t/g, '  ')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '')
+    .replace(/[ \u00a0]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
   if (!t) return null
   return t.slice(0, max)
 }
@@ -75,7 +103,7 @@ export function parseUploadRequest(body: unknown): Parsed<UploadRequest> {
 
   const title = cleanText(o.title, 200)
   if (!title) return { ok: false, error: 'title-required' }
-  const description = cleanText(o.description, 2000)
+  const description = cleanDescription(o.description, 2000)
 
   const t = asObject(o.target)
   if (!t) return { ok: false, error: 'target-required' }
@@ -139,6 +167,8 @@ export type ManageRequest =
     }
   | { kind: 'video' | 'recording'; id: string; action: 'delete' }
   | { kind: 'video' | 'recording'; id: string; action: 'refresh_status' }
+  /** Videos only (recordings have no manual order). Swaps with the neighbour in its section/level. */
+  | { kind: 'video'; id: string; action: 'move'; direction: MoveDirection }
 
 export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
   const o = asObject(body)
@@ -153,7 +183,7 @@ export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
       return { ok: true, value: { ...base, action: 'set_visibility', visibility: o.visibility } }
     case 'update_metadata': {
       const title = o.title === undefined ? null : cleanText(o.title, 200)
-      const description = o.description === undefined ? undefined : cleanText(o.description, 2000)
+      const description = o.description === undefined ? undefined : cleanDescription(o.description, 2000)
       if (o.title !== undefined && !title) return { ok: false, error: 'title-required' }
       if (title === null && o.description === undefined) return { ok: false, error: 'nothing-to-update' }
       return { ok: true, value: { ...base, action: 'update_metadata', title, description } }
@@ -162,9 +192,105 @@ export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
       return { ok: true, value: { ...base, action: 'delete' } }
     case 'refresh_status':
       return { ok: true, value: { ...base, action: 'refresh_status' } }
+    case 'move':
+      if (o.kind !== 'video') return { ok: false, error: 'move-videos-only' }
+      if (o.direction !== 'up' && o.direction !== 'down') return { ok: false, error: 'invalid-direction' }
+      return { ok: true, value: { kind: 'video', id: o.id, action: 'move', direction: o.direction } }
     default:
       return { ok: false, error: 'invalid-action' }
   }
+}
+
+// --- admin-member-identity --------------------------------------------------
+
+/**
+ * The member being looked up is named `memberDiscordId` on purpose: the plain
+ * `discordId` / `discord_id` keys are rejected everywhere else because they would
+ * let a client claim to be someone. Here the caller is an authorised manager
+ * choosing a target, and the target is validated as a Discord snowflake.
+ */
+export function parseMemberIdentityRequest(body: unknown): Parsed<{ memberDiscordId: string }> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
+  if (!isSnowflake(o.memberDiscordId)) return { ok: false, error: 'invalid-member' }
+  return { ok: true, value: { memberDiscordId: o.memberDiscordId } }
+}
+
+// --- admin-member-name ------------------------------------------------------
+
+export type MemberNameRequest =
+  | { memberDiscordId: string; action: 'set'; legalName: string }
+  | { memberDiscordId: string; action: 'clear' }
+
+/**
+ * Owner/admin sets or removes the admin-entered legal name for one member. This
+ * is the only request that accepts a `legalName`, and only to store it: the name
+ * is normalised and must pass the same rules as names from the bot (letters,
+ * 2-200 characters, no placeholders, no control or bidi characters). The target
+ * is a validated Discord snowflake; a caller can never name themselves via
+ * `discordId`/`userId`.
+ */
+export function parseMemberNameRequest(body: unknown): Parsed<MemberNameRequest> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (['discord_id', 'discordId', 'legal_name', 'user_id', 'userId'].some((k) => k in o)) {
+    return { ok: false, error: 'identity-not-accepted' }
+  }
+  if (!isSnowflake(o.memberDiscordId)) return { ok: false, error: 'invalid-member' }
+  if (o.action === 'clear') {
+    if ('legalName' in o) return { ok: false, error: 'name-not-allowed' }
+    return { ok: true, value: { memberDiscordId: o.memberDiscordId, action: 'clear' } }
+  }
+  if (o.action !== 'set') return { ok: false, error: 'invalid-action' }
+  if (!usableLegalName(o.legalName)) return { ok: false, error: 'invalid-name' }
+  return {
+    ok: true,
+    value: { memberDiscordId: o.memberDiscordId, action: 'set', legalName: normaliseLegalName(o.legalName) }
+  }
+}
+
+// --- level-descriptions -----------------------------------------------------
+
+/** Longer than a video description: it introduces a whole Level. */
+export const LEVEL_DESCRIPTION_MAX = 4000
+
+/** A page whose description is being written: a Level, or one of the other Mentorship pages. */
+export type DescriptionTarget =
+  | { kind: 'level'; level: VideoLevel }
+  | { kind: 'section'; section: DescribedSection }
+
+export type LevelDescriptionRequest =
+  | { action: 'list' }
+  /** description null = clear it. */
+  | { action: 'set'; target: DescriptionTarget; description: string | null }
+
+export function parseLevelDescriptionRequest(body: unknown): Parsed<LevelDescriptionRequest> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
+  if (o.action === undefined || o.action === 'list') return { ok: true, value: { action: 'list' } }
+  if (o.action !== 'set') return { ok: false, error: 'invalid-action' }
+  // Exactly one of `level` or `section` names the page.
+  let target: DescriptionTarget
+  if (o.level !== undefined && o.section !== undefined) return { ok: false, error: 'invalid-target' }
+  if (o.section !== undefined) {
+    if (!isDescribedSection(o.section)) return { ok: false, error: 'invalid-section' }
+    target = { kind: 'section', section: o.section }
+  } else {
+    if (o.level !== 1 && o.level !== 2 && o.level !== 3) return { ok: false, error: 'invalid-level' }
+    target = { kind: 'level', level: o.level }
+  }
+  if (o.description !== null && typeof o.description !== 'string') return { ok: false, error: 'invalid-description' }
+  // Over-long text is rejected rather than silently cut, so an admin never loses the end of it.
+  if (typeof o.description === 'string' && o.description.length > LEVEL_DESCRIPTION_MAX * 2) {
+    return { ok: false, error: 'description-too-long' }
+  }
+  const description = cleanDescription(o.description, Number.MAX_SAFE_INTEGER)
+  if (description !== null && description.length > LEVEL_DESCRIPTION_MAX) {
+    return { ok: false, error: 'description-too-long' }
+  }
+  return { ok: true, value: { action: 'set', target, description } }
 }
 
 // --- list-students / list-recordings ---------------------------------------

@@ -72,6 +72,7 @@ function deps(token = TOKEN, timeoutMs = 1_000): PlaybackDeps & { audits: AuditR
       encodingStatus: 'ready'
     }),
     loadRecording: async () => null,
+    readStoredName: async () => null,
     checkMentorship: (discordId) =>
       fetchMentorshipAccess({ baseUrl, token, discordId, allowLocalHttp: true, timeoutMs, retries: 1, sleep: async () => {} }),
     signEmbed: async (id, exp) => `https://player.mediadelivery.net/embed/1/${id}?token=t&expires=${exp}`,
@@ -93,7 +94,7 @@ describe('member-access integration (platform ↔ test-only bot mock)', () => {
   it('entitled customer gets their own watermark and a ≤300 s grant', async () => {
     const out = await play(student(IDS.entitled))
     assert.equal(out.status, 200)
-    assert.deepEqual(out.body.watermark, { legalName: 'Ada Example', discordId: IDS.entitled, sessionRef: 'ref-int' })
+    assert.deepEqual(out.body.watermark, { discordId: IDS.entitled, legalName: 'Ada Example', sessionRef: 'ref-int' })
     assert.ok((out.body.accessValidForSeconds as number) <= 300)
   })
 
@@ -108,14 +109,30 @@ describe('member-access integration (platform ↔ test-only bot mock)', () => {
     assert.equal((await play(student(IDS.inactive))).body.reasonCode, 'membership_inactive')
   })
 
-  it('staff with an approved name record are allowed under it', async () => {
+  it('staff with an approved name record are allowed, watermarked with that name and their Discord ID', async () => {
     const out = await play(mentor(IDS.staffWithRecord))
     assert.equal(out.body.ok, true)
-    assert.equal((out.body.watermark as { legalName: string }).legalName, 'Staff Example')
+    assert.deepEqual(out.body.watermark, {
+      discordId: IDS.staffWithRecord,
+      legalName: 'Staff Example',
+      sessionRef: 'ref-int'
+    })
   })
 
-  it('staff without a name record are denied', async () => {
-    assert.equal((await play(mentor(IDS.staffWithoutRecord))).body.reasonCode, 'name_unavailable')
+  it('staff without a name record can still watch: just the Discord ID, or an admin-entered name', async () => {
+    const out = await play(mentor(IDS.staffWithoutRecord))
+    assert.equal(out.body.ok, true)
+    assert.deepEqual(out.body.watermark, { discordId: IDS.staffWithoutRecord, sessionRef: 'ref-int' })
+
+    const named = await play(mentor(IDS.staffWithoutRecord), {
+      ...deps(),
+      readStoredName: async (id) => (id === IDS.staffWithoutRecord ? 'Admin Entered' : null)
+    })
+    assert.deepEqual(named.body.watermark, {
+      discordId: IDS.staffWithoutRecord,
+      legalName: 'Admin Entered',
+      sessionRef: 'ref-int'
+    })
   })
 
   it('a staff_record name is refused when the viewer has no live staff role', async () => {

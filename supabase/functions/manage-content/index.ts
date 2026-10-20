@@ -5,6 +5,8 @@
 //   update_metadata  owner/admin only (title / description)
 //   delete           owner/admin only; deletes the Bunny video, then soft-deletes the row
 //   refresh_status   any staff; re-reads encoding status from Bunny
+//   move             owner/admin; videos only: swap with the neighbour above/below
+//                    inside its section (or Level)
 //
 // Every permission is decided from LIVE Discord roles and every action is
 // written to content_audit.
@@ -17,6 +19,7 @@ import {
   canDeleteVideo,
   canEditRecording,
   canEditVideo,
+  canReorderContent,
   canSetRecordingVisibility,
   canSetVideoVisibility,
   type ContentSection,
@@ -25,6 +28,7 @@ import {
 } from '../_shared/decisions.ts'
 import { handleOptions, json, readJsonBody } from '../_shared/http.ts'
 import { deny } from '../_shared/messages.ts'
+import { planMove, sortOrdUpdates } from '../_shared/ordering.ts'
 import type { VideoLevel } from '../_shared/roles.ts'
 import { parseManageRequest } from '../_shared/validation.ts'
 
@@ -125,6 +129,40 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (error) return deny('upstream_failed')
       await audit('deleted', { title: row.title })
       return json({ ok: true, kind: request.kind, id: request.id, deleted: true })
+    }
+
+    case 'move': {
+      if (!isVideo || !canReorderContent(caps)) return deny('forbidden')
+      // The group is whatever shares this video's section (and Level, for Level
+      // videos), ordered exactly as list-content shows it.
+      let groupQuery = admin
+        .from('videos')
+        .select('id, sort_ord')
+        .is('deleted_at', null)
+        .eq('section', row.section as string)
+      groupQuery = row.level === null ? groupQuery.is('level', null) : groupQuery.eq('level', row.level as number)
+      const { data: group, error: groupErr } = await groupQuery
+        .order('sort_ord', { ascending: true })
+        .order('created_at', { ascending: false })
+      if (groupErr || !group) return deny('upstream_failed')
+
+      const plan = planMove(
+        group.map((g) => g.id as string),
+        request.id,
+        request.direction
+      )
+      if (!plan.moved) return json({ ok: true, kind: 'video', id: request.id, moved: false })
+
+      const current = new Map(group.map((g) => [g.id as string, g.sort_ord as number]))
+      const updates = sortOrdUpdates(plan.ids, current)
+      const results = await Promise.all(
+        updates.map((u) =>
+          admin.from('videos').update({ sort_ord: u.sort_ord, updated_at: nowIso() }).eq('id', u.id)
+        )
+      )
+      if (results.some((r) => r.error)) return deny('upstream_failed')
+      await audit('reordered', { direction: request.direction, from: plan.from + 1, to: plan.to + 1 })
+      return json({ ok: true, kind: 'video', id: request.id, moved: true })
     }
 
     case 'refresh_status': {

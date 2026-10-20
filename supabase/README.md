@@ -131,8 +131,13 @@ the app.)
 
 Protected videos need additional server secrets and the tables from
 `migrations/20261008_video_platform.sql` and
-`migrations/20261016_roles_sections_recordings.sql` (both also appended to
-`schema.sql`; both are safe to re-run).
+`migrations/20261016_roles_sections_recordings.sql` and
+`migrations/20261018_admin_panel.sql` and
+`migrations/20261019_member_legal_names.sql` and
+`migrations/20261020_level_descriptions.sql` and
+`migrations/20261020_section_descriptions.sql` and
+`migrations/20261020_batch_sections.sql` (all also appended to `schema.sql`; all
+are safe to re-run).
 
 ## 10. Extra secrets for videos
 
@@ -154,6 +159,12 @@ Discord role IDs for owner, admin, mentor, student and Levels 1-3 are built in
 `DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT` or
 `DISCORD_ROLE_LEVEL_1` / `_2` / `_3` to point at a different (e.g. sandbox) server.
 
+The three batch roles are built in the same way and overridden by `JULY_BATCH`
+(1st Of July Batch), `SEPT_BATCH` (1st Of September Batch) and `BATCH_5` (Batch 5.0).
+They are also set as Supabase secrets with those names. Each batch section opens for
+students holding that role (plus the Student role) and for staff; the Railway bot
+needs no change because it never sees these roles.
+
 Never put any of these in `VITE_` client env. Details: [`docs/video-platform.md`](../docs/video-platform.md).
 Bot API contract: [`docs/bot-handoff-member-access-api.md`](../docs/bot-handoff-member-access-api.md).
 
@@ -166,9 +177,33 @@ supabase functions deploy list-recordings
 supabase functions deploy list-students
 supabase functions deploy create-upload
 supabase functions deploy manage-content
+supabase functions deploy set-thumbnail
+supabase functions deploy admin-members
+supabase functions deploy admin-member-identity
+supabase functions deploy admin-member-name
+supabase functions deploy level-descriptions
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos   # replaced by list-content
 ```
+
+`set-thumbnail` lets staff replace a ready video's thumbnail (JPEG/PNG/WebP, up
+to 2 MB; same permission as publishing: owner/admin anywhere, mentors in Level
+videos). The thumbnail only shows on cards when `BUNNY_STREAM_CDN_HOSTNAME` is set.
+
+`admin-members`, `admin-member-identity` and `admin-member-name` back the Admin
+panel (owner/admin only). The member list needs the bot's **Server Members
+Intent**; the bot half of the legal-name lookup also needs
+`MENTORSHIP_API_BASE_URL` / `MENTORSHIP_API_TOKEN` (without them the lookup still
+shows names admins recorded). Run `migrations/20261019_member_legal_names.sql`
+first: it creates the service-role-only `member_legal_names` table that
+`admin-member-name` writes.
+
+`level-descriptions` serves the text at the top of each Level page and of Further
+Studying, Lectures, Weekly Recaps and Recordings: any signed-in member reads the pages
+their roles unlock (staff all of them), only owner/admin can write it, and changes are audited without copying the text. Run
+`migrations/20261020_level_descriptions.sql` and `20261020_section_descriptions.sql`
+first (service-role-only `level_descriptions` and `section_descriptions` tables; they
+also widen the `content_audit` checks).
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep
@@ -183,8 +218,8 @@ accounts have no Discord identity and cannot watch or manage mentorship content
 | Role | Watch | Upload | Publish / make private | Edit details | Delete |
 | --- | --- | --- | --- | --- | --- |
 | Owner, Admin | Everything | Every section and any student's recordings | Yes | Yes | Yes |
-| Mentor | Everything, including every student's recordings | Level 1-3 and 1:1 recordings | Level 1-3 and recordings | No | No |
-| Student | Level tabs up to their highest Level role (inclusive), Lectures, Weekly Recaps, their own published recordings | No | No | No | No |
+| Mentor | Everything, including every student's recordings | Level 1-3, Further Studying, batch sections and 1:1 recordings | Level 1-3, Further Studying, batch sections and recordings | No | No |
+| Student | Level tabs up to their highest Level role (inclusive), Further Studying (Level 3 role only), their batch section(s), Lectures, Weekly Recaps, their own published recordings | No | No | No | No |
 
-Staff playback still goes through the Railway mentorship check, so staff need a
-mentorship record with a legal name for the watermark (see the bot handoff).
+Staff playback still goes through the Railway mentorship check. The watermark is the
+viewer's Discord ID and current Discord username (plus their legal name when one is on file), so staff do not need a recorded legal name to watch.
