@@ -81,7 +81,11 @@ never HTML, with a small set of marks: blank line = new paragraph, `# Heading`,
 are not supported (`src/shared/richText.ts`).
 
 The client only receives per-item permission flags. Every action is re-checked
-on the server; sidebar locks are hints.
+on the server. The sidebar only lists the Mentorship pages the member's Discord
+roles open (`src/shared/mentorshipNav.ts`), so someone without Level 3 never
+sees the Level 3 tab and members without the Student role see no Mentorship
+group. That is navigation only: a hidden page's videos are still refused by the
+server.
 
 Email/password accounts have no Discord identity and cannot watch or manage
 mentorship content. The earlier `video_staff_access` email bypass is removed.
@@ -126,14 +130,14 @@ Before any signed URL is issued, `issue-playback-token`:
 2. Takes the Discord ID from the **linked Discord identity**, never from the request body.
 3. Live-checks guild membership and roles. Discord rate limits or outages fail closed.
 4. Applies the role rules above (private / unfinished items look "not found" to students).
-5. Calls the bot's `POST /api/v1/member-access` for **that** Discord ID and
-   requires either a strictly valid `access: "allowed"` response or the bot's
-   `identity_unresolved` denial. `identity_unresolved` is returned only after
-   every real check (suspension, membership, payment, NDA, onboarding) has passed
-   and the only gap is a usable legal name, so it is treated as "eligible": the
-   watermark does not need a name. Every other denial still blocks playback.
-   This applies to staff too (they need a live staff role; a `staff_record`
-   without a live staff role is refused).
+5. Calls the bot's `POST /api/v1/member-access` for **that** Discord ID, only
+   to get the viewer's legal name. **The bot never blocks playback** (owner
+   decision, 2026-10-20): only members of the private mentorship server can sign
+   in, so steps 1-4 decide access. Whatever the bot answers (denied, not found,
+   misconfigured or unreachable), a member with the right roles still plays; the
+   watermark then just has no bot name. A `staff_record` name is only used while
+   the viewer holds a live staff role. To cut someone off, remove their Discord
+   roles or remove them from the server.
 6. Picks the watermark name: the bot's `legal_name` if it supplied one, otherwise
    the admin-entered name in `member_legal_names` for that same verified Discord
    ID (re-validated; an unusable value is skipped, and a failed read just means no
@@ -187,13 +191,13 @@ failed Bunny delete never leaves a playable but unlisted file.
 The client measures the window from when it received the response (so server
 clock skew can't extend it), checks every 2 s and whenever the tab regains
 focus, and closes the player when the window lapses without a successful
-re-check. A denial on re-check (suspension, membership ended, role removed,
-name withdrawn) closes it immediately. "Temporarily unavailable" and "access
+re-check. A denial on re-check (role removed, left the server) closes it
+immediately; the bot's answer no longer affects it. "Temporarily unavailable" and "access
 expired" are shown differently from membership denials.
 
 **Revocation honesty:** after a role or mentorship change, new plays fail
 immediately, and an open player stops at its next re-check (at most about
-3.5 minutes later with defaults; 5 minutes if the bot is unreachable). The re-check keeps the already-loaded embed so
+3.5 minutes later with defaults). The re-check keeps the already-loaded embed so
 the video does not restart, which means this close is enforced by the app; a
 modified client could keep an open player running until Bunny's embed token
 expires. We do **not** promise instant CDN revocation.

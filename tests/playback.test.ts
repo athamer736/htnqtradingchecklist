@@ -1,7 +1,11 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AuthzResult } from '../supabase/functions/_shared/authz.ts'
-import type { MentorshipDenyReason, MentorshipLookupResult } from '../supabase/functions/_shared/mentorshipApi.ts'
+import {
+  mapMentorshipDenyToPlayback,
+  type MentorshipDenyReason,
+  type MentorshipLookupResult
+} from '../supabase/functions/_shared/mentorshipApi.ts'
 import {
   playbackGrantWindow,
   runPlayback,
@@ -155,19 +159,26 @@ describe('runPlayback', () => {
     assert.equal(out.body.reasonCode, 'video_not_found')
   })
 
-  it('maps Railway denials, outages and misconfiguration (fail closed)', async () => {
-    const cases: [MentorshipLookupResult, string][] = [
-      [deniedResult('payment_incomplete'), 'onboarding_incomplete'],
-      [deniedResult('suspended'), 'suspended'],
-      [{ kind: 'unavailable', error: 'timeout' }, 'service_unavailable'],
-      [{ kind: 'unavailable', error: 'discord-id-mismatch' }, 'service_unavailable'],
-      [{ kind: 'misconfigured', error: 'no token' }, 'misconfigured']
+  it('never blocks on the bot: denials, outages and misconfiguration still play, with no bot name', async () => {
+    const cases: MentorshipLookupResult[] = [
+      deniedResult('payment_incomplete'),
+      deniedResult('onboarding_incomplete'),
+      deniedResult('nda_missing'),
+      deniedResult('suspended'),
+      deniedResult('membership_inactive'),
+      deniedResult('not_found'),
+      { kind: 'unavailable', error: 'timeout' },
+      { kind: 'unavailable', error: 'rate-limited', retryAfterSeconds: 12 },
+      { kind: 'unavailable', error: 'discord-id-mismatch' },
+      { kind: 'misconfigured', error: 'no token' }
     ]
-    for (const [result, code] of cases) {
-      const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(), deps({ checkMentorship: async () => result }))
-      assert.equal(out.body.ok, false)
-      assert.equal(out.body.reasonCode, code)
-      assert.ok(!JSON.stringify(out.body).includes('Example Customer'))
+    for (const result of cases) {
+      const d = deps({ checkMentorship: async () => result })
+      const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(), d)
+      assert.equal(out.body.ok, true, JSON.stringify(result))
+      assert.deepEqual(out.body.watermark, { discordId: STUDENT_ID, sessionRef: 'ref123' })
+      assert.ok((out.body.accessValidForSeconds as number) <= 300)
+      assert.equal(d.audits.at(-1)?.outcome, 'issued')
     }
   })
 
@@ -277,23 +288,8 @@ describe('runPlayback', () => {
       assert.deepEqual(out.body.watermark, { discordId: STUDENT_ID, sessionRef: 'ref123' })
     })
 
-    it('a stored name never bypasses the bot or the role checks', async () => {
+    it('a stored name never bypasses the role checks', async () => {
       const stored = async () => 'Admin Entered'
-      for (const reason of ['suspended', 'membership_inactive', 'onboarding_incomplete', 'nda_missing'] as const) {
-        const out = await runPlayback(
-          { kind: 'video', id: VIDEO_ID },
-          student(R.level3),
-          deps({ checkMentorship: async () => deniedResult(reason), readStoredName: stored })
-        )
-        assert.equal(out.body.ok, false, reason)
-        assert.ok(!JSON.stringify(out.body).includes('Admin Entered'))
-      }
-      const down = await runPlayback(
-        { kind: 'video', id: VIDEO_ID },
-        student(R.level3),
-        deps({ checkMentorship: async () => ({ kind: 'unavailable', error: 'timeout' }), readStoredName: stored })
-      )
-      assert.equal(down.body.ok, false)
       const noRole = await runPlayback(
         { kind: 'video', id: VIDEO_ID },
         student([]),
@@ -377,31 +373,32 @@ describe('runPlayback: member-access decisions', () => {
     })
   })
 
-  it('denies a paid member whose onboarding is unfinished, without a name', async () => {
-    for (const reason of ['onboarding_incomplete', 'payment_incomplete', 'nda_missing'] as const) {
-      const out = await runPlayback(
-        { kind: 'video', id: VIDEO_ID },
-        student(),
-        deps({ checkMentorship: async () => deniedResult(reason) })
-      )
-      assert.equal(out.status, 403)
-      assert.equal(out.body.reasonCode, 'onboarding_incomplete')
-      assert.ok(!('watermark' in out.body) && !('embedUrl' in out.body))
+  it('lets Student and staff role holders watch whatever the bot answers, using the admin-entered name', async () => {
+    for (const who of [student(R.level1), mentor()]) {
+      const id = who.ok ? who.discordId : ''
+      for (const reason of ['not_found', 'membership_inactive', 'suspended'] as const) {
+        const d = deps({
+          checkMentorship: async () => deniedResult(reason, id),
+          readStoredName: async () => 'Admin Entered'
+        })
+        const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, who, d)
+        assert.equal(out.body.ok, true)
+        assert.deepEqual(out.body.watermark, { discordId: id, sessionRef: 'ref123', legalName: 'Admin Entered' })
+        assert.equal(d.audits.at(-1)?.outcome, 'issued')
+      }
     }
   })
 
-  it('denies suspended and inactive memberships', async () => {
-    const cases: [MentorshipDenyReason, string][] = [
-      ['suspended', 'suspended'],
-      ['membership_inactive', 'membership_inactive'],
-      ['not_found', 'membership_inactive']
-    ]
-    for (const [reason, code] of cases) {
-      const d = deps({ checkMentorship: async () => deniedResult(reason) })
-      const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(), d)
-      assert.equal(out.body.reasonCode, code)
-      assert.equal(d.audits.at(-1)?.outcome, 'denied')
-    }
+  it('the bot never bypasses the Discord-role checks', async () => {
+    const d = deps({ loadVideo: async () => video({ level: 3 }) })
+    const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level1), d)
+    assert.equal(out.body.reasonCode, 'level_insufficient')
+    assert.ok(!('embedUrl' in out.body))
+  })
+
+  it('maps a missing bot record to its own "no joining record" message', () => {
+    assert.equal(mapMentorshipDenyToPlayback('not_found'), 'no_joining_record')
+    assert.equal(mapMentorshipDenyToPlayback('membership_inactive'), 'membership_inactive')
   })
 
   it('lets staff with an approved staff record watch, showing that name', async () => {
@@ -435,52 +432,11 @@ describe('runPlayback: member-access decisions', () => {
     assert.ok(!('embedUrl' in noRole.body))
   })
 
-  it('refuses a staff_record identity when the viewer no longer holds a live staff role', async () => {
+  it('does not show a staff_record name when the viewer no longer holds a live staff role', async () => {
     const d = deps({ checkMentorship: async () => staffAllowed(STUDENT_ID) })
     const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), d)
-    assert.equal(out.body.reasonCode, 'membership_inactive')
-    assert.equal(d.audits.at(-1)?.reason_code, 'staff_record_without_role')
-  })
-
-  it('passes a 429 Retry-After through as a temporary failure', async () => {
-    const out = await runPlayback(
-      { kind: 'video', id: VIDEO_ID },
-      student(),
-      deps({ checkMentorship: async () => ({ kind: 'unavailable', error: 'rate-limited', retryAfterSeconds: 12 }) })
-    )
-    assert.equal(out.status, 503)
-    assert.equal(out.body.reasonCode, 'service_unavailable')
-    assert.equal(out.body.retryAfterSeconds, 12)
-  })
-
-  it('treats bot 401 as misconfiguration and 503/timeouts as temporarily unavailable', async () => {
-    const cases: [MentorshipLookupResult, string, number][] = [
-      [{ kind: 'misconfigured', error: 'auth-401' }, 'misconfigured', 500],
-      [{ kind: 'unavailable', error: 'upstream-503' }, 'service_unavailable', 503],
-      [{ kind: 'unavailable', error: 'timeout' }, 'service_unavailable', 503]
-    ]
-    for (const [result, code, status] of cases) {
-      const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(), deps({ checkMentorship: async () => result }))
-      assert.equal(out.body.reasonCode, code)
-      assert.equal(out.status, status)
-      assert.ok(!('embedUrl' in out.body))
-    }
-  })
-
-  it('does not sign anything when the bot denies', async () => {
-    let signed = 0
-    await runPlayback(
-      { kind: 'video', id: VIDEO_ID },
-      student(),
-      deps({
-        checkMentorship: async () => deniedResult('suspended'),
-        signEmbed: async () => {
-          signed++
-          return 'x'
-        }
-      })
-    )
-    assert.equal(signed, 0)
+    assert.equal(out.body.ok, true)
+    assert.deepEqual(out.body.watermark, { discordId: STUDENT_ID, sessionRef: 'ref123' })
   })
 })
 

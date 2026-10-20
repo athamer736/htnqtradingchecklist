@@ -321,13 +321,14 @@ async function fetchMentorshipAccessOnce(opts: FetchMentorshipOptions): Promise<
 /** Map bot deny reasons onto playback reason codes used by the app. */
 export function mapMentorshipDenyToPlayback(
   reason: MentorshipDenyReason
-): 'onboarding_incomplete' | 'membership_inactive' | 'suspended' | 'name_unavailable' {
+): 'onboarding_incomplete' | 'membership_inactive' | 'no_joining_record' | 'suspended' | 'name_unavailable' {
   switch (reason) {
     case 'suspended':
       return 'suspended'
     case 'membership_inactive':
-    case 'not_found':
       return 'membership_inactive'
+    case 'not_found':
+      return 'no_joining_record'
     case 'identity_unresolved':
       return 'name_unavailable'
     case 'onboarding_incomplete':

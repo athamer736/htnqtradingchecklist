@@ -12,11 +12,7 @@ import {
 } from './decisions.ts'
 import { pickWatermarkName } from './memberNames.ts'
 import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
-import {
-  MENTORSHIP_MAX_RECHECK_SECONDS,
-  mapMentorshipDenyToPlayback,
-  type MentorshipLookupResult
-} from './mentorshipApi.ts'
+import { MENTORSHIP_MAX_RECHECK_SECONDS, type MentorshipLookupResult } from './mentorshipApi.ts'
 import type { PlaybackRequest } from './validation.ts'
 
 export interface LoadedVideo extends VideoItem {
@@ -117,45 +113,25 @@ export async function runPlayback(
     return denied(code)
   }
 
-  // Always the Discord ID from the verified linked identity, never the request.
+  // Access is decided only by the live Discord checks above: only members of the
+  // private mentorship server can sign in, and their roles decide what they can
+  // open. The bot never blocks playback (whatever it answers, or if it is down);
+  // it only supplies the viewer's legal name for the watermark. Always the
+  // Discord ID from the verified linked identity, never the request.
   const mentorship = await deps.checkMentorship(auth.discordId)
-
-  // The watermark always carries the Discord ID, so a legal name is not needed to
-  // watch. The bot answers `identity_unresolved` only once every real access
-  // check has passed and the sole gap is a usable legal name (no single
-  // signed-NDA name, or staff without a recorded name). A name is an extra
-  // identifier for investigations, not an access requirement, so it must not
-  // block playback.
-  let recheckAfterSeconds: number
-  if (mentorship.kind === 'allowed') {
-    // A staff_record name is only valid alongside a live staff role. Without
-    // one there is no customer entitlement either (the bot prefers signed_nda).
-    if (mentorship.body.identity_source === 'staff_record' && !auth.caps.isStaff) {
-      await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'staff_record_without_role' })
-      return denied('membership_inactive')
-    }
-    recheckAfterSeconds = mentorship.body.recheck_after_seconds
-  } else if (mentorship.kind === 'denied' && mentorship.body.reason_code === 'identity_unresolved') {
-    recheckAfterSeconds = mentorship.body.recheck_after_seconds
-  } else {
-    const code: DenyCode =
-      mentorship.kind === 'misconfigured'
-        ? 'misconfigured'
-        : mentorship.kind === 'unavailable'
-          ? 'service_unavailable'
-          : mapMentorshipDenyToPlayback(mentorship.body.reason_code)
-    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: code })
-    const out = denied(code)
-    if (mentorship.kind === 'unavailable' && mentorship.retryAfterSeconds) {
-      out.body.retryAfterSeconds = mentorship.retryAfterSeconds
-    }
-    return out
-  }
+  const recheckAfterSeconds =
+    mentorship.kind === 'allowed' || mentorship.kind === 'denied'
+      ? mentorship.body.recheck_after_seconds
+      : MENTORSHIP_MAX_RECHECK_SECONDS
 
   // Name shown beside the Discord ID: the bot's, else the admin-entered one. It is
   // only ever sent back to this same verified viewer (it is their own watermark),
-  // never written to the audit log, and a failed read just means "no name".
-  const botName = mentorship.kind === 'allowed' ? mentorship.body.legal_name : null
+  // never written to the audit log, and a failed read just means "no name". A
+  // staff_record name is only used while the viewer still holds a live staff role.
+  const botName =
+    mentorship.kind === 'allowed' && (mentorship.body.identity_source !== 'staff_record' || auth.caps.isStaff)
+      ? mentorship.body.legal_name
+      : null
   let legalName = pickWatermarkName(botName, null)
   if (!legalName) {
     const stored = await deps.readStoredName(auth.discordId).catch(() => null)

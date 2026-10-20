@@ -254,6 +254,7 @@ export type PlaybackDenyReason =
   | 'level_insufficient'
   | 'onboarding_incomplete'
   | 'membership_inactive'
+  | 'no_joining_record'
   | 'suspended'
   | 'name_unavailable'
   | 'service_unavailable'
@@ -337,6 +338,8 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
     'Your mentorship onboarding is incomplete. Finish joining in Discord (documents and payment) before watching videos.',
   membership_inactive:
     'Your mentorship access is not active. Open a ticket in Discord or message staff for help.',
+  no_joining_record:
+    "We couldn't find your mentorship joining record. Open a ticket in Discord or message staff for help.",
   suspended: 'Video access is currently restricted on your account. Contact staff for details.',
   name_unavailable:
     'Staff still need to complete your account details (legal name on file) before videos can play with your watermark.',

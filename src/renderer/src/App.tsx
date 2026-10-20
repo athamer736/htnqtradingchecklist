@@ -19,6 +19,7 @@ import { useDataCollection } from './store/useDataCollection'
 import { useAuth } from './store/useAuth'
 import { useMentorship } from './store/useMentorship'
 import { startSync, stopSync, isCloudSyncEnabled } from './sync/syncEngine'
+import { canSeeMentorshipPage, isMentorshipPage } from '../../shared/mentorshipNav'
 
 export default function App(): JSX.Element {
   const [view, setView] = useState<ViewId>('start')
@@ -48,12 +49,19 @@ export default function App(): JSX.Element {
     return undefined
   }, [authStatus, userId])
 
-  // Capabilities come from live Discord roles and drive the sidebar locks.
+  // Capabilities come from live Discord roles and decide which sidebar pages appear.
   // Cleared on sign-out / account switch so nothing leaks between accounts.
   useEffect(() => {
     resetMentorship()
     if (authStatus === 'in' && userId) void loadMentorship()
   }, [authStatus, userId, loadMentorship, resetMentorship])
+
+  const capabilities = useMentorship((s) => s.capabilities)
+  useEffect(() => {
+    if (!capabilities) return
+    if (isMentorshipPage(view) && !canSeeMentorshipPage(capabilities, view)) setView('start')
+    if (view === 'admin' && !capabilities.isManager) setView('start')
+  }, [capabilities, view])
 
   const handleChange = (v: ViewId): void => {
     setView(v)
