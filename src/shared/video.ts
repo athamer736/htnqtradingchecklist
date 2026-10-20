@@ -210,8 +210,10 @@ export type PlaybackDenyReason =
   | 'access_expired'
 
 export interface PlaybackWatermark {
-  /** The viewer's Discord ID: the watermark identifier. Legal names are never sent to the client. */
+  /** The viewer's own Discord ID: always shown, the primary watermark identifier. */
   discordId: string
+  /** The viewer's own legal name, only when one is on file (bot first, else admin-entered). */
+  legalName?: string
   /** Short server-generated reference for investigation (not PII). */
   sessionRef: string
 }

@@ -240,8 +240,9 @@ export default function MembersTab(): JSX.Element {
       <p className="mb-3 text-[11px] leading-relaxed text-muted">
         Roles and levels come live from Discord and can only be changed there. Legal names are not listed: open{' '}
         <span className="text-slate-300">Legal name</span> on a member to see what the bot has and to add one yourself.
-        A name you add is saved on the server for admins only (it is not used for video access or the watermark), and
-        every lookup and change is logged.
+        A name you add is saved on the server, visible to admins only. It is shown on that member's own video
+        watermark (next to their Discord ID) when the bot has no name for them, and is never used to decide access.
+        Every lookup and change is logged.
       </p>
 
       {status === 'loading' && <div className="text-sm text-muted">Loading members…</div>}

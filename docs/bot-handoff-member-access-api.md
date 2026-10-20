@@ -114,11 +114,11 @@ membership — successful joining intentionally archives the enquiry.
 ### Legal name
 
 > **Update:** the platform no longer needs a legal name to play a video. The
-> watermark is the viewer's Discord ID. The platform treats `denied` +
+> watermark always has the viewer's Discord ID. The platform treats `denied` +
 > `identity_unresolved` as "eligible, no name" and every other denial as a block,
 > so keep returning `identity_unresolved` **only** after suspension, membership,
 > payment, NDA and onboarding have all passed. A name is still returned when
-> available, but it is only a backup identifier for investigations and for the
+> available and is shown on the viewer's own watermark beside the Discord ID (the platform falls back to an admin-entered name when the bot has none); it is also a backup identifier for investigations and for the
 > Admin panel's audited lookup.
 
 Resolve from the customer’s **valid signed record** (e.g. NDA `signed_name`

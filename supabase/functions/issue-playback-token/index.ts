@@ -1,11 +1,13 @@
 // issue-playback-token
 //
 // Authorises playback of a section video or a 1:1 student recording and
-// returns a short-lived signed Bunny Player embed URL plus watermark identity.
+// returns a short-lived signed Bunny Player embed URL plus watermark identity
+// (the viewer's own Discord ID, plus their legal name when one is on file).
 // Service-role reads bypass RLS, so every check is enforced in runPlayback.
 //
 // Body: exactly one of { videoId } or { recordingId }. Discord ID and legal
-// name are never taken from the request body or editable user metadata.
+// name are never taken from the request body or editable user metadata; the
+// name comes from the bot or the admin-entered record for the verified ID.
 //
 // Required secrets: DISCORD_BOT_TOKEN, DISCORD_GUILD_ID,
 //   MENTORSHIP_API_BASE_URL, MENTORSHIP_API_TOKEN,
@@ -19,6 +21,7 @@ import { buildBunnyEmbedUrl, signBunnyEmbedToken } from '../_shared/bunnyAuth.ts
 import { loadContext } from '../_shared/context.ts'
 import { isContentSection, type EncodingStatus, type Visibility } from '../_shared/decisions.ts'
 import { handleOptions, json, newSessionRef, readJsonBody } from '../_shared/http.ts'
+import { readStoredName } from '../_shared/memberNameStore.ts'
 import { deny } from '../_shared/messages.ts'
 import { fetchMentorshipAccess } from '../_shared/mentorshipApi.ts'
 import { runPlayback, type LoadedRecording, type LoadedVideo } from '../_shared/playback.ts'
@@ -89,6 +92,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         discordId,
         allowLocalHttp: env.allowLocalHttp
       }),
+    readStoredName: async (discordId) => {
+      const stored = await readStoredName(admin, discordId)
+      return stored.ok ? stored.value : null
+    },
     signEmbed: async (bunnyVideoId, expiresAt) => {
       const token = await signBunnyEmbedToken(tokenKey, bunnyVideoId, expiresAt)
       return buildBunnyEmbedUrl({ libraryId, videoId: bunnyVideoId, token, expiresUnixSeconds: expiresAt })

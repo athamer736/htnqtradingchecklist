@@ -42,7 +42,7 @@ The **Mentorship** sidebar group (after Learn) has Level 1, Level 2, Level 3,
 Lectures, Weekly Recaps & Outlooks, and Student Recordings (staff) or My
 Recordings (students). Access follows live Discord roles: higher Level roles
 include the lower levels, mentors and admins upload directly from the app, and
-every video plays with a Discord ID watermark after the mentorship
+every video plays with a personalised watermark (the viewer's Discord ID, plus their legal name when one is on file) after the mentorship
 bot confirms access. Playback always needs an online check, even though the
 rest of the app works offline.
 

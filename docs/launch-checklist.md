@@ -77,7 +77,7 @@ supabase functions deploy set-thumbnail
 supabase functions deploy admin-members
 supabase functions deploy admin-member-identity
 supabase functions deploy admin-member-name
-supabase functions deploy issue-playback-token
+supabase functions deploy issue-playback-token   # also reads member_legal_names
 supabase functions delete list-videos
 ```
 
@@ -106,8 +106,9 @@ supabase functions delete list-videos
    `MENTORSHIP_API_TOKEN` to the same value. Never reuse other secrets.
 3. `MENTORSHIP_API_BASE_URL` = the bot service's HTTPS origin, no path.
 4. Optional: record legal names in the bot's staff table for owners/admins/mentors.
-   Watching does not need a name (the watermark is the Discord ID); a recorded name
-   is only a backup identifier. Owners/admins can also record any member's name in
+   Watching does not need a name (the watermark always has the Discord ID); when a
+   name is on file it is shown too (bot's name first, else the admin-entered one).
+   Owners/admins can also record any member's name in
    Admin -> Members -> **Legal name** (stored in this project's `member_legal_names`;
    needs migration `20261019_member_legal_names.sql` and the `admin-member-name`
    function). Update the privacy notice before using it (see `privacy-notice-draft.md`).
@@ -124,7 +125,8 @@ after explicit approval), a sandbox bot deployment and its own credential.
 3. Accounts to prepare in the bot's sandbox data: an entitled customer, a paid
    member with onboarding unfinished, a suspended member, a staff member with a
    staff-table name, and a staff member without one.
-4. Check each account sees only its own Discord ID on the watermark, the
+4. Check each account sees only its own Discord ID (and its own legal name, if on
+   file) on the watermark, the
    unfinished and suspended accounts are refused with the right message, a
    nameless staff account can still watch, and a wrong token shows "not configured" rather than a denial.
 5. Revoke the entitled customer in the bot while their player is open: it must

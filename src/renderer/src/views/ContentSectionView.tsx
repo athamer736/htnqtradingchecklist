@@ -127,7 +127,7 @@ export default function ContentSectionView({
         <div>
           <h1 className="text-xl font-semibold text-slate-100">{title}</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            {INTRO[section]} Playback shows your Discord ID as a watermark.
+            {INTRO[section]} Playback shows your Discord ID (and your legal name, if one is on file) as a watermark.
           </p>
         </div>
         <div className="flex gap-2">

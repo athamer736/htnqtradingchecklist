@@ -6,7 +6,12 @@
 // They are reported side by side and never merged or compared, so an admin can
 // see when they differ. Neither is used for access decisions.
 
-import type { MentorshipIdentitySource, MentorshipLookupResult } from './mentorshipApi.ts'
+import {
+  normaliseLegalName,
+  usableLegalName,
+  type MentorshipIdentitySource,
+  type MentorshipLookupResult
+} from './mentorshipApi.ts'
 
 /** What the bot lookup produced, including "we did not ask". */
 export type BotAnswer = MentorshipLookupResult | { kind: 'not_configured' }
@@ -80,4 +85,18 @@ export function lookupAuditOutcome(body: IdentityBody): string {
     default:
       return `unavailable:${body.reason}${stored}`
   }
+}
+
+/**
+ * The legal name to show on a viewer's own watermark. The bot's name (signed NDA
+ * or staff record) wins; the admin-entered name is the fallback. Both are
+ * re-checked here with the same rules used everywhere else, so an unusable value
+ * (blank, placeholder, control or bidi characters) is skipped, never displayed.
+ * Returns null when neither is usable and the watermark is just the Discord ID.
+ */
+export function pickWatermarkName(botName: string | null, storedName: string | null): string | null {
+  for (const candidate of [botName, storedName]) {
+    if (usableLegalName(candidate)) return normaliseLegalName(candidate)
+  }
+  return null
 }

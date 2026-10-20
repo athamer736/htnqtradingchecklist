@@ -27,9 +27,11 @@ Customer app (Windows desktop or https://app.htnq.org)
   → Bunny TUS endpoint (browser uploads files directly; never via Supabase)
 ```
 
-The app never talks to Railway's database. The playback watermark is the viewer's
-Discord ID, so no legal name is needed to watch. Legal names stay in the bot as a
-backup identifier and are only shown, on request, to owners and admins.
+The app never talks to Railway's database. The playback watermark always shows the
+viewer's own Discord ID, plus their legal name when one is on file (the bot's name
+first, else the one an admin entered), so no legal name is needed to watch. Names
+are only ever sent back to that same verified viewer, and are listed or looked up
+by owners and admins on request.
 
 ## Roles
 
@@ -118,10 +120,15 @@ Before any signed URL is issued, `issue-playback-token`:
    and the only gap is a usable legal name, so it is treated as "eligible": the
    watermark does not need a name. Every other denial still blocks playback.
    This applies to staff too (they need a live staff role; a `staff_record`
-   without a live staff role is refused). The legal name is never sent to the
-   client.
-6. Signs a short-lived Bunny **embed** URL and returns the watermark (Discord ID
-   plus a session reference) and the access window (`accessValidForSeconds`, at most 300 s).
+   without a live staff role is refused).
+6. Picks the watermark name: the bot's `legal_name` if it supplied one, otherwise
+   the admin-entered name in `member_legal_names` for that same verified Discord
+   ID (re-validated; an unusable value is skipped, and a failed read just means no
+   name). A stored name never changes an access decision.
+7. Signs a short-lived Bunny **embed** URL and returns the watermark (Discord ID,
+   the viewer's own legal name when there is one, and a session reference) and the
+   access window (`accessValidForSeconds`, at most 300 s). The name is never put in
+   the URL, `playback_audit` or logs.
 
 Every grant and denial is written to `playback_audit`. Uploads, visibility
 changes, edits, deletes, reorders, status refreshes and Admin-panel legal-name
