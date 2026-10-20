@@ -3,6 +3,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   PLAYBACK_MESSAGES,
   type ContentVideo,
+  type LevelDescription,
   type MentorshipCapabilities,
   type PlaybackDenied,
   type PlaybackDenyReason,
@@ -12,6 +13,7 @@ import {
   type StudentSummary,
   type UploadCredentials,
   type UploadTarget,
+  type VideoLevel,
   type Visibility,
   thumbnailFileProblem
 } from '../../../shared/video'
@@ -106,6 +108,11 @@ interface MentorshipState {
   capabilities: MentorshipCapabilities | null
   videos: ContentVideo[]
 
+  /** Level page descriptions the caller may read, keyed by Level. */
+  levelDescriptions: Partial<Record<VideoLevel, LevelDescription>>
+  /** True for owner/admin: may write Level descriptions. */
+  canEditLevelDescriptions: boolean
+
   /** Staff: students who already have recordings (picker shortcuts). */
   studentSummaries: StudentSummary[]
   recordingsStatus: LoadStatus
@@ -122,6 +129,9 @@ interface MentorshipState {
   playLoading: boolean
 
   load: () => Promise<void>
+  loadLevelDescriptions: () => Promise<void>
+  /** Owner/admin. A blank text removes the description. Resolves to an error message, or null on success. */
+  saveLevelDescription: (level: VideoLevel, text: string) => Promise<string | null>
   loadStudentSummaries: () => Promise<void>
   loadRecordings: (studentDiscordId: string | null) => Promise<void>
   searchStudents: (query: string) => Promise<Result<{ students: StudentSummary[] }>>
@@ -142,6 +152,8 @@ const initial = {
   error: null,
   capabilities: null,
   videos: [],
+  levelDescriptions: {},
+  canEditLevelDescriptions: false,
   studentSummaries: [],
   recordingsStatus: 'idle' as LoadStatus,
   recordingsError: null,
@@ -189,6 +201,34 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
       capabilities: body.capabilities as MentorshipCapabilities,
       videos: (body.videos as ContentVideo[] | undefined) ?? []
     })
+  },
+
+  loadLevelDescriptions: async () => {
+    const body = await invoke('level-descriptions', { action: 'list' })
+    // A failure just means no description is shown; the videos still work.
+    if (body?.ok !== true || !Array.isArray(body.levels)) return
+    const next: Partial<Record<VideoLevel, LevelDescription>> = {}
+    for (const d of body.levels as LevelDescription[]) {
+      if ((d.level === 1 || d.level === 2 || d.level === 3) && typeof d.description === 'string') next[d.level] = d
+    }
+    set({ levelDescriptions: next, canEditLevelDescriptions: body.canEdit === true })
+  },
+
+  saveLevelDescription: async (level, text) => {
+    const body = await invoke('level-descriptions', { action: 'set', level, description: text.trim() ? text : null })
+    if (body?.ok !== true) return toFailure(body, 'The description could not be saved.').message
+    const rest = { ...get().levelDescriptions }
+    if (typeof body.description === 'string') {
+      rest[level] = {
+        level,
+        description: body.description,
+        updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : new Date().toISOString()
+      }
+    } else {
+      delete rest[level]
+    }
+    set({ levelDescriptions: rest })
+    return null
   },
 
   loadStudentSummaries: async () => {

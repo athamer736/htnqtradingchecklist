@@ -42,6 +42,7 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
 2. `supabase/migrations/20261016_roles_sections_recordings.sql`
 3. `supabase/migrations/20261018_admin_panel.sql` (Admin panel: wider `content_audit`)
 4. `supabase/migrations/20261019_member_legal_names.sql` (admin-entered legal names)
+   and `20261020_level_descriptions.sql` (Level page descriptions + audit widening)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -77,6 +78,7 @@ supabase functions deploy set-thumbnail
 supabase functions deploy admin-members
 supabase functions deploy admin-member-identity
 supabase functions deploy admin-member-name
+supabase functions deploy level-descriptions
 supabase functions deploy issue-playback-token   # also reads member_legal_names
 supabase functions delete list-videos
 ```

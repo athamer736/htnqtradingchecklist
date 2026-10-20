@@ -79,6 +79,16 @@ export interface ContentVideo extends ItemPermissions {
   sortOrd: number
 }
 
+/** The text at the top of a Level page, written by an owner/admin. */
+export interface LevelDescription {
+  level: VideoLevel
+  description: string
+  updatedAt: string
+}
+
+/** Same limit the server enforces. */
+export const LEVEL_DESCRIPTION_MAX = 4000
+
 export interface StudentRecording extends ItemPermissions {
   id: string
   studentDiscordId: string

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
+import LevelDescriptionDialog from '../components/video/LevelDescriptionDialog'
 import PlaybackNotice from '../components/video/PlaybackNotice'
+import RichText from '../components/video/RichText'
 import UploadDialog from '../components/video/UploadDialog'
 import VideoPlayer from '../components/video/VideoPlayer'
 import { isSupabaseConfigured } from '../lib/supabase'
@@ -94,12 +96,21 @@ export default function ContentSectionView({
   const playError = useMentorship((s) => s.playError)
   const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
+  const levelDescriptions = useMentorship((s) => s.levelDescriptions)
+  const canEditDescriptions = useMentorship((s) => s.canEditLevelDescriptions)
+  const loadLevelDescriptions = useMentorship((s) => s.loadLevelDescriptions)
+  const saveLevelDescription = useMentorship((s) => s.saveLevelDescription)
   const [uploading, setUploading] = useState(false)
+  const [editingDescription, setEditingDescription] = useState(false)
 
   useEffect(() => {
     void load()
     return () => stop()
   }, [load, stop])
+
+  useEffect(() => {
+    if (section === 'level') void loadLevelDescriptions()
+  }, [section, level, loadLevelDescriptions])
 
   const title = sectionTitle(section, level)
   const gate = <MentorshipStatus />
@@ -133,6 +144,8 @@ export default function ContentSectionView({
   const locked = lockReason(caps, section, level)
   const items = videos.filter((v) => v.section === section && (section !== 'level' || v.level === level))
   const canUpload = caps.canUpload[section]
+  const levelText = section === 'level' && level !== null && !locked ? levelDescriptions[level] : undefined
+  const canWriteLevelText = section === 'level' && level !== null && !locked && canEditDescriptions
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6">
@@ -144,9 +157,21 @@ export default function ContentSectionView({
           </p>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="btn-ghost" onClick={() => void load()}>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              void load()
+              if (section === 'level') void loadLevelDescriptions()
+            }}
+          >
             Refresh
           </button>
+          {canWriteLevelText && (
+            <button type="button" className="btn-ghost" onClick={() => setEditingDescription(true)}>
+              {levelText ? 'Edit description' : 'Add description'}
+            </button>
+          )}
           {canUpload && (
             <button type="button" className="btn-primary" onClick={() => setUploading(true)}>
               Upload video
@@ -156,6 +181,16 @@ export default function ContentSectionView({
       </div>
 
       {playError && <PlaybackNotice error={playError} onDismiss={stop} />}
+
+      {levelText && (
+        <section
+          aria-label={`About Level ${level}`}
+          className="mb-6 rounded-xl border border-line bg-bg-card p-4 md:p-5"
+        >
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">About Level {level}</h2>
+          <RichText text={levelText.description} />
+        </section>
+      )}
 
       {locked ? (
         <div className="flex items-start gap-3 rounded-xl border border-line bg-bg-card px-4 py-4 text-sm text-muted">
@@ -182,6 +217,15 @@ export default function ContentSectionView({
             />
           ))}
         </div>
+      )}
+
+      {editingDescription && level !== null && (
+        <LevelDescriptionDialog
+          level={level}
+          initial={levelText?.description ?? ''}
+          onSave={(text) => saveLevelDescription(level, text)}
+          onClose={() => setEditingDescription(false)}
+        />
       )}
 
       {uploading && (

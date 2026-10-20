@@ -243,6 +243,35 @@ export function parseMemberNameRequest(body: unknown): Parsed<MemberNameRequest>
   }
 }
 
+// --- level-descriptions -----------------------------------------------------
+
+/** Longer than a video description: it introduces a whole Level. */
+export const LEVEL_DESCRIPTION_MAX = 4000
+
+export type LevelDescriptionRequest =
+  | { action: 'list' }
+  /** description null = clear it. */
+  | { action: 'set'; level: VideoLevel; description: string | null }
+
+export function parseLevelDescriptionRequest(body: unknown): Parsed<LevelDescriptionRequest> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
+  if (o.action === undefined || o.action === 'list') return { ok: true, value: { action: 'list' } }
+  if (o.action !== 'set') return { ok: false, error: 'invalid-action' }
+  if (o.level !== 1 && o.level !== 2 && o.level !== 3) return { ok: false, error: 'invalid-level' }
+  if (o.description !== null && typeof o.description !== 'string') return { ok: false, error: 'invalid-description' }
+  // Over-long text is rejected rather than silently cut, so an admin never loses the end of it.
+  if (typeof o.description === 'string' && o.description.length > LEVEL_DESCRIPTION_MAX * 2) {
+    return { ok: false, error: 'description-too-long' }
+  }
+  const description = cleanDescription(o.description, Number.MAX_SAFE_INTEGER)
+  if (description !== null && description.length > LEVEL_DESCRIPTION_MAX) {
+    return { ok: false, error: 'description-too-long' }
+  }
+  return { ok: true, value: { action: 'set', level: o.level, description } }
+}
+
 // --- list-students / list-recordings ---------------------------------------
 
 export function parseStudentQuery(body: unknown): Parsed<string> {

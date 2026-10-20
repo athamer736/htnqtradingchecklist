@@ -102,6 +102,16 @@ export function canManageMemberNames(caps: Capabilities): boolean {
   return caps.isManager
 }
 
+/** Staff, or a student whose roles unlock that Level, may read its description. */
+export function canViewLevelDescription(caps: Capabilities, level: VideoLevel): boolean {
+  return caps.isStaff || (caps.isStudent && caps.levels.includes(level))
+}
+
+/** Writing what every student reads on a Level page is a manager action. */
+export function canEditLevelDescriptions(caps: Capabilities): boolean {
+  return caps.isManager
+}
+
 // --- 1:1 student recordings -------------------------------------------------
 
 export function canListRecording(
