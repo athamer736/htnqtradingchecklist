@@ -1,11 +1,9 @@
 # Customer-facing privacy text (approved by the owner)
 
-**Wording approved by the owner on 2026-10-20 (includes the legal-name
-watermark). Not legal advice. No retention period is invented here: the
-retention wording below is still HTNQ's to set. This text still has to be added
-to the published privacy notice. The watermark now also shows the viewer's
-current Discord username; the first sentence below was updated to say so and
-that change still needs the owner's approval.**
+**Wording approved by the owner on 2026-10-20 (includes the legal-name and
+Discord-username watermark). Not legal advice. No retention period is invented
+here: the retention wording below is still HTNQ's to set. This text still has
+to be added to the published privacy notice.**
 
 Suggested addition for the owner’s privacy notice:
 
