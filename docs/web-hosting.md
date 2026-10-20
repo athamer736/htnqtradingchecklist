@@ -32,7 +32,9 @@ Do these in order. Nothing here needs a secret pasted into chat.
 
 **Settings → Secrets and variables → Actions → Variables → New repository variable**:
 
-- `VITE_SUPABASE_URL` = your Supabase Project URL
+- `VITE_SUPABASE_URL` = your Supabase Project URL, exactly `https://<project-ref>.supabase.co`
+  (not the `/rest/v1/` API URL; with a path on it, Discord sign-in fails with
+  "No API key found in request")
 - `VITE_SUPABASE_ANON_KEY` = your Supabase **anon / publishable** key
 
 These two are public by design (they ship in every browser build). Never add

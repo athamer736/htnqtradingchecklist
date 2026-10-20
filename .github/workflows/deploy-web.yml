@@ -46,6 +46,10 @@ jobs:
             echo "::error::Set the VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY repository variables (Settings > Secrets and variables > Actions > Variables)."
             exit 1
           fi
+          if ! echo "$VITE_SUPABASE_URL" | grep -Eq '^https://[a-z0-9]+\.supabase\.co$'; then
+            echo "::error::VITE_SUPABASE_URL must be just the project URL, like https://<project-ref>.supabase.co (no /rest/v1/ or trailing slash)."
+            exit 1
+          fi
 
       - name: Build web app
         env:
