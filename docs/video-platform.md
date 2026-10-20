@@ -261,11 +261,14 @@ The Discord bot needs **Server Members Intent** for the student search.
 Bunny library **Security** settings:
 
 - **Embed view token authentication**: on (every embed URL is signed).
-- **CDN token authentication**: on. The embedded player signs its own video
-  requests, and `list-content` signs thumbnail URLs (valid 6-12 hours).
+- **MediaCage Basic DRM**: on (files are encrypted and only play in the embed).
+- **CDN token authentication** (set on the library's `vz-…` CDN zone): **off**.
+  Bunny can't combine it with DRM; turning it on makes every video "not
+  available", even in Bunny's own preview. `list-content` still signs thumbnail
+  URLs, which Bunny ignores while it is off.
 - **Block direct url file access**: off. It relies on a `Referer` header, which
   iPhone/iPad Safari's built-in video player doesn't send, so every video fails
-  there with "This video is not available". CDN tokens protect the files instead.
+  there with "This video is not available".
 
 Client env (public by design) only has:
 
