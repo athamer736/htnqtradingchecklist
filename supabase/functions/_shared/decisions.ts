@@ -60,18 +60,18 @@ export function canUploadVideo(
   if (section === 'level' && (level === null || ![1, 2, 3].includes(level))) return false
   if (section !== 'level' && level !== null) return false
   if (caps.isManager) return true
-  if (caps.isMentor) return section === 'level'
+  if (caps.isMentor) return section === 'level' || section === 'further_studying'
   return false
 }
 
-/** Mentors may hide or republish Level videos; owner/admin may for every section. */
+/** Mentors may hide or republish Level and Further Studying videos; owner/admin may for every section. */
 export function canSetVideoVisibility(caps: Capabilities, item: VideoItem): boolean {
   if (caps.isManager) return true
-  if (caps.isMentor) return item.section === 'level'
+  if (caps.isMentor) return item.section === 'level' || item.section === 'further_studying'
   return false
 }
 
-/** Same people who may publish/hide a video: owner/admin anywhere, mentors in Level sections. */
+/** Same people who may publish/hide a video: owner/admin anywhere, mentors in Level and Further Studying. */
 export function canSetVideoThumbnail(caps: Capabilities, item: VideoItem): boolean {
   return canSetVideoVisibility(caps, item)
 }

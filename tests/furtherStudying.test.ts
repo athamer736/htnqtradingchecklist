@@ -65,10 +65,10 @@ describe('Further Studying viewing', () => {
 })
 
 describe('Further Studying management', () => {
-  it('owner and admin can upload; mentors and students cannot', () => {
+  it('owner, admin and mentors can upload; students cannot', () => {
     assert.equal(canUploadVideo(owner, 'further_studying', null), true)
     assert.equal(canUploadVideo(admin, 'further_studying', null), true)
-    assert.equal(canUploadVideo(mentor, 'further_studying', null), false)
+    assert.equal(canUploadVideo(mentor, 'further_studying', null), true)
     assert.equal(canUploadVideo(studentL3, 'further_studying', null), false)
   })
 
@@ -76,14 +76,15 @@ describe('Further Studying management', () => {
     assert.equal(canUploadVideo(owner, 'further_studying', 3), false)
   })
 
-  it('mentors cannot hide or publish its videos', () => {
+  it('mentors can hide or publish its videos, students cannot', () => {
     assert.equal(canSetVideoVisibility(owner, further()), true)
-    assert.equal(canSetVideoVisibility(mentor, further()), false)
+    assert.equal(canSetVideoVisibility(mentor, further()), true)
+    assert.equal(canSetVideoVisibility(studentL3, further()), false)
   })
 
-  it('upload capabilities report it for managers only', () => {
+  it('upload capabilities report it for staff only', () => {
     assert.equal(uploadCapabilities(owner).further_studying, true)
-    assert.equal(uploadCapabilities(mentor).further_studying, false)
+    assert.equal(uploadCapabilities(mentor).further_studying, true)
     assert.equal(uploadCapabilities(studentL3).further_studying, false)
   })
 

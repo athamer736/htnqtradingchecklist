@@ -209,7 +209,7 @@ accounts have no Discord identity and cannot watch or manage mentorship content
 | Role | Watch | Upload | Publish / make private | Edit details | Delete |
 | --- | --- | --- | --- | --- | --- |
 | Owner, Admin | Everything | Every section and any student's recordings | Yes | Yes | Yes |
-| Mentor | Everything, including every student's recordings | Level 1-3 and 1:1 recordings | Level 1-3 and recordings | No | No |
+| Mentor | Everything, including every student's recordings | Level 1-3, Further Studying and 1:1 recordings | Level 1-3, Further Studying and recordings | No | No |
 | Student | Level tabs up to their highest Level role (inclusive), Further Studying (Level 3 role only), Lectures, Weekly Recaps, their own published recordings | No | No | No | No |
 
 Staff playback still goes through the Railway mentorship check. The watermark is the

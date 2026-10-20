@@ -61,7 +61,7 @@ mentor) see every level.
 | Further Studying | All, including private and processing | All, including private and processing | Published + ready, with the Level 3 role |
 | Lectures, Weekly Recaps & Outlooks | All | All | Published + ready |
 | 1:1 recordings | Any student's | Any student's | Their own, published + ready |
-| Upload | Every section (Further Studying: owner/admin only); any student's recordings | Level 1-3; any student's recordings | No |
+| Upload | Every section; any student's recordings | Level 1-3 and Further Studying; any student's recordings | No |
 | Publish / make private | Everything | Level 1-3 and recordings | No |
 | Edit title / description | Yes | No | No |
 | Delete (also deletes in Bunny) | Yes | No | No |
