@@ -214,9 +214,7 @@ export default function VideoPlayer({
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted">
-        Watermark shows your legal name, Discord username and Discord ID as a deterrent. It does not prevent all
-        screen recording or by itself prove a legal breach. Your access is re-checked every few
-        minutes while this view stays open.
+        Watermark shows your legal name, Discord username and Discord ID.
       </p>
     </div>
   )
