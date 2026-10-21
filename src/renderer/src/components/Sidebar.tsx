@@ -10,7 +10,6 @@ import logo from '../assets/htnq-logo.png'
 
 export type ViewId =
   | 'start'
-  | 'learn'
   | 'level1'
   | 'level2'
   | 'level3'
@@ -42,17 +41,6 @@ const items: NavItem[] = [
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
         <path d="M12 3v4m0 0L8 11m4-4l4 4M6 11v4m0 0l-2 3m2-3l2 3m10-7v4m0 0l-2 3m2-3l2 3" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
-  },
-  {
-    id: 'learn',
-    label: 'Learn',
-    hint: 'Concepts',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
-        <path d="M4 5h6a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H4z" strokeLinejoin="round" />
-        <path d="M20 5h-6a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h6z" strokeLinejoin="round" />
       </svg>
     )
   },
@@ -103,7 +91,8 @@ const items: NavItem[] = [
   }
 ]
 
-const LEARN_INDEX = items.findIndex((i) => i.id === 'learn')
+// Mentorship sits directly under Setup.
+const MENTORSHIP_AFTER = items.findIndex((i) => i.id === 'start')
 
 // Owner/admin only. Shown from the server-computed `isManager` capability; the
 // functions behind the panel re-check live Discord roles on every call.
@@ -317,12 +306,12 @@ export default function Sidebar({
         </div>
 
       <nav className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-2">
-        {items.slice(0, LEARN_INDEX + 1).map((item) => (
+        {items.slice(0, MENTORSHIP_AFTER + 1).map((item) => (
           <NavButton key={item.id} item={item} active={active} onChange={onChange} />
         ))}
         <MentorshipNav active={active} onChange={onChange} />
         <div className="mt-1" />
-        {items.slice(LEARN_INDEX + 1).map((item) => (
+        {items.slice(MENTORSHIP_AFTER + 1).map((item) => (
           <NavButton key={item.id} item={item} active={active} onChange={onChange} />
         ))}
         {isManager && <NavButton item={adminItem} active={active} onChange={onChange} />}

@@ -38,7 +38,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
 ## Mentorship content (online-only)
 
-The **Mentorship** sidebar group (after Learn) has Level 1, Level 2, Level 3, Further Studying (Level 3 only),
+The **Mentorship** sidebar group (under Setup) has Level 1, Level 2, Level 3, Further Studying (Level 3 only),
 Lectures, Weekly Recaps & Outlooks, the 1st Of July, 1st Of September and Batch 5.0
 sections (each only for members with that batch's Discord role), and Student Recordings (staff) or My
 Recordings (students). Access follows live Discord roles: higher Level roles

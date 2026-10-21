@@ -92,11 +92,10 @@ mentorship content. The earlier `video_staff_access` email bypass is removed.
 
 ## Sidebar
 
-After **Learn**, a **Mentorship** group: Level 1, Level 2, Level 3, Further Studying, Lectures,
+Under **Setup**, a **Mentorship** group: Level 1, Level 2, Level 3, Further Studying, Lectures,
 Weekly Recaps & Outlooks, 1st Of July Batch, 1st Of September Batch, Batch 5.0, then **Student Recordings** (staff: searchable
 picker of Discord members with the Student role, then that student's
-recordings and an upload button) or **My Recordings** (students). Learn is
-unchanged.
+recordings and an upload button) or **My Recordings** (students).
 
 Owners and admins also get an **Admin** item (shown from the server-computed
 `isManager` capability) with two tabs:

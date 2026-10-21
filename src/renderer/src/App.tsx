@@ -6,7 +6,6 @@ import AccountSwitchDialog from './components/AccountSwitchDialog'
 // import LogConsole from './components/LogConsole' // dev-only log popup; hidden in release
 import { installGlobalLogCapture } from './lib/logger'
 import StartView from './views/StartView'
-import LearnView from './views/LearnView'
 import PointsView from './views/PointsView'
 import ReferenceView from './views/ReferenceView'
 import JournalView from './views/JournalView'
@@ -95,7 +94,6 @@ export default function App(): JSX.Element {
         )}
         <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pl-12'}`}>
           {view === 'start' && <StartView />}
-          {view === 'learn' && <LearnView />}
           {view === 'level1' && <ContentSectionView section="level" level={1} />}
           {view === 'level2' && <ContentSectionView section="level" level={2} />}
           {view === 'level3' && <ContentSectionView section="level" level={3} />}
