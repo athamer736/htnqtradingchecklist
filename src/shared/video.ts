@@ -27,7 +27,7 @@ export function isBatchSection(section: ContentSection): section is BatchId {
 export const FURTHER_STUDYING_LEVEL: VideoLevel = 3
 export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
-export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'none'
+export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'partial' | 'none'
 
 /**
  * File picker filter for uploads. `video/*` alone hides .mkv on Windows, where
@@ -149,6 +149,7 @@ export interface MentorshipCapabilities {
   isStaff: boolean
   isManager: boolean
   isStudent: boolean
+  isPartial: boolean
   levels: VideoLevel[]
   /** Batch sections they may open (staff: all). */
   batches: BatchId[]

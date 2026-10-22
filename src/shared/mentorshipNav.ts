@@ -50,8 +50,11 @@ export function isMentorshipPage(id: string): id is MentorshipPageId {
 export function canSeeMentorshipPage(caps: MentorshipCapabilities | null, page: MentorshipPageId): boolean {
   if (!caps) return false
   if (caps.isStaff) return true
-  if (!caps.isStudent) return false
   const req = REQUIREMENTS[page]
+  if (caps.isPartial) {
+    return req.kind === 'level' && req.level <= 2 && levelsInclude(caps.levels ?? [], req.level)
+  }
+  if (!caps.isStudent) return false
   if (req.kind === 'student') return true
   if (req.kind === 'level') return levelsInclude(caps.levels ?? [], req.level)
   return (caps.batches ?? []).includes(req.batch)

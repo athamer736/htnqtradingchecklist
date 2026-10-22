@@ -29,13 +29,13 @@ export interface AdminMember {
   hasStoredName?: boolean
 }
 
-const ROLE_RANK: Record<PrimaryRole, number> = { owner: 0, admin: 1, mentor: 2, student: 3, none: 4 }
+const ROLE_RANK: Record<PrimaryRole, number> = { owner: 0, admin: 1, mentor: 2, student: 3, partial: 4, none: 5 }
 
 /** Returns null for members with no mentorship role at all (the wider community). */
 export function toAdminMember(member: GuildMemberSummary, cfg: RoleConfig): AdminMember | null {
   const caps = resolveCapabilities(member.roles, cfg)
   const levelRoles = inclusiveLevels(member.roles, cfg)
-  if (!caps.isStaff && !caps.isStudent && levelRoles.length === 0) return null
+  if (!caps.isStaff && !caps.isStudent && !caps.isPartial && levelRoles.length === 0) return null
   return {
     discordId: member.discordId,
     displayName: member.displayName,
@@ -46,7 +46,7 @@ export function toAdminMember(member: GuildMemberSummary, cfg: RoleConfig): Admi
     isStudent: caps.isStudent,
     levels: caps.levels,
     levelRoles,
-    levelWithoutStudent: !caps.isStaff && !caps.isStudent && levelRoles.length > 0
+    levelWithoutStudent: !caps.isStaff && !caps.isStudent && !caps.isPartial && levelRoles.length > 0
   }
 }
 

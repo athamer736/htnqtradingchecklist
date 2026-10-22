@@ -105,6 +105,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       isStaff: caps.isStaff,
       isManager: caps.isManager,
       isStudent: caps.isStudent,
+      isPartial: caps.isPartial,
       levels: caps.levels,
       batches: caps.batches,
       canUpload: uploadCapabilities(caps)
