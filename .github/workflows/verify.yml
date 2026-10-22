@@ -1,0 +1,25 @@
+name: Verify platform
+on:
+  pull_request:
+  push:
+    branches: [codex/partial-plan-video-access]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build:web
+        env:
+          # Build-only public placeholders; no deployment or production credentials.
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: build-verification-public-placeholder

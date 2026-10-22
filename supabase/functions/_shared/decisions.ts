@@ -65,8 +65,11 @@ export function isVisibility(v: unknown): v is Visibility {
 /** Whether the caller may see the item in a listing. */
 export function canListVideo(caps: Capabilities, item: VideoItem): boolean {
   if (caps.isStaff) return true
-  if (!caps.isStudent) return false
   if (item.visibility !== 'published' || item.encodingStatus !== 'ready') return false
+  if (caps.isPartial) {
+    return item.section === 'level' && (item.level === 1 || item.level === 2) && caps.levels.includes(item.level)
+  }
+  if (!caps.isStudent) return false
   if (item.section === 'level') return item.level !== null && caps.levels.includes(item.level)
   if (item.section === 'further_studying') return caps.levels.includes(FURTHER_STUDYING_LEVEL)
   if (isBatchSection(item.section)) return caps.batches.includes(item.section)
@@ -140,7 +143,9 @@ export function canManageMemberNames(caps: Capabilities): boolean {
 
 /** Staff, or a student whose roles unlock that Level, may read its description. */
 export function canViewLevelDescription(caps: Capabilities, level: VideoLevel): boolean {
-  return caps.isStaff || (caps.isStudent && caps.levels.includes(level))
+  if (caps.isStaff) return true
+  if (caps.isPartial) return level <= 2 && caps.levels.includes(level)
+  return caps.isStudent && caps.levels.includes(level)
 }
 
 /** Writing what every student reads on a Level or section page is a manager action. */
