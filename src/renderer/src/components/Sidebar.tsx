@@ -320,7 +320,7 @@ export default function Sidebar({
       <div className="shrink-0 px-5 py-4 text-[11px] leading-relaxed text-muted/70">
         <SyncStatus />
         <div className="font-medium text-muted">HTNQ Ltd</div>
-        <div className="mt-0.5">Coded by TH55MER</div>
+        <div className="mt-0.5">Developed by th55mer</div>
         <button
           onClick={() => window.htnq.openExternal('https://discord.gg/3NCzYnRtKd')}
           className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-card px-2.5 py-1.5 text-[11px] font-medium text-slate-300 transition-colors hover:bg-bg-hover hover:text-white"
