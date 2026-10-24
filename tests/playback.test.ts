@@ -461,3 +461,58 @@ describe('playbackGrantWindow', () => {
     assert.equal(playbackGrantWindow(300, 120, 90).embedTtlSeconds, 120)
   })
 })
+
+describe('partial-plan signed playback', () => {
+  const BATCH_5 = '1561824503447687279'
+  it('issues only early lessons, refuses higher/shared/private content before any signing or name lookup', async () => {
+    const who = auth([R.partial, R.level1, R.level2, R.student, R.level3, BATCH_5])
+    for (const slug of ['level_1', 'level_2'] as const) {
+      const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, who, deps({ loadVideo: async () => video({ tab: seedTab(slug) }) }))
+      assert.equal(out.status, 200)
+      assert.equal(out.body.ok, true)
+    }
+    let signed = 0
+    const blocked = [
+      video({ tab: seedTab('level_3'), level: 3 }),
+      video({ visibility: 'private' }),
+      video({ encodingStatus: 'processing' }),
+      ...(['lectures', 'weekly_recaps', 'further_studying', 'july_batch', 'sept_batch', 'batch_5'] as const).map((slug) =>
+        video({ tab: seedTab(slug), level: null })
+      ),
+      // An admin-created tab, even one open to every Student, is never open to a partial member.
+      video({ tab: { viewRoleIds: [], uploadRoleIds: [R.level1], manageRoleIds: [R.level2] }, level: null })
+    ]
+    for (const item of blocked) {
+      const d = deps({
+        loadVideo: async () => item,
+        signEmbed: async () => {
+          signed++
+          return 'must-not-sign'
+        }
+      })
+      const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, who, d)
+      assert.equal(out.body.ok, false, JSON.stringify(item))
+      assert.equal(d.mentorshipCalls, 0)
+      assert.ok(!('embedUrl' in out.body))
+    }
+    const out = await runPlayback(
+      { kind: 'recording', id: REC_ID },
+      who,
+      deps({
+        signEmbed: async () => {
+          signed++
+          return 'must-not-sign'
+        }
+      })
+    )
+    assert.equal(out.body.ok, false)
+    assert.equal(signed, 0)
+  })
+
+  it('rechecks a partial-to-full role change on each new playback request', async () => {
+    const d = deps({ loadVideo: async () => video({ tab: seedTab('level_3'), level: 3 }) })
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, auth([R.partial, R.level2]), d)).body.ok, false)
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, auth([R.student, R.level3]), d)).body.ok, true)
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, auth([R.partial, R.level2]), d)).body.ok, false)
+  })
+})

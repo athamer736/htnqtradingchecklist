@@ -16,6 +16,7 @@ function caps(over: Partial<MentorshipCapabilities> = {}): MentorshipCapabilitie
     isStaff: false,
     isManager: false,
     isStudent: true,
+    isPartial: false,
     canManageTabs: false,
     canUpload: { recordings: false },
     ...over

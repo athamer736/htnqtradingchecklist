@@ -21,6 +21,7 @@ const ROLE_CHIP: Record<PrimaryRole, { label: string; className: string }> = {
   admin: { label: 'Admin', className: 'bg-rose-400/15 text-rose-200' },
   mentor: { label: 'Mentor', className: 'bg-sky-400/15 text-sky-200' },
   student: { label: 'Student', className: 'bg-emerald-400/15 text-emerald-200' },
+  partial: { label: 'Partial · Levels 1–2', className: 'bg-violet-400/15 text-violet-200' },
   none: { label: 'No Student role', className: 'bg-bg-soft text-muted' }
 }
 

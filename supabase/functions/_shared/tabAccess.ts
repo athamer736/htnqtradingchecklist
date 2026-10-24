@@ -13,12 +13,20 @@
 // the Student role but still have to be on the tab's view list (or the list must be
 // empty). Holding an upload or manage role is itself a grant to open that tab, so a
 // custom "content team" role works without also being a Student.
+//
+// Partial payment-plan members (caps.isPartial, never staff) are the exception to all
+// of the above: they may open only the built-in Level 1 and Level 2 tabs that their
+// early Level roles cover, and see only published, ready lessons there. They can never
+// upload or manage, whatever the tab's lists say, and a stray Level 3 role does not
+// help (caps.levels already leaves it out). See docs/partial-plan-access.md.
 
 import type { Capabilities } from './roles.ts'
 import type { EncodingStatus, Visibility } from './decisions.ts'
 
 /** What the permission decisions need to know about a tab. */
 export interface TabAccess {
+  /** The tab's slug. Only the built-in level_1 / level_2 tabs are open to partial members. */
+  slug?: string
   viewRoleIds: readonly string[]
   uploadRoleIds: readonly string[]
   manageRoleIds: readonly string[]
@@ -38,18 +46,28 @@ function holdsAny(roles: readonly string[], list: readonly string[]): boolean {
   return list.some((id) => roles.includes(id))
 }
 
+/** Partial members: the built-in Level 1 / Level 2 tabs their early Level roles cover. */
+function partialMayView(caps: Capabilities, tab: TabAccess): boolean {
+  if (tab.slug === 'level_1') return caps.levels.includes(1)
+  if (tab.slug === 'level_2') return caps.levels.includes(2)
+  return false
+}
+
 /** Upload, publish and hide videos in the tab. Owner/admin: always. */
 export function canUploadToTab(caps: Capabilities, roles: readonly string[], tab: TabAccess): boolean {
+  if (caps.isPartial) return false
   return caps.isManager || holdsAny(roles, tab.uploadRoleIds)
 }
 
 /** Edit details, reorder and delete videos, and edit the tab's description. */
 export function canManageTabContent(caps: Capabilities, roles: readonly string[], tab: TabAccess): boolean {
+  if (caps.isPartial) return false
   return caps.isManager || holdsAny(roles, tab.manageRoleIds)
 }
 
 /** May open the tab at all. */
 export function canViewTab(caps: Capabilities, roles: readonly string[], tab: TabAccess): boolean {
+  if (caps.isPartial) return partialMayView(caps, tab)
   if (caps.isManager) return true
   if (canUploadToTab(caps, roles, tab) || canManageTabContent(caps, roles, tab)) return true
   // The Student role is required to view anything (mentors are staff and exempt).
@@ -115,6 +133,7 @@ export function canEditTabDescription(caps: Capabilities, roles: readonly string
 
 /** Create, rename, reorder and delete tabs and change their role lists. */
 export function canManageTabs(caps: Capabilities, roles: readonly string[], settings: TabSettings): boolean {
+  if (caps.isPartial) return false
   if (caps.isOwner) return true
   return holdsAny(roles, settings.tabManagerRoleIds)
 }

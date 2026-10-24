@@ -145,6 +145,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       isStaff: caps.isStaff,
       isManager: caps.isManager,
       isStudent: caps.isStudent,
+      isPartial: caps.isPartial,
       /** Owner, or a holder of a "tab manager" role: sees the Tabs admin page. */
       canManageTabs: canManageTabs(caps, roles, settings.value),
       levels: legacyLevels,

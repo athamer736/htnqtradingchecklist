@@ -9,7 +9,7 @@ export const VIDEO_LEVELS: VideoLevel[] = [1, 2, 3]
 
 export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
-export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'none'
+export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'partial' | 'none'
 
 /**
  * File picker filter for uploads. `video/*` alone hides .mkv on Windows, where
@@ -156,6 +156,8 @@ export interface MentorshipCapabilities {
   isStaff: boolean
   isManager: boolean
   isStudent: boolean
+  /** Limited payment-plan member: only the Level 1-2 tabs their roles cover, nothing else. */
+  isPartial: boolean
   /** Owner, or holds a "tab manager" role: sees the Tabs page in Admin. */
   canManageTabs: boolean
   canUpload: {
