@@ -95,7 +95,7 @@ export async function writeContentAudit(
     actor_user_id: string
     actor_discord_id: string
     action: string
-    target_kind: 'video' | 'recording' | 'member' | 'level' | 'section'
+    target_kind: 'video' | 'recording' | 'member' | 'level' | 'section' | 'tab'
     /** Null for member, level and section targets, which are identified another way. */
     target_id: string | null
     /** Set for 'member' targets (an id, never a name). */

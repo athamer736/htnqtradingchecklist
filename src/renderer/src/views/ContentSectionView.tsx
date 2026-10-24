@@ -6,52 +6,6 @@ import UploadDialog from '../components/video/UploadDialog'
 import VideoPlayer from '../components/video/VideoPlayer'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { useMentorship } from '../store/useMentorship'
-import {
-  FURTHER_STUDYING_LEVEL,
-  SECTION_LABELS,
-  isBatchSection,
-  levelsInclude,
-  type ContentSection,
-  type MentorshipCapabilities,
-  type VideoLevel
-} from '../../../shared/video'
-
-const INTRO: Record<ContentSection, string> = {
-  level: 'Lessons for this mentorship level.',
-  lectures: 'Full-length mentorship lectures.',
-  weekly_recaps: 'Weekly market recaps and the outlook for the week ahead.',
-  further_studying: 'Extra material for Level 3 members who want to keep going.',
-  july_batch: 'Material for the 1st Of July Batch.',
-  sept_batch: 'Material for the 1st Of September Batch.',
-  batch_5: 'Material for Batch 5.0.'
-}
-
-function sectionTitle(section: ContentSection, level: VideoLevel | null): string {
-  return section === 'level' ? `Level ${level}` : SECTION_LABELS[section]
-}
-
-/** Why a non-staff caller cannot see this section, or null when they can. */
-export function lockReason(
-  caps: MentorshipCapabilities,
-  section: ContentSection,
-  level: VideoLevel | null
-): string | null {
-  if (caps.isStaff) return null
-  if (!caps.isStudent) {
-    return 'Mentorship content needs the Student role in the HTNQ Discord. Contact staff if you believe this is wrong.'
-  }
-  if (section === 'level' && level !== null && !levelsInclude(caps.levels, level)) {
-    const roles = ([1, 2, 3] as VideoLevel[]).filter((l) => l >= level).map((l) => `Level ${l}`)
-    return `Level ${level} unlocks with the ${roles.join(' or ')} Discord role.`
-  }
-  if (section === 'further_studying' && !levelsInclude(caps.levels, FURTHER_STUDYING_LEVEL)) {
-    return 'Further Studying unlocks with the Level 3 Discord role.'
-  }
-  if (isBatchSection(section) && !(caps.batches ?? []).includes(section)) {
-    return `${SECTION_LABELS[section]} unlocks with the ${SECTION_LABELS[section]} Discord role.`
-  }
-  return null
-}
 
 export function MentorshipStatus(): JSX.Element | null {
   const status = useMentorship((s) => s.status)
@@ -91,15 +45,10 @@ export function MentorshipStatus(): JSX.Element | null {
   return null
 }
 
-export default function ContentSectionView({
-  section,
-  level = null
-}: {
-  section: ContentSection
-  level?: VideoLevel | null
-}): JSX.Element {
+export default function ContentSectionView({ tabId }: { tabId: string }): JSX.Element {
   const status = useMentorship((s) => s.status)
   const caps = useMentorship((s) => s.capabilities)
+  const tab = useMentorship((s) => s.tabs.find((t) => t.id === tabId))
   const videos = useMentorship((s) => s.videos)
   const load = useMentorship((s) => s.load)
   const playing = useMentorship((s) => s.playing)
@@ -107,12 +56,7 @@ export default function ContentSectionView({
   const playError = useMentorship((s) => s.playError)
   const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
-  const levelDescriptions = useMentorship((s) => s.levelDescriptions)
-  const sectionDescriptions = useMentorship((s) => s.sectionDescriptions)
-  const canEditDescriptions = useMentorship((s) => s.canEditLevelDescriptions)
-  const loadDescriptions = useMentorship((s) => s.loadDescriptions)
-  const saveLevelDescription = useMentorship((s) => s.saveLevelDescription)
-  const saveSectionDescription = useMentorship((s) => s.saveSectionDescription)
+  const saveTabDescription = useMentorship((s) => s.saveTabDescription)
   const [uploading, setUploading] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
 
@@ -121,11 +65,6 @@ export default function ContentSectionView({
     return () => stop()
   }, [load, stop])
 
-  useEffect(() => {
-    void loadDescriptions()
-  }, [section, level, loadDescriptions])
-
-  const title = sectionTitle(section, level)
   const gate = <MentorshipStatus />
   if (status !== 'ready' || !caps) return gate
 
@@ -154,47 +93,40 @@ export default function ContentSectionView({
     )
   }
 
-  const locked = lockReason(caps, section, level)
-  const items = videos.filter((v) => v.section === section && (section !== 'level' || v.level === level))
-  const canUpload = caps.canUpload[section]
-  // A Level page and each other section page carry their own owner/admin-written text.
-  const describable = section !== 'level' || level !== null
-  const descriptionText = !describable || locked
-    ? undefined
-    : section === 'level'
-      ? levelDescriptions[level as VideoLevel]?.description
-      : sectionDescriptions[section]?.description
-  const canWriteDescription = describable && !locked && canEditDescriptions
-  const descriptionLabel = section === 'level' ? `About Level ${level}` : `About ${SECTION_LABELS[section]}`
-  const saveDescription = (text: string): Promise<string | null> =>
-    section === 'level' ? saveLevelDescription(level as VideoLevel, text) : saveSectionDescription(section, text)
+  // The server only returns tabs this member may open. A tab that vanished (deleted,
+  // or roles changed) is redirected away by App; this covers the moment in between.
+  if (!tab) {
+    return (
+      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted">
+        This tab is no longer available to you.
+      </div>
+    )
+  }
+
+  const items = videos.filter((v) => v.tabId === tab.id)
+  // People who upload to or manage the tab also see its private videos.
+  const seesPrivate = caps.isStaff || tab.canUpload || tab.canManage
+  const descriptionText = tab.description ?? undefined
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-100">{title}</h1>
+          <h1 className="text-xl font-semibold text-slate-100">{tab.title}</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            {INTRO[section]} Playback shows your Discord ID and username (and your legal name, if one is on file) as a watermark.
+            Playback shows your Discord ID and username (and your legal name, if one is on file) as a watermark.
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => {
-              void load()
-              void loadDescriptions()
-            }}
-          >
+          <button type="button" className="btn-ghost" onClick={() => void load()}>
             Refresh
           </button>
-          {canWriteDescription && (
+          {tab.canManage && (
             <button type="button" className="btn-ghost" onClick={() => setEditingDescription(true)}>
               {descriptionText ? 'Edit description' : 'Add description'}
             </button>
           )}
-          {canUpload && (
+          {tab.canUpload && (
             <button type="button" className="btn-primary" onClick={() => setUploading(true)}>
               Upload video
             </button>
@@ -204,19 +136,11 @@ export default function ContentSectionView({
 
       {playError && <PlaybackNotice error={playError} onDismiss={stop} />}
 
-      {descriptionText && <DescriptionCard label={descriptionLabel} text={descriptionText} />}
+      {descriptionText && <DescriptionCard label={`About ${tab.title}`} text={descriptionText} />}
 
-      {locked ? (
-        <div className="flex items-start gap-3 rounded-xl border border-line bg-bg-card px-4 py-4 text-sm text-muted">
-          <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <rect x="5" y="11" width="14" height="9" rx="2" />
-            <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-          </svg>
-          <p>{locked}</p>
-        </div>
-      ) : items.length === 0 ? (
+      {items.length === 0 ? (
         <p className="text-sm text-muted">
-          {caps.isStaff ? 'Nothing here yet.' : 'No videos have been published here yet.'}
+          {seesPrivate ? 'Nothing here yet.' : 'No videos have been published here yet.'}
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -225,36 +149,27 @@ export default function ContentSectionView({
               key={v.id}
               kind="video"
               item={v}
-              badge={section === 'level' ? `Level ${v.level}` : undefined}
-              isStaff={caps.isStaff}
+              isStaff={seesPrivate}
               onChanged={() => void load()}
             />
           ))}
         </div>
       )}
 
-      {editingDescription && describable && (
+      {editingDescription && (
         <PageDescriptionDialog
-          title={`${sectionTitle(section, level)} description`}
-          audience={
-            section === 'level'
-              ? `Students with Level ${level} access`
-              : section === 'further_studying'
-                ? 'Students with the Level 3 role'
-                : isBatchSection(section)
-                  ? `Students in the ${SECTION_LABELS[section]}`
-                  : 'Students'
-          }
-          fieldId={`${section}-${level ?? 'page'}-description`}
+          title={`${tab.title} description`}
+          audience={`Members who can open ${tab.title}`}
+          fieldId={`${tab.id}-description`}
           initial={descriptionText ?? ''}
-          onSave={saveDescription}
+          onSave={(text) => saveTabDescription(tab.id, text)}
           onClose={() => setEditingDescription(false)}
         />
       )}
 
       {uploading && (
         <UploadDialog
-          target={{ kind: 'video', section, level: section === 'level' ? level : null }}
+          target={{ kind: 'video', tabId: tab.id, tabTitle: tab.title }}
           onClose={() => setUploading(false)}
           onUploaded={() => void load()}
         />

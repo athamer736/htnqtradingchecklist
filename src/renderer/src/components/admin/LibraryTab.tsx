@@ -4,7 +4,7 @@ import EditDetailsDialog from '../video/EditDetailsDialog'
 import ThumbnailButton from '../video/ThumbnailButton'
 import { formatDuration } from '../video/ContentCard'
 import { useMentorship, type ManageAction } from '../../store/useMentorship'
-import { SECTION_LABELS, type ContentSection, type ContentVideo } from '../../../../shared/video'
+import type { ContentVideo, MentorshipTab } from '../../../../shared/video'
 
 // Every video in one place, grouped the way members see them, with reordering.
 // Upload happens on each section's page; this is the manager's overview for
@@ -17,35 +17,15 @@ interface Group {
   videos: ContentVideo[]
 }
 
-function buildGroups(videos: ContentVideo[]): Group[] {
-  // `videos` arrives in the server's display order (sort_ord, then newest), so
-  // filtering preserves exactly the order members see in each section.
-  const groups: Group[] = []
-  for (const level of [1, 2, 3] as const) {
-    groups.push({
-      key: `level-${level}`,
-      label: `Level ${level}`,
-      videos: videos.filter((v) => v.section === 'level' && v.level === level)
-    })
-  }
-  // Further Studying sits right after Level 3, the same place it has in the sidebar.
-  for (const section of [
-    'further_studying',
-    'lectures',
-    'weekly_recaps',
-    'july_batch',
-    'sept_batch',
-    'batch_5'
-  ] as ContentSection[]) {
-    groups.push({
-      key: section,
-      label: SECTION_LABELS[section],
-      videos: videos.filter((v) => v.section === section)
-    })
-  }
-  return groups
+function buildGroups(tabs: MentorshipTab[], videos: ContentVideo[]): Group[] {
+  // `tabs` and `videos` arrive in the server's display order (the admins' tab order,
+  // then sort_ord and newest), so filtering preserves exactly what members see.
+  return tabs.map((t) => ({
+    key: t.id,
+    label: t.title,
+    videos: videos.filter((v) => v.tabId === t.id)
+  }))
 }
-
 const STATUS_CHIP: Record<string, { label: string; className: string }> = {
   uploading: { label: 'Uploading', className: 'bg-sky-400/15 text-sky-200' },
   processing: { label: 'Processing', className: 'bg-amber-400/15 text-amber-200' },
@@ -53,6 +33,7 @@ const STATUS_CHIP: Record<string, { label: string; className: string }> = {
 }
 
 export default function LibraryTab(): JSX.Element {
+  const tabs = useMentorship((s) => s.tabs)
   const videos = useMentorship((s) => s.videos)
   const manage = useMentorship((s) => s.manage)
   const load = useMentorship((s) => s.load)
@@ -62,7 +43,7 @@ export default function LibraryTab(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<ContentVideo | null>(null)
 
-  const groups = useMemo(() => buildGroups(videos), [videos])
+  const groups = useMemo(() => buildGroups(tabs, videos), [tabs, videos])
 
   const run = async (video: ContentVideo, action: ManageAction): Promise<string | null> => {
     setBusyId(video.id)
@@ -90,8 +71,8 @@ export default function LibraryTab(): JSX.Element {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-[11px] leading-relaxed text-muted">
-        Order here is the order members see inside each section. Upload new videos from the section pages in the
-        Mentorship menu.
+        Order here is the order members see inside each tab. Upload new videos from the tab pages in the Mentorship
+        menu; add, rename or reorder the tabs themselves under Tabs.
       </p>
       {error && (
         <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-xs text-rose-100">
@@ -130,7 +111,7 @@ export default function LibraryTab(): JSX.Element {
                       <button
                         type="button"
                         className="btn-ghost px-2 py-1 text-xs"
-                        disabled={busy || i === 0}
+                        disabled={busy || i === 0 || !v.canReorder}
                         title="Move up"
                         onClick={() => void run(v, { action: 'move', direction: 'up' })}
                       >
@@ -139,7 +120,7 @@ export default function LibraryTab(): JSX.Element {
                       <button
                         type="button"
                         className="btn-ghost px-2 py-1 text-xs"
-                        disabled={busy || i === g.videos.length - 1}
+                        disabled={busy || i === g.videos.length - 1 || !v.canReorder}
                         title="Move down"
                         onClick={() => void run(v, { action: 'move', direction: 'down' })}
                       >

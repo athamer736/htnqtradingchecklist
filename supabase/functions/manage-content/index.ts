@@ -1,12 +1,15 @@
 // manage-content
 //
 // { kind: 'video' | 'recording', id, action, ... }
-//   set_visibility   owner/admin: everything; mentor: Level videos and recordings
-//   update_metadata  owner/admin only (title / description)
-//   delete           owner/admin only; deletes the Bunny video, then soft-deletes the row
-//   refresh_status   any staff; re-reads encoding status from Bunny
-//   move             owner/admin; videos only: swap with the neighbour above/below
-//                    inside its section (or Level)
+//   set_visibility   video: the tab's upload/manage roles (or owner/admin);
+//                    recording: any staff
+//   update_metadata  video: the tab's manage roles (or owner/admin); recording: owner/admin
+//   delete           same people as update_metadata; deletes the Bunny video, then
+//                    soft-deletes the row
+//   refresh_status   anyone who sees unfinished items in that tab (recordings: staff);
+//                    re-reads encoding status from Bunny
+//   move             video only: the tab's manage roles (or owner/admin); swap with the
+//                    neighbour above/below inside its tab
 //
 // Every permission is decided from LIVE Discord roles and every action is
 // written to content_audit.
@@ -16,20 +19,23 @@ import { deleteBunnyVideo, getBunnyVideo, mapBunnyStatus } from '../_shared/bunn
 import { loadContext, writeContentAudit } from '../_shared/context.ts'
 import {
   canDeleteRecording,
-  canDeleteVideo,
   canEditRecording,
-  canEditVideo,
-  canReorderContent,
   canSetRecordingVisibility,
-  canSetVideoVisibility,
-  type ContentSection,
-  type EncodingStatus,
-  type Visibility
+  type EncodingStatus
 } from '../_shared/decisions.ts'
 import { handleOptions, json, readJsonBody } from '../_shared/http.ts'
 import { deny } from '../_shared/messages.ts'
 import { planMove, sortOrdUpdates } from '../_shared/ordering.ts'
-import type { VideoLevel } from '../_shared/roles.ts'
+import {
+  canDeleteTabVideo,
+  canEditTabVideo,
+  canReorderTabVideos,
+  canSeeUnpublishedInTab,
+  canSetTabVideoVisibility,
+  canViewTab
+} from '../_shared/tabAccess.ts'
+import { slugForLegacy } from '../_shared/tabCompat.ts'
+import { getTab, type TabRecord } from '../_shared/tabStore.ts'
 import { parseManageRequest } from '../_shared/validation.ts'
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -49,13 +55,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const auth = await authorize(req, ctx.authzDeps)
   if (!auth.ok) return deny(auth.reasonCode)
-  const { caps, discordId, userId } = auth
-  if (!caps.isStaff) return deny('forbidden')
+  const { caps, roles, discordId, userId } = auth
 
   const isVideo = request.kind === 'video'
+  // Recordings are not tab content: they stay a staff-only area.
+  if (!isVideo && !caps.isStaff) return deny('forbidden')
+
   const table = isVideo ? 'videos' : 'student_recordings'
   const columns = isVideo
-    ? 'id, bunny_video_id, section, level, title, visibility, encoding_status'
+    ? 'id, bunny_video_id, tab_id, section, level, title, visibility, encoding_status'
     : 'id, bunny_video_id, student_discord_id, title, visibility, encoding_status'
 
   const { data: found, error: loadErr } = await admin
@@ -68,14 +76,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!found) return deny('video_not_found')
   const row = found as unknown as Record<string, unknown>
   const bunnyVideoId = row.bunny_video_id as string
-  const videoItem = isVideo
-    ? {
-        section: row.section as ContentSection,
-        level: (row.level as VideoLevel | null) ?? null,
-        visibility: row.visibility as Visibility,
-        encodingStatus: row.encoding_status as EncodingStatus
-      }
-    : null
+
+  // The tab a video lives in decides who may touch it. Someone who cannot even open
+  // the tab is told the video does not exist.
+  let tab: TabRecord | null = null
+  if (isVideo) {
+    const ref =
+      typeof row.tab_id === 'string'
+        ? ({ by: 'id', id: row.tab_id } as const)
+        : ({ by: 'slug', slug: slugForLegacy(row.section, row.level ?? null) ?? '' } as const)
+    const loaded = await getTab(admin, ref)
+    if (!loaded.ok) return deny('upstream_failed')
+    tab = loaded.value
+    if (!tab || !canViewTab(caps, roles, tab)) return deny('video_not_found')
+  }
 
   const audit = (action: string, detail?: Record<string, unknown>) =>
     writeContentAudit(admin, {
@@ -90,7 +104,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   switch (request.action) {
     case 'set_visibility': {
-      const allowed = videoItem ? canSetVideoVisibility(caps, videoItem) : canSetRecordingVisibility(caps)
+      const allowed = tab ? canSetTabVideoVisibility(caps, roles, tab) : canSetRecordingVisibility(caps)
       if (!allowed) return deny('forbidden')
       const patch: Record<string, unknown> = { visibility: request.visibility, updated_at: nowIso() }
       // Keep the legacy boolean in sync so the migration backfill stays a no-op.
@@ -102,7 +116,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'update_metadata': {
-      const allowed = isVideo ? canEditVideo(caps) : canEditRecording(caps)
+      const allowed = tab ? canEditTabVideo(caps, roles, tab) : canEditRecording(caps)
       if (!allowed) return deny('forbidden')
       const patch: Record<string, unknown> = { updated_at: nowIso() }
       if (request.title !== null) patch.title = request.title
@@ -117,7 +131,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'delete': {
-      const allowed = isVideo ? canDeleteVideo(caps) : canDeleteRecording(caps)
+      const allowed = tab ? canDeleteTabVideo(caps, roles, tab) : canDeleteRecording(caps)
       if (!allowed) return deny('forbidden')
       if (!env.bunnyLibraryId || !env.bunnyApiKey) return deny('misconfigured')
       // Bunny first: if it fails the row stays, so nothing is left playable but unlisted.
@@ -132,16 +146,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'move': {
-      if (!isVideo || !canReorderContent(caps)) return deny('forbidden')
-      // The group is whatever shares this video's section (and Level, for Level
-      // videos), ordered exactly as list-content shows it.
-      let groupQuery = admin
+      if (!tab || !canReorderTabVideos(caps, roles, tab)) return deny('forbidden')
+      // The group is whatever shares this video's tab, ordered exactly as
+      // list-content shows it.
+      const { data: group, error: groupErr } = await admin
         .from('videos')
         .select('id, sort_ord')
         .is('deleted_at', null)
-        .eq('section', row.section as string)
-      groupQuery = row.level === null ? groupQuery.is('level', null) : groupQuery.eq('level', row.level as number)
-      const { data: group, error: groupErr } = await groupQuery
+        .eq('tab_id', tab.id)
         .order('sort_ord', { ascending: true })
         .order('created_at', { ascending: false })
       if (groupErr || !group) return deny('upstream_failed')
@@ -166,6 +178,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'refresh_status': {
+      if (tab && !canSeeUnpublishedInTab(caps, roles, tab)) return deny('forbidden')
       if (!env.bunnyLibraryId || !env.bunnyApiKey) return deny('misconfigured')
       const info = await getBunnyVideo(env.bunnyLibraryId, env.bunnyApiKey, bunnyVideoId)
       let next: EncodingStatus

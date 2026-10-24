@@ -1,10 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  canReorderContent,
-  canViewMemberIdentity,
-  canViewMembers
-} from '../supabase/functions/_shared/decisions.ts'
+import { canViewMemberIdentity, canViewMembers } from '../supabase/functions/_shared/decisions.ts'
 import { resolveCapabilities, DEFAULT_ROLE_IDS as R } from '../supabase/functions/_shared/roles.ts'
 import { parseManageRequest, parseMemberIdentityRequest } from '../supabase/functions/_shared/validation.ts'
 
@@ -22,9 +18,8 @@ describe('admin permissions (all decided from live roles)', () => {
     ['no role', [], false]
   ]
   for (const [label, roles, allowed] of cases) {
-    it(`${label}: reorder / members / identity = ${allowed}`, () => {
+    it(`${label}: members / identity = ${allowed}`, () => {
       const caps = as(...roles)
-      assert.equal(canReorderContent(caps), allowed)
       assert.equal(canViewMembers(caps), allowed)
       assert.equal(canViewMemberIdentity(caps), allowed)
     })

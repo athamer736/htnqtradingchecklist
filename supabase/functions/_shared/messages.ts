@@ -23,6 +23,8 @@ export type DenyCode =
   | 'invalid_request'
   | 'invalid_name'
   | 'upstream_failed'
+  | 'tab_not_found'
+  | 'tab_not_empty'
 
 export const DENY_MESSAGES: Record<DenyCode, string> = {
   unauthenticated: 'Sign in with Discord to watch mentorship videos.',
@@ -53,7 +55,9 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
   invalid_request: 'That request was not valid.',
   invalid_name:
     'That is not a valid legal name. Enter the full name using letters (2 to 200 characters), with no placeholders.',
-  upstream_failed: 'The video service could not complete that request. Try again shortly.'
+  upstream_failed: 'The video service could not complete that request. Try again shortly.',
+  tab_not_found: 'That tab no longer exists.',
+  tab_not_empty: 'Delete or move every video out of this tab before deleting it.'
 }
 
 export const DENY_STATUS: Record<DenyCode, number> = {
@@ -75,7 +79,9 @@ export const DENY_STATUS: Record<DenyCode, number> = {
   misconfigured: 500,
   invalid_request: 400,
   invalid_name: 400,
-  upstream_failed: 502
+  upstream_failed: 502,
+  tab_not_found: 404,
+  tab_not_empty: 409
 }
 
 export function denyBody(reasonCode: DenyCode): { ok: false; reasonCode: DenyCode; message: string } {

@@ -3,7 +3,8 @@ import { createHmac } from 'node:crypto'
 import { describe, it } from 'node:test'
 import { setBunnyThumbnail } from '../supabase/functions/_shared/bunnyApi'
 import { signBunnyCdnFileUrl } from '../supabase/functions/_shared/bunnyAuth'
-import { canSetVideoThumbnail } from '../supabase/functions/_shared/decisions'
+import { canSetTabVideoThumbnail } from '../supabase/functions/_shared/tabAccess'
+import { seedTab } from './helpers/seedTabs'
 import { resolveCapabilities } from '../supabase/functions/_shared/roles'
 import {
   detectImageType,
@@ -119,7 +120,7 @@ describe('thumbnailFileProblem (client check)', () => {
   })
 })
 
-describe('canSetVideoThumbnail', () => {
+describe('canSetTabVideoThumbnail', () => {
   const cfg = {
     owner: '1000000000000000001',
     admin: '1000000000000000002',
@@ -129,23 +130,26 @@ describe('canSetVideoThumbnail', () => {
     level2: '1000000000000000006',
     level3: '1000000000000000007'
   }
-  const level = { section: 'level', level: 1, visibility: 'published', encodingStatus: 'ready' } as const
-  const lecture = { section: 'lectures', level: null, visibility: 'published', encodingStatus: 'ready' } as const
+  // Seeded tabs name the real mentor role; this test uses its own ids, so give the tabs those.
+  const level = { viewRoleIds: [cfg.mentor], uploadRoleIds: [cfg.mentor], manageRoleIds: [] }
+  const lecture = seedTab('lectures')
+  const who = (...roles: string[]) => ({ caps: resolveCapabilities(roles, cfg), roles })
 
-  it('lets owner/admin set any video and mentors only Level videos', () => {
-    const admin = resolveCapabilities([cfg.admin], cfg)
-    const mentor = resolveCapabilities([cfg.mentor], cfg)
-    assert.equal(canSetVideoThumbnail(admin, lecture), true)
-    assert.equal(canSetVideoThumbnail(mentor, level), true)
-    assert.equal(canSetVideoThumbnail(mentor, lecture), false)
+  it('lets owner/admin set any video and mentors only where they may upload', () => {
+    const admin = who(cfg.admin)
+    const mentor = who(cfg.mentor)
+    assert.equal(canSetTabVideoThumbnail(admin.caps, admin.roles, lecture), true)
+    assert.equal(canSetTabVideoThumbnail(mentor.caps, mentor.roles, level), true)
+    assert.equal(canSetTabVideoThumbnail(mentor.caps, mentor.roles, lecture), false)
   })
 
   it('never lets students or members without roles change it', () => {
-    assert.equal(canSetVideoThumbnail(resolveCapabilities([cfg.student, cfg.level3], cfg), level), false)
-    assert.equal(canSetVideoThumbnail(resolveCapabilities([], cfg), level), false)
+    const student = who(cfg.student, cfg.level3)
+    const nobody = who()
+    assert.equal(canSetTabVideoThumbnail(student.caps, student.roles, level), false)
+    assert.equal(canSetTabVideoThumbnail(nobody.caps, nobody.roles, level), false)
   })
 })
-
 describe('setBunnyThumbnail', () => {
   it('posts the raw bytes to the video thumbnail endpoint with the library key', async () => {
     let seen: { url: string; init: RequestInit } | null = null

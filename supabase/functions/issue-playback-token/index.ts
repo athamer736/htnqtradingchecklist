@@ -19,13 +19,14 @@
 import { authorize } from '../_shared/authz.ts'
 import { buildBunnyEmbedUrl, signBunnyEmbedToken } from '../_shared/bunnyAuth.ts'
 import { loadContext } from '../_shared/context.ts'
-import { isContentSection, type EncodingStatus, type Visibility } from '../_shared/decisions.ts'
+import type { EncodingStatus, Visibility } from '../_shared/decisions.ts'
 import { handleOptions, json, newSessionRef, readJsonBody } from '../_shared/http.ts'
 import { readStoredName } from '../_shared/memberNameStore.ts'
 import { deny } from '../_shared/messages.ts'
 import { fetchMentorshipAccess } from '../_shared/mentorshipApi.ts'
 import { runPlayback, type LoadedRecording, type LoadedVideo } from '../_shared/playback.ts'
-import type { VideoLevel } from '../_shared/roles.ts'
+import { slugForLegacy } from '../_shared/tabCompat.ts'
+import { getTab } from '../_shared/tabStore.ts'
 import { parsePlaybackRequest } from '../_shared/validation.ts'
 
 const RENEW_LEAD_SECONDS = 90
@@ -57,15 +58,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
     loadVideo: async (id): Promise<LoadedVideo | null> => {
       const { data } = await admin
         .from('videos')
-        .select('id, bunny_video_id, section, level, visibility, encoding_status, deleted_at')
+        .select('id, bunny_video_id, tab_id, section, level, visibility, encoding_status, deleted_at')
         .eq('id', id)
         .maybeSingle()
-      if (!data || data.deleted_at || !isContentSection(data.section)) return null
+      if (!data || data.deleted_at) return null
+      const ref =
+        typeof data.tab_id === 'string'
+          ? ({ by: 'id', id: data.tab_id } as const)
+          : ({ by: 'slug', slug: slugForLegacy(data.section, data.level ?? null) ?? '' } as const)
+      const tab = await getTab(admin, ref)
+      // A video with no tab is unplayable; a failed read denies rather than allows.
+      if (!tab.ok || !tab.value) return null
       return {
         id: data.id as string,
         bunnyVideoId: data.bunny_video_id as string,
-        section: data.section,
-        level: (data.level as VideoLevel | null) ?? null,
+        tab: tab.value,
+        level: (data.level as number | null) ?? null,
         visibility: data.visibility as Visibility,
         encodingStatus: data.encoding_status as EncodingStatus
       }

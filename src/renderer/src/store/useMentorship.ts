@@ -1,22 +1,22 @@
 import { create } from 'zustand'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
-  DESCRIBED_SECTION_LABELS,
   PLAYBACK_MESSAGES,
+  type AdminTab,
   type ContentVideo,
-  type DescribedSection,
-  type LevelDescription,
+  type DiscordRole,
   type MentorshipCapabilities,
+  type MentorshipTab,
   type PlaybackDenied,
   type PlaybackDenyReason,
   type PlaybackSuccess,
   type PlaybackTarget,
-  type SectionDescription,
+  type RecordingsDescription,
   type StudentRecording,
   type StudentSummary,
+  type TabInput,
   type UploadCredentials,
   type UploadTarget,
-  type VideoLevel,
   type Visibility,
   thumbnailFileProblem
 } from '../../../shared/video'
@@ -109,14 +109,25 @@ interface MentorshipState {
   status: LoadStatus
   error: Failure | null
   capabilities: MentorshipCapabilities | null
+  /** The tabs the caller may open, in display order. */
+  tabs: MentorshipTab[]
   videos: ContentVideo[]
 
-  /** Level page descriptions the caller may read, keyed by Level. */
-  levelDescriptions: Partial<Record<VideoLevel, LevelDescription>>
-  /** Descriptions of the other Mentorship pages the caller may read. */
-  sectionDescriptions: Partial<Record<DescribedSection, SectionDescription>>
-  /** True for owner/admin: may write page descriptions. */
-  canEditLevelDescriptions: boolean
+  /** The Recordings page text, when the caller may read it and one is set. */
+  recordingsDescription: RecordingsDescription | null
+  /** True for owner/admin: may write the Recordings page text. */
+  canEditRecordingsDescription: boolean
+
+  /** Tab managers only: every tab with its role lists (Admin > Tabs). */
+  adminTabs: AdminTab[]
+  adminTabsStatus: LoadStatus
+  adminTabsError: Failure | null
+  /** Roles whose holders may manage tabs (the owner always can). */
+  tabManagerRoleIds: string[]
+  /** Only the owner may change the tab-manager roles. */
+  canEditTabManagers: boolean
+  /** The server's Discord roles for the pickers (null until loaded). */
+  discordRoles: DiscordRole[] | null
 
   /** Staff: students who already have recordings (picker shortcuts). */
   studentSummaries: StudentSummary[]
@@ -134,11 +145,23 @@ interface MentorshipState {
   playLoading: boolean
 
   load: () => Promise<void>
-  /** Loads every Level and page description the caller may read. */
-  loadDescriptions: () => Promise<void>
+  /** Loads the Recordings page text (tab descriptions arrive with `load`). */
+  loadRecordingsDescription: () => Promise<void>
   /** Owner/admin. A blank text removes the description. Resolves to an error message, or null on success. */
-  saveLevelDescription: (level: VideoLevel, text: string) => Promise<string | null>
-  saveSectionDescription: (section: DescribedSection, text: string) => Promise<string | null>
+  saveRecordingsDescription: (text: string) => Promise<string | null>
+  /** The tab's manage roles (or owner/admin). Blank removes the description. Error message or null. */
+  saveTabDescription: (tabId: string, text: string) => Promise<string | null>
+
+  loadAdminTabs: () => Promise<void>
+  loadDiscordRoles: () => Promise<void>
+  createTab: (input: TabInput) => Promise<string | null>
+  updateTab: (id: string, patch: Partial<TabInput>) => Promise<string | null>
+  deleteTab: (id: string) => Promise<string | null>
+  moveTab: (id: string, direction: 'up' | 'down') => Promise<string | null>
+  /** Drag and drop: `id` was dropped into the order `ids` (every tab). Shows the new order at once. */
+  reorderTabs: (id: string, ids: string[]) => Promise<string | null>
+  /** Owner only. */
+  saveTabManagers: (roleIds: string[]) => Promise<string | null>
   loadStudentSummaries: () => Promise<void>
   loadRecordings: (studentDiscordId: string | null) => Promise<void>
   searchStudents: (query: string) => Promise<Result<{ students: StudentSummary[] }>>
@@ -158,10 +181,16 @@ const initial = {
   status: 'idle' as LoadStatus,
   error: null,
   capabilities: null,
+  tabs: [],
   videos: [],
-  levelDescriptions: {},
-  sectionDescriptions: {},
-  canEditLevelDescriptions: false,
+  recordingsDescription: null,
+  canEditRecordingsDescription: false,
+  adminTabs: [],
+  adminTabsStatus: 'idle' as LoadStatus,
+  adminTabsError: null,
+  tabManagerRoleIds: [],
+  canEditTabManagers: false,
+  discordRoles: null,
   studentSummaries: [],
   recordingsStatus: 'idle' as LoadStatus,
   recordingsError: null,
@@ -201,63 +230,142 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
     set({ status: get().capabilities ? 'ready' : 'loading', error: null })
     const body = await invoke('list-content', {})
     if (!body || body.ok !== true) {
-      set({ status: 'error', error: toFailure(body, 'Could not load mentorship content.'), capabilities: null, videos: [] })
+      set({
+        status: 'error',
+        error: toFailure(body, 'Could not load mentorship content.'),
+        capabilities: null,
+        tabs: [],
+        videos: []
+      })
       return
     }
     set({
       status: 'ready',
       capabilities: body.capabilities as MentorshipCapabilities,
+      tabs: Array.isArray(body.tabs) ? (body.tabs as MentorshipTab[]) : [],
       videos: (body.videos as ContentVideo[] | undefined) ?? []
     })
   },
 
-  loadDescriptions: async () => {
+  loadRecordingsDescription: async () => {
     const body = await invoke('level-descriptions', { action: 'list' })
-    // A failure just means no description is shown; the videos still work.
-    if (body?.ok !== true || !Array.isArray(body.levels)) return
-    const levels: Partial<Record<VideoLevel, LevelDescription>> = {}
-    for (const d of body.levels as LevelDescription[]) {
-      if ((d.level === 1 || d.level === 2 || d.level === 3) && typeof d.description === 'string') levels[d.level] = d
-    }
-    const sections: Partial<Record<DescribedSection, SectionDescription>> = {}
-    const known = Object.keys(DESCRIBED_SECTION_LABELS)
-    for (const d of Array.isArray(body.sections) ? (body.sections as SectionDescription[]) : []) {
-      if (known.includes(d.section) && typeof d.description === 'string') sections[d.section] = d
-    }
-    set({ levelDescriptions: levels, sectionDescriptions: sections, canEditLevelDescriptions: body.canEdit === true })
+    // A failure just means no description is shown; the recordings still work.
+    if (body?.ok !== true) return
+    const entry = (Array.isArray(body.sections) ? (body.sections as Array<Record<string, unknown>>) : []).find(
+      (d) => d.section === 'recordings' && typeof d.description === 'string'
+    )
+    set({
+      recordingsDescription: entry
+        ? {
+            description: entry.description as string,
+            updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : ''
+          }
+        : null,
+      canEditRecordingsDescription: body.canEdit === true
+    })
   },
 
-  saveLevelDescription: async (level, text) => {
-    const body = await invoke('level-descriptions', { action: 'set', level, description: text.trim() ? text : null })
+  saveRecordingsDescription: async (text) => {
+    const body = await invoke('level-descriptions', {
+      action: 'set',
+      section: 'recordings',
+      description: text.trim() ? text : null
+    })
     if (body?.ok !== true) return toFailure(body, 'The description could not be saved.').message
-    const rest = { ...get().levelDescriptions }
-    if (typeof body.description === 'string') {
-      rest[level] = {
-        level,
-        description: body.description,
-        updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : new Date().toISOString()
-      }
-    } else {
-      delete rest[level]
-    }
-    set({ levelDescriptions: rest })
+    set({
+      recordingsDescription:
+        typeof body.description === 'string'
+          ? {
+              description: body.description,
+              updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : new Date().toISOString()
+            }
+          : null
+    })
     return null
   },
 
-  saveSectionDescription: async (section, text) => {
-    const body = await invoke('level-descriptions', { action: 'set', section, description: text.trim() ? text : null })
+  saveTabDescription: async (tabId, text) => {
+    const body = await invoke('level-descriptions', {
+      action: 'set',
+      tabId,
+      description: text.trim() ? text : null
+    })
     if (body?.ok !== true) return toFailure(body, 'The description could not be saved.').message
-    const rest = { ...get().sectionDescriptions }
-    if (typeof body.description === 'string') {
-      rest[section] = {
-        section,
-        description: body.description,
-        updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : new Date().toISOString()
-      }
-    } else {
-      delete rest[section]
+    const next = typeof body.description === 'string' ? body.description : null
+    set({ tabs: get().tabs.map((t) => (t.id === tabId ? { ...t, description: next } : t)) })
+    return null
+  },
+
+  // --- Admin > Tabs ----------------------------------------------------------
+  loadAdminTabs: async () => {
+    set({ adminTabsStatus: get().adminTabs.length > 0 ? 'ready' : 'loading', adminTabsError: null })
+    const body = await invoke('manage-tabs', { action: 'list' })
+    if (!body || body.ok !== true || !Array.isArray(body.tabs)) {
+      set({ adminTabsStatus: 'error', adminTabsError: toFailure(body, 'Could not load the tabs.') })
+      return
     }
-    set({ sectionDescriptions: rest })
+    set({
+      adminTabsStatus: 'ready',
+      adminTabs: body.tabs as AdminTab[],
+      tabManagerRoleIds: Array.isArray(body.tabManagerRoleIds) ? (body.tabManagerRoleIds as string[]) : [],
+      canEditTabManagers: body.canEditManagers === true
+    })
+  },
+
+  loadDiscordRoles: async () => {
+    if (get().discordRoles) return
+    const body = await invoke('manage-tabs', { action: 'roles' })
+    // Without the list the pickers fall back to pasting a role id.
+    if (body?.ok === true && Array.isArray(body.roles)) set({ discordRoles: body.roles as DiscordRole[] })
+  },
+
+  createTab: async (input) => {
+    const body = await invoke('manage-tabs', { action: 'create', ...input })
+    if (body?.ok !== true) return toFailure(body, 'The tab could not be created.').message
+    await Promise.all([get().loadAdminTabs(), get().load()])
+    return null
+  },
+
+  updateTab: async (id, patch) => {
+    const body = await invoke('manage-tabs', { action: 'update', id, ...patch })
+    if (body?.ok !== true) return toFailure(body, 'The tab could not be saved.').message
+    await Promise.all([get().loadAdminTabs(), get().load()])
+    return null
+  },
+
+  deleteTab: async (id) => {
+    const body = await invoke('manage-tabs', { action: 'delete', id })
+    if (body?.ok !== true) return toFailure(body, 'The tab could not be deleted.').message
+    await Promise.all([get().loadAdminTabs(), get().load()])
+    return null
+  },
+
+  moveTab: async (id, direction) => {
+    const body = await invoke('manage-tabs', { action: 'move', id, direction })
+    if (body?.ok !== true) return toFailure(body, 'The tab could not be moved.').message
+    await Promise.all([get().loadAdminTabs(), get().load()])
+    return null
+  },
+
+  reorderTabs: async (id, ids) => {
+    const before = get().adminTabs
+    const byId = new Map(before.map((t) => [t.id, t]))
+    if (ids.length === before.length && ids.every((x) => byId.has(x))) {
+      set({ adminTabs: ids.map((x) => byId.get(x) as AdminTab) })
+    }
+    const body = await invoke('manage-tabs', { action: 'reorder', id, ids })
+    if (body?.ok !== true) {
+      await get().loadAdminTabs()
+      return toFailure(body, 'The tab could not be moved.').message
+    }
+    await Promise.all([get().loadAdminTabs(), get().load()])
+    return null
+  },
+
+  saveTabManagers: async (roleIds) => {
+    const body = await invoke('manage-tabs', { action: 'set_tab_managers', roleIds })
+    if (body?.ok !== true) return toFailure(body, 'The tab managers could not be saved.').message
+    set({ tabManagerRoleIds: roleIds })
     return null
   },
 
@@ -365,7 +473,7 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
         : {
             target:
               req.target.kind === 'video'
-                ? { kind: 'video', section: req.target.section, level: req.target.level }
+                ? { kind: 'video', tabId: req.target.tabId }
                 : { kind: 'recording', studentDiscordId: req.target.studentDiscordId },
             title: req.title,
             description: req.description,

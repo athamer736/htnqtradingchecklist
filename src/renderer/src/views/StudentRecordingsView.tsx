@@ -125,10 +125,10 @@ export default function StudentRecordingsView(): JSX.Element {
   const [student, setStudent] = useState<StudentSummary | null>(null)
   const [uploading, setUploading] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
-  const recordingsDescription = useMentorship((s) => s.sectionDescriptions.recordings)
-  const canEditDescriptions = useMentorship((s) => s.canEditLevelDescriptions)
-  const loadDescriptions = useMentorship((s) => s.loadDescriptions)
-  const saveSectionDescription = useMentorship((s) => s.saveSectionDescription)
+  const recordingsDescription = useMentorship((s) => s.recordingsDescription)
+  const canEditDescriptions = useMentorship((s) => s.canEditRecordingsDescription)
+  const loadDescriptions = useMentorship((s) => s.loadRecordingsDescription)
+  const saveRecordingsDescription = useMentorship((s) => s.saveRecordingsDescription)
 
   useEffect(() => {
     void load()
@@ -273,7 +273,7 @@ export default function StudentRecordingsView(): JSX.Element {
           audience="Students and staff"
           fieldId="recordings-page-description"
           initial={recordingsDescription?.description ?? ''}
-          onSave={(text) => saveSectionDescription('recordings', text)}
+          onSave={(text) => saveRecordingsDescription(text)}
           onClose={() => setEditingDescription(false)}
         />
       )}

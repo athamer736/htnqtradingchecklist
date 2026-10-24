@@ -3,7 +3,7 @@
 ## Implemented (this branch)
 
 - [x] Live Discord role capabilities: owner, admin, mentor, student, inclusive Levels 1-3
-- [x] Sections: Level 1-3, Further Studying (Level 3), Lectures, Weekly Recaps & Outlooks, 1st Of July / 1st Of September / Batch 5.0 batch sections; private/published; encoding status
+- [x] Editable Mentorship tabs (2.0.3; seeded: Level 1-3, Further Studying, Lectures, Weekly Recaps & Outlooks, three batch tabs) with per-tab view / upload / manage roles, the Student role required to view, a Tab managers setting (owner only); private/published; encoding status
 - [x] 1:1 student recordings (staff upload and browse; students see only their own)
 - [x] Edge Functions: `list-content`, `list-recordings`, `list-students`, `create-upload`,
       `manage-content`, `issue-playback-token`, `verify-membership` (`list-videos` removed)
@@ -44,7 +44,8 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
 4. `supabase/migrations/20261019_member_legal_names.sql` (admin-entered legal names)
    and `20261020_level_descriptions.sql` (Level page descriptions + audit widening),
    `20261020_section_descriptions.sql` (descriptions for the other Mentorship pages),
-   `20261020_batch_sections.sql` (the three batch sections)
+   `20261020_batch_sections.sql` (the three batch sections),
+   `20261024_mentorship_tabs.sql` (2.0.3 editable tabs; then deploy `manage-tabs` and redeploy `list-content`, `create-upload`, `manage-content`, `set-thumbnail`, `issue-playback-token`, `level-descriptions`)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 

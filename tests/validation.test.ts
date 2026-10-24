@@ -37,27 +37,45 @@ describe('parsePlaybackRequest', () => {
 })
 
 describe('parseUploadRequest', () => {
+  it('maps the old section/level shape (2.0.2 apps) to the seeded tab slugs', () => {
+    const slugOf = (target: Record<string, unknown>): string | null => {
+      const r = parseUploadRequest({ target: { kind: 'video', ...target }, title: 'x' })
+      if (!r.ok || r.value.mode !== 'create' || r.value.target.kind !== 'video') return null
+      const t = r.value.target.tab
+      return t.by === 'slug' ? t.slug : null
+    }
+    assert.equal(slugOf({ section: 'level', level: 2 }), 'level_2')
+    assert.equal(slugOf({ section: 'weekly_recaps' }), 'weekly_recaps')
+    assert.equal(slugOf({ section: 'further_studying' }), 'further_studying')
+    assert.equal(slugOf({ section: 'batch_5', level: null }), 'batch_5')
+  })
+
   it('requires a level for Level videos and forbids one for other sections', () => {
-    const ok = parseUploadRequest({ target: { kind: 'video', section: 'level', level: 2 }, title: 'Intro' })
-    assert.equal(ok.ok, true)
     assert.equal(parseUploadRequest({ target: { kind: 'video', section: 'level' }, title: 'x' }).ok, false)
     assert.equal(parseUploadRequest({ target: { kind: 'video', section: 'level', level: 4 }, title: 'x' }).ok, false)
     assert.equal(
       parseUploadRequest({ target: { kind: 'video', section: 'lectures', level: 1 }, title: 'x' }).ok,
       false
     )
-    const lecture = parseUploadRequest({ target: { kind: 'video', section: 'weekly_recaps' }, title: 'Week 42' })
-    assert.equal(lecture.ok, true)
-    if (lecture.ok && lecture.value.mode === 'create' && lecture.value.target.kind === 'video') {
-      assert.equal(lecture.value.target.level, null)
-    }
+  })
+
+  it('accepts a tab id (2.0.3 apps) and rejects mixing it with the old shape', () => {
+    const ok = parseUploadRequest({ target: { kind: 'video', tabId: UUID }, title: 'Intro' })
+    assert.deepEqual(ok.ok && ok.value.mode === 'create' && ok.value.target, {
+      kind: 'video',
+      tab: { by: 'id', id: UUID }
+    })
+    assert.equal(parseUploadRequest({ target: { kind: 'video', tabId: 'nope' }, title: 'x' }).ok, false)
+    assert.equal(
+      parseUploadRequest({ target: { kind: 'video', tabId: UUID, section: 'lectures' }, title: 'x' }).ok,
+      false
+    )
   })
 
   it('rejects unknown sections and missing titles', () => {
     assert.equal(parseUploadRequest({ target: { kind: 'video', section: 'secret' }, title: 'x' }).ok, false)
     assert.equal(parseUploadRequest({ target: { kind: 'video', section: 'lectures' }, title: '   ' }).ok, false)
   })
-
   it('validates recording targets and call dates', () => {
     const ok = parseUploadRequest({
       target: { kind: 'recording', studentDiscordId: STUDENT },

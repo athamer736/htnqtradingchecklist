@@ -159,11 +159,10 @@ Discord role IDs for owner, admin, mentor, student and Levels 1-3 are built in
 `DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_MENTOR`, `DISCORD_ROLE_STUDENT` or
 `DISCORD_ROLE_LEVEL_1` / `_2` / `_3` to point at a different (e.g. sandbox) server.
 
-The three batch roles are built in the same way and overridden by `JULY_BATCH`
-(1st Of July Batch), `SEPT_BATCH` (1st Of September Batch) and `BATCH_5` (Batch 5.0).
-They are also set as Supabase secrets with those names. Each batch section opens for
-students holding that role (plus the Student role) and for staff; the Railway bot
-needs no change because it never sees these roles.
+The batch roles (`JULY_BATCH`, `SEPT_BATCH`, `BATCH_5`) are **no longer secrets**: since
+2.0.3 which roles see which Mentorship tab is data, edited in the app under
+Admin -> Tabs (`mentorship_tabs`). The migration seeds the three batch tabs with their
+role IDs. The Railway bot needs no change because it never sees these roles.
 
 Never put any of these in `VITE_` client env. Details: [`docs/video-platform.md`](../docs/video-platform.md).
 Bot API contract: [`docs/bot-handoff-member-access-api.md`](../docs/bot-handoff-member-access-api.md).
@@ -182,6 +181,7 @@ supabase functions deploy admin-members
 supabase functions deploy admin-member-identity
 supabase functions deploy admin-member-name
 supabase functions deploy level-descriptions
+supabase functions deploy manage-tabs
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos   # replaced by list-content
 ```
@@ -217,9 +217,9 @@ accounts have no Discord identity and cannot watch or manage mentorship content
 
 | Role | Watch | Upload | Publish / make private | Edit details | Delete |
 | --- | --- | --- | --- | --- | --- |
-| Owner, Admin | Everything | Every section and any student's recordings | Yes | Yes | Yes |
-| Mentor | Everything, including every student's recordings | Level 1-3, Further Studying, batch sections and 1:1 recordings | Level 1-3, Further Studying, batch sections and recordings | No | No |
-| Student | Level tabs up to their highest Level role (inclusive), Further Studying (Level 3 role only), their batch section(s), Lectures, Weekly Recaps, their own published recordings | No | No | No | No |
+| Owner, Admin | Everything | Every tab and any student's recordings | Yes | Yes | Yes |
+| Mentor | Tabs listing the mentor role (all seeded tabs), plus every student's recordings | Tabs whose upload list has them (seeded: Level 1-3, Further Studying, batches) and 1:1 recordings | Same as upload | Only where a tab's manage list has them | Same as edit |
+| Student | **Requires the Student role.** A tab opens if its view list is empty or the student holds a listed role (seeded: Level tabs up to their Level, Further Studying for Level 3, their batch, Lectures and Weekly Recaps for all), plus their own published recordings | No | No | No | No |
 
 Playback is decided by the live Discord roles only; the Railway mentorship bot is asked
 for the viewer's legal name but never blocks playback. The watermark is the

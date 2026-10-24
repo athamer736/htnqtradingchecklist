@@ -15,6 +15,7 @@ import {
   type PlaybackDeps
 } from '../supabase/functions/_shared/playback.ts'
 import { DEFAULT_ROLE_IDS as R, resolveCapabilities } from '../supabase/functions/_shared/roles.ts'
+import { seedTab } from './helpers/seedTabs.ts'
 
 const STUDENT_ID = '111111111111111111'
 const OTHER_ID = '222222222222222222'
@@ -59,7 +60,7 @@ function video(over: Partial<LoadedVideo> = {}): LoadedVideo {
   return {
     id: VIDEO_ID,
     bunnyVideoId: 'bunny-1',
-    section: 'level',
+    tab: seedTab('level_1'),
     level: 1,
     visibility: 'published',
     encodingStatus: 'ready',
@@ -124,7 +125,7 @@ describe('runPlayback', () => {
   })
 
   it('denies a higher level than the student holds without calling Railway', async () => {
-    const d = deps({ loadVideo: async () => video({ level: 3 }) })
+    const d = deps({ loadVideo: async () => video({ tab: seedTab('level_3'), level: 3 }) })
     const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level2), d)
     assert.equal(out.body.reasonCode, 'level_insufficient')
     assert.equal(d.mentorshipCalls, 0)
@@ -148,7 +149,7 @@ describe('runPlayback', () => {
   })
 
   it('lets staff play private videos, still through the Railway check', async () => {
-    const d = deps({ loadVideo: async () => video({ visibility: 'private', level: 3 }) })
+    const d = deps({ loadVideo: async () => video({ visibility: 'private', tab: seedTab('level_3'), level: 3 }) })
     const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, mentor(), d)
     assert.equal(out.body.ok, true)
     assert.equal(d.mentorshipCalls, 1)
@@ -390,7 +391,7 @@ describe('runPlayback: member-access decisions', () => {
   })
 
   it('the bot never bypasses the Discord-role checks', async () => {
-    const d = deps({ loadVideo: async () => video({ level: 3 }) })
+    const d = deps({ loadVideo: async () => video({ tab: seedTab('level_3'), level: 3 }) })
     const out = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level1), d)
     assert.equal(out.body.reasonCode, 'level_insufficient')
     assert.ok(!('embedUrl' in out.body))
@@ -406,7 +407,7 @@ describe('runPlayback: member-access decisions', () => {
       const out = await runPlayback(
         { kind: 'video', id: VIDEO_ID },
         who,
-        deps({ loadVideo: async () => video({ visibility: 'private', level: 3 }), checkMentorship: async () => staffAllowed() })
+        deps({ loadVideo: async () => video({ visibility: 'private', tab: seedTab('level_3'), level: 3 }), checkMentorship: async () => staffAllowed() })
       )
       assert.equal(out.body.ok, true)
       assert.deepEqual(out.body.watermark, { discordId: OTHER_ID, legalName: 'Staff Member', sessionRef: 'ref123' })

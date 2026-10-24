@@ -1,12 +1,13 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  MENTORSHIP_PAGE_IDS,
+  canOpenAdmin,
   canSeeMentorshipPage,
   isMentorshipPage,
-  type MentorshipPageId
+  tabIdFromView,
+  tabView
 } from '../src/shared/mentorshipNav.ts'
-import type { BatchId, MentorshipCapabilities, VideoLevel } from '../src/shared/video.ts'
+import type { MentorshipCapabilities, MentorshipTab } from '../src/shared/video.ts'
 
 function caps(over: Partial<MentorshipCapabilities> = {}): MentorshipCapabilities {
   return {
@@ -15,68 +16,71 @@ function caps(over: Partial<MentorshipCapabilities> = {}): MentorshipCapabilitie
     isStaff: false,
     isManager: false,
     isStudent: true,
-    levels: [],
-    batches: [],
-    canUpload: {} as MentorshipCapabilities['canUpload'],
+    canManageTabs: false,
+    canUpload: { recordings: false },
     ...over
-  } as MentorshipCapabilities
+  }
 }
 
-const visible = (c: MentorshipCapabilities | null): MentorshipPageId[] =>
-  MENTORSHIP_PAGE_IDS.filter((p) => canSeeMentorshipPage(c, p))
+const tab = (id: string, title = id): MentorshipTab => ({
+  id,
+  slug: id,
+  title,
+  description: null,
+  sortOrd: 1,
+  canUpload: false,
+  canManage: false
+})
 
-const student = (levels: VideoLevel[], batches: BatchId[] = []): MentorshipCapabilities => caps({ levels, batches })
+const TABS = [tab('aaa'), tab('bbb')]
+
+describe('tab view ids', () => {
+  it('round-trips a tab id', () => {
+    assert.equal(tabView('3f2a'), 'tab:3f2a')
+    assert.equal(tabIdFromView(tabView('3f2a')), '3f2a')
+  })
+
+  it('only recognises tab views', () => {
+    assert.equal(tabIdFromView('journal'), null)
+    assert.equal(tabIdFromView('tab:'), null)
+    assert.equal(tabIdFromView('recordings'), null)
+  })
+})
 
 describe('canSeeMentorshipPage', () => {
   it('shows nothing before roles are known', () => {
-    assert.deepEqual(visible(null), [])
+    assert.equal(canSeeMentorshipPage(null, TABS, tabView('aaa')), false)
+    assert.equal(canSeeMentorshipPage(null, TABS, 'recordings'), false)
   })
 
-  it('shows nothing to members without the Student role', () => {
-    assert.deepEqual(visible(caps({ role: 'none', isStudent: false, levels: [3], batches: ['batch_5'] })), [])
+  it('shows exactly the tabs the server returned', () => {
+    assert.equal(canSeeMentorshipPage(caps(), TABS, tabView('aaa')), true)
+    assert.equal(canSeeMentorshipPage(caps(), TABS, tabView('zzz')), false)
+    assert.equal(canSeeMentorshipPage(caps(), [], tabView('aaa')), false)
   })
 
-  it('shows staff every page', () => {
-    assert.deepEqual(visible(caps({ role: 'mentor', isStaff: true, isStudent: false })), MENTORSHIP_PAGE_IDS)
-  })
-
-  it('a Level 1 student does not see Level 2, Level 3 or Further Studying', () => {
-    assert.deepEqual(visible(student([1])), ['level1', 'lectures', 'weekly', 'recordings'])
-  })
-
-  it('a Level 2 student sees Levels 1-2 but not Level 3', () => {
-    assert.deepEqual(visible(student([2])), ['level1', 'level2', 'lectures', 'weekly', 'recordings'])
-  })
-
-  it('a Level 3 student sees all Levels and Further Studying', () => {
-    assert.deepEqual(visible(student([3])), [
-      'level1',
-      'level2',
-      'level3',
-      'furtherStudying',
-      'lectures',
-      'weekly',
-      'recordings'
-    ])
-  })
-
-  it('a student with no Level role still sees the shared pages only', () => {
-    assert.deepEqual(visible(student([])), ['lectures', 'weekly', 'recordings'])
-  })
-
-  it('batch pages appear only for the batch roles held', () => {
-    const v = visible(student([1], ['sept_batch']))
-    assert.ok(v.includes('septBatch'))
-    assert.ok(!v.includes('julyBatch'))
-    assert.ok(!v.includes('batch5'))
+  it('Recordings is for staff and students only', () => {
+    assert.equal(canSeeMentorshipPage(caps(), [], 'recordings'), true)
+    assert.equal(canSeeMentorshipPage(caps({ isStudent: false, isStaff: true }), [], 'recordings'), true)
+    assert.equal(canSeeMentorshipPage(caps({ role: 'none', isStudent: false }), [], 'recordings'), false)
   })
 })
 
 describe('isMentorshipPage', () => {
   it('recognises mentorship pages only', () => {
-    assert.ok(isMentorshipPage('level3'))
+    assert.ok(isMentorshipPage('recordings'))
+    assert.ok(isMentorshipPage(tabView('aaa')))
     assert.ok(!isMentorshipPage('journal'))
     assert.ok(!isMentorshipPage('admin'))
     assert.ok(!isMentorshipPage('toString'))
+  })
+})
+
+describe('canOpenAdmin', () => {
+  it('opens for owners/admins and tab managers, not for everyone else', () => {
+    assert.equal(canOpenAdmin(caps({ isManager: true })), true)
+    assert.equal(canOpenAdmin(caps({ canManageTabs: true })), true)
+    assert.equal(canOpenAdmin(caps()), false)
+    assert.equal(canOpenAdmin(null), false)
   })
 })

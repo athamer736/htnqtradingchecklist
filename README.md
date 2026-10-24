@@ -38,11 +38,11 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
 ## Mentorship content (online-only)
 
-The **Mentorship** sidebar group (under Setup) has Level 1, Level 2, Level 3, Further Studying (Level 3 only),
-Lectures, Weekly Recaps & Outlooks, the 1st Of July, 1st Of September and Batch 5.0
-sections (each only for members with that batch's Discord role), and Student Recordings (staff) or My
-Recordings (students). Access follows live Discord roles: higher Level roles
-include the lower levels, mentors and admins upload directly from the app, and
+The **Mentorship** sidebar group (under Setup) is made of editable **tabs** plus Student Recordings (staff) or My
+Recordings (students). Out of the box the tabs are Level 1-3, Further Studying, Lectures, Weekly Recaps & Outlooks
+and the three batch tabs. Since 2.0.3 owners, admins and any role they name as a tab manager can add, rename,
+reorder and delete tabs under Admin -> Tabs, and pick per tab which Discord roles may view, upload and manage it.
+The Student role is required to view any tab. Access follows live Discord roles: mentors and admins upload directly from the app, and
 every video plays with a personalised watermark (the viewer's Discord ID and current Discord username, plus their legal name when one is on file) after the mentorship
 bot confirms access. Playback always needs an online check, even though the
 rest of the app works offline.

@@ -53,8 +53,8 @@ roles use `JULY_BATCH`, `SEPT_BATCH` and `BATCH_5`.
 | Level 3 | 1504525483814158376 |
 
 **Levels are inclusive:** the Level 3 role unlocks Levels 1, 2 and 3; Level 2
-unlocks 1 and 2. Students also need the Student role. Staff (owner, admin,
-mentor) see every level.
+unlocks 1 and 2. Students also need the Student role. Since 2.0.3 these rules are the *seeded
+defaults* of editable tabs (below); the table describes the seeded tabs.
 
 | | Owner / Admin | Mentor | Student |
 | --- | --- | --- | --- |
@@ -92,13 +92,13 @@ mentorship content. The earlier `video_staff_access` email bypass is removed.
 
 ## Sidebar
 
-Under **Setup**, a **Mentorship** group: Level 1, Level 2, Level 3, Further Studying, Lectures,
-Weekly Recaps & Outlooks, 1st Of July Batch, 1st Of September Batch, Batch 5.0, then **Student Recordings** (staff: searchable
+Under **Setup**, a **Mentorship** group made of the tabs the member may open (admin-editable since 2.0.3; seeded as Level 1-3, Further Studying, Lectures,
+Weekly Recaps & Outlooks, 1st Of July Batch, 1st Of September Batch, Batch 5.0), then **Student Recordings** (staff: searchable
 picker of Discord members with the Student role, then that student's
 recordings and an upload button) or **My Recordings** (students).
 
-Owners and admins also get an **Admin** item (shown from the server-computed
-`isManager` capability) with two tabs:
+Owners and admins (and any Tab manager role) also get an **Admin** item (shown from the server-computed
+`isManager` / `canManageTabs` capabilities); Members and Library are owner/admin only, **Tabs** is for tab managers:
 
 - **Members**: everyone in the mentorship server who holds a staff, Student or
   Level role (`admin-members`). Roles and effective levels come live from
@@ -116,7 +116,15 @@ Owners and admins also get an **Admin** item (shown from the server-computed
   sent to the player or used for any access decision, and each change is audited
   with who/whom but never the name. It works for any member, including those the
   bot has no name for, and does not change anything in the bot.
-- **Library**: every video grouped by Level 1-3, Further Studying, Lectures and Weekly Recaps, in
+- **Tabs** (2.0.3): add, rename, describe, reorder (Up / Down) and delete Mentorship tabs. Each tab has three
+  any-of role lists: **view** (empty = every Student), **upload** and **manage** (edit, delete, reorder, write the
+  description). The Student role is always required to view; owner/admin always have full access, and mentors do not
+  need the Student role but must be on the view list (or the list must be empty). A role on a tab's upload or manage
+  list also opens that tab. A tab can only be deleted when it has no videos. Only the owner edits the **Tab managers**
+  list (which roles may manage tabs; admins by default). Backed by `manage-tabs`, tables `mentorship_tabs` and
+  `mentorship_settings`, and `videos.tab_id`. Changes are written to `content_audit` (`tab_created`, `tab_updated`,
+  `tab_roles_changed`, `tab_deleted`, `tab_managers_changed`).
+- **Library**: every video grouped by tab, in
   the order members see, with **Up / Down** (`manage-content` `move`),
   publish / make private, edit and delete. Upload still happens on each
   section's page.
@@ -283,6 +291,9 @@ VITE_SUPABASE_ANON_KEY=
 Apply in order (all idempotent, all appended to `schema.sql`):
 
 - `20261008_video_platform.sql`: `videos`, `member_levels`, `video_staff_access` (now unused), `playback_audit`.
+- `20261024_mentorship_tabs.sql`: `mentorship_tabs` (seeded with the nine original sections and their role lists),
+  `mentorship_settings` (tab managers), `videos.tab_id` (backfilled; a trigger keeps 2.0.2 uploads working),
+  `section = 'custom'` and the new `content_audit` actions. The `JULY_BATCH` / `SEPT_BATCH` / `BATCH_5` env vars are no longer used.
 - `20261016_roles_sections_recordings.sql`: adds `section`, `visibility`, `encoding_status`,
   `uploaded_by_discord_id`, `deleted_at` to `videos`; makes `level` nullable for
   Lectures / Weekly Recaps; adds `student_recordings`, `content_audit` and

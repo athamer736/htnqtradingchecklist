@@ -1,114 +1,52 @@
-// Reads and writes the page descriptions: Levels (`level_descriptions`) and the other
-// Mentorship pages (`section_descriptions`).
+// Reads and writes the one page description that is not part of a tab: Recordings
+// (`section_descriptions`, section = 'recordings'). Descriptions of the Mentorship
+// tabs live on the tab rows themselves (see tabStore.ts); the old per-Level and
+// per-section tables were folded into them by 20261024_mentorship_tabs.sql.
 //
 // Service-role only. Callers must already have checked the caller's live
 // Discord roles. Errors are reported as `{ ok: false }` with no database text.
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
-import { isDescribedSection, type DescribedSection } from './decisions.ts'
-import type { VideoLevel } from './roles.ts'
 
-const TABLE = 'level_descriptions'
+const SECTION_TABLE = 'section_descriptions'
+const RECORDINGS = 'recordings'
 
 export type StoreResult<T> = { ok: true; value: T } | { ok: false }
 
-export interface StoredLevelDescription {
-  level: VideoLevel
+export interface StoredRecordingsDescription {
   description: string
   updatedAt: string
 }
 
-/** Every Level that has a description (Levels without one are simply absent). */
-export async function listLevelDescriptions(admin: SupabaseClient): Promise<StoreResult<StoredLevelDescription[]>> {
-  const { data, error } = await admin.from(TABLE).select('level, description, updated_at').order('level')
-  if (error) return { ok: false }
-  const rows = (data ?? []) as Array<{ level?: unknown; description?: unknown; updated_at?: unknown }>
-  const out: StoredLevelDescription[] = []
-  for (const r of rows) {
-    if ((r.level === 1 || r.level === 2 || r.level === 3) && typeof r.description === 'string') {
-      out.push({
-        level: r.level,
-        description: r.description,
-        updatedAt: typeof r.updated_at === 'string' ? r.updated_at : ''
-      })
-    }
-  }
-  return { ok: true, value: out }
-}
-
-/** Creates or replaces a Level's description. Reports whether one already existed. */
-export async function saveLevelDescription(
-  admin: SupabaseClient,
-  row: { level: VideoLevel; description: string; actorUserId: string; actorDiscordId: string }
-): Promise<StoreResult<{ replaced: boolean; updatedAt: string }>> {
-  const existing = await admin.from(TABLE).select('level').eq('level', row.level).maybeSingle()
-  if (existing.error) return { ok: false }
-  const updatedAt = new Date().toISOString()
-  const { error } = await admin.from(TABLE).upsert(
-    {
-      level: row.level,
-      description: row.description,
-      set_by_user_id: row.actorUserId,
-      set_by_discord_id: row.actorDiscordId,
-      updated_at: updatedAt
-    },
-    { onConflict: 'level' }
-  )
-  if (error) return { ok: false }
-  return { ok: true, value: { replaced: existing.data !== null, updatedAt } }
-}
-
-/** Removes a Level's description. Reports whether there was one to remove. */
-export async function deleteLevelDescription(
-  admin: SupabaseClient,
-  level: VideoLevel
-): Promise<StoreResult<{ removed: boolean }>> {
-  const { data, error } = await admin.from(TABLE).delete().eq('level', level).select('level')
-  if (error) return { ok: false }
-  return { ok: true, value: { removed: Array.isArray(data) && data.length > 0 } }
-}
-
-// --- Other Mentorship pages (`section_descriptions`) ---------------------------
-
-const SECTION_TABLE = 'section_descriptions'
-
-export interface StoredSectionDescription {
-  section: DescribedSection
-  description: string
-  updatedAt: string
-}
-
-/** Every page that has a description (pages without one are simply absent). */
-export async function listSectionDescriptions(
+/** The Recordings page description, or null when there is none. */
+export async function readRecordingsDescription(
   admin: SupabaseClient
-): Promise<StoreResult<StoredSectionDescription[]>> {
-  const { data, error } = await admin.from(SECTION_TABLE).select('section, description, updated_at').order('section')
+): Promise<StoreResult<StoredRecordingsDescription | null>> {
+  const { data, error } = await admin
+    .from(SECTION_TABLE)
+    .select('description, updated_at')
+    .eq('section', RECORDINGS)
+    .maybeSingle()
   if (error) return { ok: false }
-  const rows = (data ?? []) as Array<{ section?: unknown; description?: unknown; updated_at?: unknown }>
-  const out: StoredSectionDescription[] = []
-  for (const r of rows) {
-    if (isDescribedSection(r.section) && typeof r.description === 'string') {
-      out.push({
-        section: r.section,
-        description: r.description,
-        updatedAt: typeof r.updated_at === 'string' ? r.updated_at : ''
-      })
-    }
+  const row = data as { description?: unknown; updated_at?: unknown } | null
+  if (!row || typeof row.description !== 'string') return { ok: true, value: null }
+  return {
+    ok: true,
+    value: { description: row.description, updatedAt: typeof row.updated_at === 'string' ? row.updated_at : '' }
   }
-  return { ok: true, value: out }
 }
 
-/** Creates or replaces a page's description. Reports whether one already existed. */
-export async function saveSectionDescription(
+/** Creates or replaces the Recordings description. Reports whether one already existed. */
+export async function saveRecordingsDescription(
   admin: SupabaseClient,
-  row: { section: DescribedSection; description: string; actorUserId: string; actorDiscordId: string }
+  row: { description: string; actorUserId: string; actorDiscordId: string }
 ): Promise<StoreResult<{ replaced: boolean; updatedAt: string }>> {
-  const existing = await admin.from(SECTION_TABLE).select('section').eq('section', row.section).maybeSingle()
+  const existing = await admin.from(SECTION_TABLE).select('section').eq('section', RECORDINGS).maybeSingle()
   if (existing.error) return { ok: false }
   const updatedAt = new Date().toISOString()
   const { error } = await admin.from(SECTION_TABLE).upsert(
     {
-      section: row.section,
+      section: RECORDINGS,
       description: row.description,
       set_by_user_id: row.actorUserId,
       set_by_discord_id: row.actorDiscordId,
@@ -120,12 +58,11 @@ export async function saveSectionDescription(
   return { ok: true, value: { replaced: existing.data !== null, updatedAt } }
 }
 
-/** Removes a page's description. Reports whether there was one to remove. */
-export async function deleteSectionDescription(
-  admin: SupabaseClient,
-  section: DescribedSection
+/** Removes the Recordings description. Reports whether there was one to remove. */
+export async function deleteRecordingsDescription(
+  admin: SupabaseClient
 ): Promise<StoreResult<{ removed: boolean }>> {
-  const { data, error } = await admin.from(SECTION_TABLE).delete().eq('section', section).select('section')
+  const { data, error } = await admin.from(SECTION_TABLE).delete().eq('section', RECORDINGS).select('section')
   if (error) return { ok: false }
   return { ok: true, value: { removed: Array.isArray(data) && data.length > 0 } }
 }

@@ -11,6 +11,7 @@ import type { AuthzResult } from '../supabase/functions/_shared/authz.ts'
 import { fetchMentorshipAccess } from '../supabase/functions/_shared/mentorshipApi.ts'
 import { runPlayback, type AuditRow, type PlaybackDeps } from '../supabase/functions/_shared/playback.ts'
 import { DEFAULT_ROLE_IDS as R, resolveCapabilities } from '../supabase/functions/_shared/roles.ts'
+import { seedTab } from './helpers/seedTabs.ts'
 import { parsePlaybackRequest } from '../supabase/functions/_shared/validation.ts'
 import { handler, TOKEN } from './mocks/mentorshipAccessMock.ts'
 
@@ -66,7 +67,7 @@ function deps(token = TOKEN, timeoutMs = 1_000): PlaybackDeps & { audits: AuditR
     loadVideo: async () => ({
       id: VIDEO_ID,
       bunnyVideoId: 'bunny-1',
-      section: 'level',
+      tab: seedTab('level_1'),
       level: 1,
       visibility: 'published',
       encodingStatus: 'ready'

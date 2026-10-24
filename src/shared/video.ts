@@ -7,24 +7,6 @@ export type VideoLevel = 1 | 2 | 3
 
 export const VIDEO_LEVELS: VideoLevel[] = [1, 2, 3]
 
-/** Batch (cohort) sections, each unlocked by its own Discord role. */
-export type BatchId = 'july_batch' | 'sept_batch' | 'batch_5'
-
-export const BATCH_IDS: BatchId[] = ['july_batch', 'sept_batch', 'batch_5']
-
-export type ContentSection =
-  | 'level'
-  | 'lectures'
-  | 'weekly_recaps'
-  | 'further_studying'
-  | BatchId
-
-export function isBatchSection(section: ContentSection): section is BatchId {
-  return (BATCH_IDS as string[]).includes(section)
-}
-
-/** Further Studying opens for members whose roles unlock this Level (and staff). */
-export const FURTHER_STUDYING_LEVEL: VideoLevel = 3
 export type Visibility = 'published' | 'private'
 export type EncodingStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 export type PrimaryRole = 'owner' | 'admin' | 'mentor' | 'student' | 'none'
@@ -69,15 +51,59 @@ export function thumbnailFileProblem(file: { name: string; size: number; type: s
   return null
 }
 
-export const SECTION_LABELS: Record<ContentSection, string> = {
-  level: 'Level',
-  lectures: 'Lectures',
-  weekly_recaps: 'Weekly Recaps & Outlooks',
-  further_studying: 'Further Studying',
-  july_batch: '1st Of July Batch',
-  sept_batch: '1st Of September Batch',
-  batch_5: 'Batch 5.0'
+/**
+ * A Mentorship tab as the server returns it to a member: only tabs they may open,
+ * with flags for what they can do there. Role lists are never sent to members.
+ */
+export interface MentorshipTab {
+  id: string
+  slug: string
+  title: string
+  /** Text shown at the top of the tab's page, or null. */
+  description: string | null
+  sortOrd: number
+  /** May upload, publish and hide videos here. */
+  canUpload: boolean
+  /** May edit video details, reorder and delete videos, and edit the description. */
+  canManage: boolean
 }
+
+/** A tab as tab managers see it in the Admin panel, including its role lists. */
+export interface AdminTab {
+  id: string
+  slug: string
+  title: string
+  description: string | null
+  sortOrd: number
+  viewRoleIds: string[]
+  uploadRoleIds: string[]
+  manageRoleIds: string[]
+  /** Videos currently in the tab; a tab can only be deleted when this is 0. */
+  videoCount: number
+  /** One of the tabs that existed before tabs were editable. They edit like any other. */
+  builtIn: boolean
+}
+
+/** What a tab manager writes when creating or editing a tab. */
+export interface TabInput {
+  title: string
+  description: string | null
+  viewRoleIds: string[]
+  uploadRoleIds: string[]
+  manageRoleIds: string[]
+}
+
+/** A Discord role the pickers can offer. */
+export interface DiscordRole {
+  id: string
+  name: string
+  /** 0xRRGGBB, or 0 for "no colour". */
+  color: number
+  position: number
+}
+
+export const TAB_TITLE_MAX = 60
+export const TAB_ROLES_MAX = 25
 
 /** Per-item permission flags computed server-side from live Discord roles. */
 export interface ItemPermissions {
@@ -88,8 +114,8 @@ export interface ItemPermissions {
 
 export interface ContentVideo extends ItemPermissions {
   id: string
-  section: ContentSection
-  level: VideoLevel | null
+  /** The tab the video lives in. */
+  tabId: string
   title: string
   description: string | null
   durationSeconds: number | null
@@ -98,31 +124,12 @@ export interface ContentVideo extends ItemPermissions {
   encodingStatus: EncodingStatus
   createdAt: string
   sortOrd: number
+  /** May move it up/down inside its tab. */
+  canReorder: boolean
 }
 
-/** The text at the top of a Level page, written by an owner/admin. */
-export interface LevelDescription {
-  level: VideoLevel
-  description: string
-  updatedAt: string
-}
-
-/** Mentorship pages besides the Levels that carry an owner/admin-written description. */
-export type DescribedSection = Exclude<ContentSection, 'level'> | 'recordings'
-
-export const DESCRIBED_SECTION_LABELS: Record<DescribedSection, string> = {
-  further_studying: 'Further Studying',
-  lectures: 'Lectures',
-  weekly_recaps: 'Weekly Recaps & Outlooks',
-  july_batch: SECTION_LABELS.july_batch,
-  sept_batch: SECTION_LABELS.sept_batch,
-  batch_5: SECTION_LABELS.batch_5,
-  recordings: 'Recordings'
-}
-
-/** The text at the top of one of those pages. */
-export interface SectionDescription {
-  section: DescribedSection
+/** The text at the top of the Recordings page, written by an owner/admin. */
+export interface RecordingsDescription {
   description: string
   updatedAt: string
 }
@@ -149,17 +156,10 @@ export interface MentorshipCapabilities {
   isStaff: boolean
   isManager: boolean
   isStudent: boolean
-  levels: VideoLevel[]
-  /** Batch sections they may open (staff: all). */
-  batches: BatchId[]
+  /** Owner, or holds a "tab manager" role: sees the Tabs page in Admin. */
+  canManageTabs: boolean
   canUpload: {
-    level: boolean
-    lectures: boolean
-    weekly_recaps: boolean
-    further_studying: boolean
-    july_batch: boolean
-    sept_batch: boolean
-    batch_5: boolean
+    /** 1:1 recordings; uploading to a tab is MentorshipTab.canUpload. */
     recordings: boolean
   }
 }
@@ -167,6 +167,8 @@ export interface MentorshipCapabilities {
 export interface ListContentResponse {
   ok: true
   capabilities: MentorshipCapabilities
+  /** The tabs the caller may open, in display order. */
+  tabs: MentorshipTab[]
   videos: ContentVideo[]
 }
 
@@ -231,7 +233,7 @@ export const IDENTITY_DENY_LABELS: Record<string, string> = {
 export type PlaybackTarget = { kind: 'video'; id: string } | { kind: 'recording'; id: string }
 
 export type UploadTarget =
-  | { kind: 'video'; section: ContentSection; level: VideoLevel | null }
+  | { kind: 'video'; tabId: string; tabTitle: string }
   | { kind: 'recording'; studentDiscordId: string; studentLabel: string }
 
 export interface UploadCredentials {
@@ -264,6 +266,8 @@ export type PlaybackDenyReason =
   | 'invalid_request'
   | 'forbidden'
   | 'upstream_failed'
+  | 'tab_not_found'
+  | 'tab_not_empty'
   /** Client-side: the open player couldn't re-confirm access before it lapsed. */
   | 'access_expired'
 
@@ -351,6 +355,8 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   invalid_request: 'That request was not valid.',
   forbidden: 'Your Discord roles do not allow this action.',
   upstream_failed: 'The video service could not complete that request. Try again shortly.',
+  tab_not_found: 'That tab no longer exists.',
+  tab_not_empty: 'Delete every video in this tab before deleting it.',
   access_expired:
     'We could not re-confirm your access in time, so playback stopped. This is usually temporary: press play to try again.'
 }

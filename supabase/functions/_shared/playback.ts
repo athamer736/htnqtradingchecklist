@@ -3,21 +3,22 @@
 // inject mocks. Privileged database reads bypass RLS, so every check lives here.
 
 import type { AuthzResult } from './authz.ts'
-import {
-  canPlayRecording,
-  canPlayVideo,
-  type EncodingStatus,
-  type RecordingItem,
-  type VideoItem
-} from './decisions.ts'
+import { canPlayRecording, type EncodingStatus, type RecordingItem, type Visibility } from './decisions.ts'
 import { pickWatermarkName } from './memberNames.ts'
 import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
 import { MENTORSHIP_MAX_RECHECK_SECONDS, type MentorshipLookupResult } from './mentorshipApi.ts'
+import { canPlayTabVideo, canSeeUnpublishedInTab, type TabAccess } from './tabAccess.ts'
 import type { PlaybackRequest } from './validation.ts'
 
-export interface LoadedVideo extends VideoItem {
+export interface LoadedVideo {
   id: string
   bunnyVideoId: string
+  /** The tab the video lives in: its role lists decide who may play it. */
+  tab: TabAccess
+  /** Legacy Level (1-3) for the audit row, null outside the Level tabs. */
+  level: number | null
+  visibility: Visibility
+  encodingStatus: EncodingStatus
 }
 
 export interface LoadedRecording extends RecordingItem {
@@ -74,6 +75,8 @@ export async function runPlayback(
   let bunnyVideoId: string
   let auditTarget: Partial<AuditRow>
   let encoding: EncodingStatus
+  /** Whether this viewer may learn that an unfinished item exists. */
+  let seesUnfinished: boolean
 
   if (request.kind === 'video') {
     const video = await deps.loadVideo(request.id)
@@ -83,10 +86,11 @@ export async function runPlayback(
     }
     auditTarget = { video_id: video.id, bunny_video_id: video.bunnyVideoId, level_required: video.level }
     encoding = video.encodingStatus
-    if (encoding === 'ready' && !canPlayVideo(auth.caps, video)) {
-      // Students can't tell private videos apart from missing ones.
+    seesUnfinished = canSeeUnpublishedInTab(auth.caps, auth.roles, video.tab)
+    if (encoding === 'ready' && !canPlayTabVideo(auth.caps, auth.roles, video.tab, video)) {
+      // Members can't tell private videos apart from missing ones.
       const code: DenyCode =
-        !auth.caps.isStaff && video.visibility === 'private' ? 'video_not_found' : 'level_insufficient'
+        !seesUnfinished && video.visibility === 'private' ? 'video_not_found' : 'level_insufficient'
       await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: code })
       return denied(code)
     }
@@ -99,6 +103,7 @@ export async function runPlayback(
     }
     auditTarget = { recording_id: rec.id, bunny_video_id: rec.bunnyVideoId }
     encoding = rec.encodingStatus
+    seesUnfinished = auth.caps.isStaff
     if (encoding === 'ready' && !canPlayRecording(auth.caps, auth.discordId, rec)) {
       await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'video_not_found' })
       return denied('video_not_found')
@@ -108,7 +113,7 @@ export async function runPlayback(
 
   if (encoding !== 'ready') {
     // Only staff can see unfinished items at all; others get "not found".
-    const code: DenyCode = auth.caps.isStaff ? 'not_ready' : 'video_not_found'
+    const code: DenyCode = seesUnfinished ? 'not_ready' : 'video_not_found'
     await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: code })
     return denied(code)
   }

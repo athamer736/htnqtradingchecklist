@@ -2,17 +2,10 @@
 // never accepted from clients: the Discord ID always comes from the linked
 // Supabase identity, and legal names only from the Railway API.
 
-import {
-  isContentSection,
-  isDescribedSection,
-  isVisibility,
-  type ContentSection,
-  type DescribedSection,
-  type Visibility
-} from './decisions.ts'
+import { isVisibility, type Visibility } from './decisions.ts'
 import { normaliseLegalName, usableLegalName } from './mentorshipApi.ts'
 import type { MoveDirection } from './ordering.ts'
-import type { VideoLevel } from './roles.ts'
+import { slugForLegacy } from './tabCompat.ts'
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -78,11 +71,17 @@ export function parsePlaybackRequest(body: unknown): Parsed<PlaybackRequest> {
 
 // --- create-upload ----------------------------------------------------------
 
+/**
+ * Which tab a video goes into. 2.0.3 clients send `tabId`; 2.0.2 clients send the
+ * old `{ section, level }`, which is translated to the seeded tab's slug.
+ */
+export type TabRef = { by: 'id'; id: string } | { by: 'slug'; slug: string }
+
 export type UploadRequest =
   | {
       mode: 'create'
       target:
-        | { kind: 'video'; section: ContentSection; level: VideoLevel | null }
+        | { kind: 'video'; tab: TabRef }
         | { kind: 'recording'; studentDiscordId: string }
       title: string
       description: string | null
@@ -109,18 +108,21 @@ export function parseUploadRequest(body: unknown): Parsed<UploadRequest> {
   if (!t) return { ok: false, error: 'target-required' }
 
   if (t.kind === 'video') {
-    if (!isContentSection(t.section)) return { ok: false, error: 'invalid-section' }
-    const level = t.level === null || t.level === undefined ? null : t.level
-    if (t.section === 'level') {
-      if (level !== 1 && level !== 2 && level !== 3) return { ok: false, error: 'invalid-level' }
-    } else if (level !== null) {
-      return { ok: false, error: 'level-not-allowed' }
+    let tab: TabRef
+    if (t.tabId !== undefined) {
+      if ('section' in t || 'level' in t) return { ok: false, error: 'invalid-target' }
+      if (!isUuid(t.tabId)) return { ok: false, error: 'invalid-tab' }
+      tab = { by: 'id', id: t.tabId }
+    } else {
+      const slug = slugForLegacy(t.section, t.level === undefined ? null : t.level)
+      if (!slug) return { ok: false, error: 'invalid-section' }
+      tab = { by: 'slug', slug }
     }
     return {
       ok: true,
       value: {
         mode: 'create',
-        target: { kind: 'video', section: t.section, level: level as VideoLevel | null },
+        target: { kind: 'video', tab },
         title,
         description,
         recordedAt: null
@@ -255,10 +257,13 @@ export function parseMemberNameRequest(body: unknown): Parsed<MemberNameRequest>
 /** Longer than a video description: it introduces a whole Level. */
 export const LEVEL_DESCRIPTION_MAX = 4000
 
-/** A page whose description is being written: a Level, or one of the other Mentorship pages. */
+/**
+ * A page whose description is being written: a tab (by id, or by the slug an old
+ * client's `{ level }` / `{ section }` maps to), or the fixed Recordings page.
+ */
 export type DescriptionTarget =
-  | { kind: 'level'; level: VideoLevel }
-  | { kind: 'section'; section: DescribedSection }
+  | { kind: 'tab'; ref: TabRef }
+  | { kind: 'recordings' }
 
 export type LevelDescriptionRequest =
   | { action: 'list' }
@@ -271,15 +276,25 @@ export function parseLevelDescriptionRequest(body: unknown): Parsed<LevelDescrip
   if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
   if (o.action === undefined || o.action === 'list') return { ok: true, value: { action: 'list' } }
   if (o.action !== 'set') return { ok: false, error: 'invalid-action' }
-  // Exactly one of `level` or `section` names the page.
+  // Exactly one of `tabId`, `level` or `section` names the page.
   let target: DescriptionTarget
-  if (o.level !== undefined && o.section !== undefined) return { ok: false, error: 'invalid-target' }
-  if (o.section !== undefined) {
-    if (!isDescribedSection(o.section)) return { ok: false, error: 'invalid-section' }
-    target = { kind: 'section', section: o.section }
+  const named = ['tabId', 'level', 'section'].filter((k) => o[k] !== undefined)
+  if (named.length !== 1) return { ok: false, error: 'invalid-target' }
+  if (o.tabId !== undefined) {
+    if (!isUuid(o.tabId)) return { ok: false, error: 'invalid-tab' }
+    target = { kind: 'tab', ref: { by: 'id', id: o.tabId } }
+  } else if (o.section !== undefined) {
+    if (o.section === 'recordings') {
+      target = { kind: 'recordings' }
+    } else {
+      const slug = slugForLegacy(o.section, null)
+      if (!slug || o.section === 'level') return { ok: false, error: 'invalid-section' }
+      target = { kind: 'tab', ref: { by: 'slug', slug } }
+    }
   } else {
-    if (o.level !== 1 && o.level !== 2 && o.level !== 3) return { ok: false, error: 'invalid-level' }
-    target = { kind: 'level', level: o.level }
+    const slug = slugForLegacy('level', o.level)
+    if (!slug) return { ok: false, error: 'invalid-level' }
+    target = { kind: 'tab', ref: { by: 'slug', slug } }
   }
   if (o.description !== null && typeof o.description !== 'string') return { ok: false, error: 'invalid-description' }
   // Over-long text is rejected rather than silently cut, so an admin never loses the end of it.
@@ -291,6 +306,152 @@ export function parseLevelDescriptionRequest(body: unknown): Parsed<LevelDescrip
     return { ok: false, error: 'description-too-long' }
   }
   return { ok: true, value: { action: 'set', target, description } }
+}
+
+// --- manage-tabs --------------------------------------------------------------
+
+export const TAB_TITLE_MAX = 60
+/** Upper bound on tabs in one reorder request (the menu is nowhere near this long). */
+export const TAB_COUNT_MAX = 100
+export const TAB_ROLES_MAX = 25
+
+export interface TabRoleLists {
+  viewRoleIds: string[]
+  uploadRoleIds: string[]
+  manageRoleIds: string[]
+}
+
+export type TabRequest =
+  | { action: 'list' }
+  /** The guild's Discord roles, for the role pickers. */
+  | { action: 'roles' }
+  | ({ action: 'create'; title: string; description: string | null } & TabRoleLists)
+  | {
+      action: 'update'
+      id: string
+      title?: string
+      /** undefined = unchanged; null = clear. */
+      description?: string | null
+      viewRoleIds?: string[]
+      uploadRoleIds?: string[]
+      manageRoleIds?: string[]
+    }
+  | { action: 'delete'; id: string }
+  | { action: 'move'; id: string; direction: MoveDirection }
+  /** Drag and drop: `id` was dropped into the full new order `ids` (every tab, once). */
+  | { action: 'reorder'; id: string; ids: string[] }
+  | { action: 'set_tab_managers'; roleIds: string[] }
+
+/** Distinct Discord role ids, in the order given; null when anything is malformed. */
+export function cleanRoleIds(v: unknown): string[] | null {
+  if (!Array.isArray(v) || v.length > TAB_ROLES_MAX * 2) return null
+  const out: string[] = []
+  for (const id of v) {
+    if (!isSnowflake(id)) return null
+    if (!out.includes(id)) out.push(id)
+  }
+  return out.length <= TAB_ROLES_MAX ? out : null
+}
+
+/** A tab title: 1-60 characters after control characters are stripped; never silently cut. */
+function cleanTabTitle(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const t = v
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return t.length >= 1 && t.length <= TAB_TITLE_MAX ? t : null
+}
+
+function tabDescription(v: unknown): Parsed<string | null> {
+  if (v === null || v === undefined || v === '') return { ok: true, value: null }
+  if (typeof v !== 'string') return { ok: false, error: 'invalid-description' }
+  if (v.length > LEVEL_DESCRIPTION_MAX * 2) return { ok: false, error: 'description-too-long' }
+  const d = cleanDescription(v, Number.MAX_SAFE_INTEGER)
+  if (d !== null && d.length > LEVEL_DESCRIPTION_MAX) return { ok: false, error: 'description-too-long' }
+  return { ok: true, value: d }
+}
+
+export function parseTabRequest(body: unknown): Parsed<TabRequest> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (hasForbiddenIdentity(o)) return { ok: false, error: 'identity-not-accepted' }
+
+  switch (o.action) {
+    case undefined:
+    case 'list':
+      return { ok: true, value: { action: 'list' } }
+    case 'roles':
+      return { ok: true, value: { action: 'roles' } }
+    case 'create': {
+      const title = cleanTabTitle(o.title)
+      if (!title) return { ok: false, error: 'invalid-title' }
+      const description = tabDescription(o.description)
+      if (!description.ok) return description
+      const view = cleanRoleIds(o.viewRoleIds ?? [])
+      const upload = cleanRoleIds(o.uploadRoleIds ?? [])
+      const manage = cleanRoleIds(o.manageRoleIds ?? [])
+      if (!view || !upload || !manage) return { ok: false, error: 'invalid-roles' }
+      return {
+        ok: true,
+        value: {
+          action: 'create',
+          title,
+          description: description.value,
+          viewRoleIds: view,
+          uploadRoleIds: upload,
+          manageRoleIds: manage
+        }
+      }
+    }
+    case 'update': {
+      if (!isUuid(o.id)) return { ok: false, error: 'invalid-id' }
+      const value: Extract<TabRequest, { action: 'update' }> = { action: 'update', id: o.id }
+      if (o.title !== undefined) {
+        const title = cleanTabTitle(o.title)
+        if (!title) return { ok: false, error: 'invalid-title' }
+        value.title = title
+      }
+      if (o.description !== undefined) {
+        const description = tabDescription(o.description)
+        if (!description.ok) return description
+        value.description = description.value
+      }
+      for (const key of ['viewRoleIds', 'uploadRoleIds', 'manageRoleIds'] as const) {
+        if (o[key] === undefined) continue
+        const ids = cleanRoleIds(o[key])
+        if (!ids) return { ok: false, error: 'invalid-roles' }
+        value[key] = ids
+      }
+      if (Object.keys(value).length === 2) return { ok: false, error: 'nothing-to-update' }
+      return { ok: true, value }
+    }
+    case 'delete':
+      if (!isUuid(o.id)) return { ok: false, error: 'invalid-id' }
+      return { ok: true, value: { action: 'delete', id: o.id } }
+    case 'move':
+      if (!isUuid(o.id)) return { ok: false, error: 'invalid-id' }
+      if (o.direction !== 'up' && o.direction !== 'down') return { ok: false, error: 'invalid-direction' }
+      return { ok: true, value: { action: 'move', id: o.id, direction: o.direction } }
+    case 'reorder': {
+      if (!isUuid(o.id)) return { ok: false, error: 'invalid-id' }
+      if (!Array.isArray(o.ids) || o.ids.length < 1 || o.ids.length > TAB_COUNT_MAX) return { ok: false, error: 'invalid-order' }
+      const ids: string[] = []
+      for (const v of o.ids) {
+        if (!isUuid(v) || ids.includes(v)) return { ok: false, error: 'invalid-order' }
+        ids.push(v)
+      }
+      if (!ids.includes(o.id)) return { ok: false, error: 'invalid-order' }
+      return { ok: true, value: { action: 'reorder', id: o.id, ids } }
+    }
+    case 'set_tab_managers': {
+      const roleIds = cleanRoleIds(o.roleIds)
+      if (!roleIds) return { ok: false, error: 'invalid-roles' }
+      return { ok: true, value: { action: 'set_tab_managers', roleIds } }
+    }
+    default:
+      return { ok: false, error: 'invalid-action' }
+  }
 }
 
 // --- list-students / list-recordings ---------------------------------------

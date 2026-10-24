@@ -18,7 +18,7 @@ import { useDataCollection } from './store/useDataCollection'
 import { useAuth } from './store/useAuth'
 import { useMentorship } from './store/useMentorship'
 import { startSync, stopSync, isCloudSyncEnabled } from './sync/syncEngine'
-import { canSeeMentorshipPage, isMentorshipPage } from '../../shared/mentorshipNav'
+import { canOpenAdmin, canSeeMentorshipPage, isMentorshipPage, tabIdFromView } from '../../shared/mentorshipNav'
 
 export default function App(): JSX.Element {
   const [view, setView] = useState<ViewId>('start')
@@ -56,11 +56,14 @@ export default function App(): JSX.Element {
   }, [authStatus, userId, loadMentorship, resetMentorship])
 
   const capabilities = useMentorship((s) => s.capabilities)
+  const tabs = useMentorship((s) => s.tabs)
+  // A tab that was deleted, or whose roles changed so this member can no longer open
+  // it, sends them back to Setup as soon as the refreshed list arrives.
   useEffect(() => {
     if (!capabilities) return
-    if (isMentorshipPage(view) && !canSeeMentorshipPage(capabilities, view)) setView('start')
-    if (view === 'admin' && !capabilities.isManager) setView('start')
-  }, [capabilities, view])
+    if (isMentorshipPage(view) && !canSeeMentorshipPage(capabilities, tabs, view)) setView('start')
+    if (view === 'admin' && !canOpenAdmin(capabilities)) setView('start')
+  }, [capabilities, tabs, view])
 
   const handleChange = (v: ViewId): void => {
     setView(v)
@@ -94,15 +97,7 @@ export default function App(): JSX.Element {
         )}
         <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pl-12'}`}>
           {view === 'start' && <StartView />}
-          {view === 'level1' && <ContentSectionView section="level" level={1} />}
-          {view === 'level2' && <ContentSectionView section="level" level={2} />}
-          {view === 'level3' && <ContentSectionView section="level" level={3} />}
-          {view === 'furtherStudying' && <ContentSectionView section="further_studying" />}
-          {view === 'julyBatch' && <ContentSectionView section="july_batch" />}
-          {view === 'septBatch' && <ContentSectionView section="sept_batch" />}
-          {view === 'batch5' && <ContentSectionView section="batch_5" />}
-          {view === 'lectures' && <ContentSectionView section="lectures" />}
-          {view === 'weekly' && <ContentSectionView section="weekly_recaps" />}
+          {tabIdFromView(view) && <ContentSectionView tabId={tabIdFromView(view) as string} />}
           {view === 'recordings' && <StudentRecordingsView />}
           {view === 'points' && <PointsView />}
           {view === 'reference' && <ReferenceView />}

@@ -196,6 +196,62 @@ export async function listGuildMembers(
   }
 }
 
+export interface GuildRoleSummary {
+  id: string
+  name: string
+  /** 0xRRGGBB, or 0 for "no colour". */
+  color: number
+  position: number
+}
+
+export type GuildRolesResult =
+  | { kind: 'ok'; roles: GuildRoleSummary[] }
+  | { kind: 'rate_limited'; retryAfterSeconds?: number }
+  | { kind: 'error'; status: number }
+  | { kind: 'unreachable' }
+
+/**
+ * The server's roles for the tab role pickers, highest first. `@everyone` (whose id
+ * is the guild id) and bot/integration-managed roles are left out: nobody holds
+ * those on purpose, so offering them would only invite mistakes.
+ */
+export async function listGuildRoles(
+  botToken: string,
+  guildId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<GuildRolesResult> {
+  try {
+    const res = await fetchImpl(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+      headers: { Authorization: `Bot ${botToken}` }
+    })
+    if (res.status === 429) {
+      const retry = Number(res.headers.get('retry-after') ?? '')
+      return { kind: 'rate_limited', retryAfterSeconds: Number.isFinite(retry) ? retry : undefined }
+    }
+    if (!res.ok) return { kind: 'error', status: res.status }
+    const body = (await res.json()) as unknown
+    if (!Array.isArray(body)) return { kind: 'error', status: 502 }
+    const roles: GuildRoleSummary[] = []
+    for (const raw of body as Array<Record<string, unknown>>) {
+      const id = raw.id
+      if (typeof id !== 'string' || !/^\d{5,32}$/.test(id) || id === guildId) continue
+      if (raw.managed === true) continue
+      const name = typeof raw.name === 'string' ? raw.name.replace(/[\u0000-\u001f\u007f]/g, '').trim() : ''
+      if (!name) continue
+      roles.push({
+        id,
+        name: name.slice(0, 100),
+        color: typeof raw.color === 'number' ? raw.color : 0,
+        position: typeof raw.position === 'number' ? raw.position : 0
+      })
+    }
+    roles.sort((a, b) => b.position - a.position)
+    return { kind: 'ok', roles }
+  } catch {
+    return { kind: 'unreachable' }
+  }
+}
+
 /** Single-member lookup returning a display summary (used to label recordings). */
 export async function fetchGuildMemberSummary(
   botToken: string,

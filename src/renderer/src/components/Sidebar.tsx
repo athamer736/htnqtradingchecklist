@@ -3,22 +3,13 @@ import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { useConfirm } from './ConfirmProvider'
 import { useMentorship } from '../store/useMentorship'
-import { SECTION_LABELS, type BatchId, type VideoLevel } from '../../../shared/video'
-import { canSeeMentorshipPage, type MentorshipPageId } from '../../../shared/mentorshipNav'
+import { canOpenAdmin, canSeeMentorshipPage, tabView, type TabViewId } from '../../../shared/mentorshipNav'
 import SyncStatus from './SyncStatus'
 import logo from '../assets/htnq-logo.png'
 
 export type ViewId =
   | 'start'
-  | 'level1'
-  | 'level2'
-  | 'level3'
-  | 'furtherStudying'
-  | 'lectures'
-  | 'weekly'
-  | 'julyBatch'
-  | 'septBatch'
-  | 'batch5'
+  | TabViewId
   | 'recordings'
   | 'points'
   | 'reference'
@@ -94,12 +85,12 @@ const items: NavItem[] = [
 // Mentorship sits directly under Setup.
 const MENTORSHIP_AFTER = items.findIndex((i) => i.id === 'start')
 
-// Owner/admin only. Shown from the server-computed `isManager` capability; the
-// functions behind the panel re-check live Discord roles on every call.
+// Owners, admins and tab managers. Shown from server-computed capabilities; the
+// functions behind each panel re-check live Discord roles on every call.
 const adminItem: NavItem = {
   id: 'admin',
   label: 'Admin',
-  hint: 'Members & library',
+  hint: 'Members, library & tabs',
   icon: (
     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
       <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" strokeLinejoin="round" />
@@ -108,17 +99,6 @@ const adminItem: NavItem = {
   )
 }
 
-const MENTORSHIP_LEVELS: { id: MentorshipPageId; level: VideoLevel }[] = [
-  { id: 'level1', level: 1 },
-  { id: 'level2', level: 2 },
-  { id: 'level3', level: 3 }
-]
-
-const MENTORSHIP_BATCHES: { id: MentorshipPageId; section: BatchId }[] = [
-  { id: 'julyBatch', section: 'july_batch' },
-  { id: 'septBatch', section: 'sept_batch' },
-  { id: 'batch5', section: 'batch_5' }
-]
 
 const playIcon = (
   <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.6">
@@ -167,18 +147,16 @@ function MentorshipNav({
   const caps = useMentorship((s) => s.capabilities)
   const status = useMentorship((s) => s.status)
   const retry = useMentorship((s) => s.load)
+  const tabs = useMentorship((s) => s.tabs)
   const isStaff = Boolean(caps?.isStaff)
   // Open by default each launch; the member can fold the group away.
   const [expanded, setExpanded] = useState(true)
-  const allEntries: { id: MentorshipPageId; label: string }[] = [
-    ...MENTORSHIP_LEVELS.map(({ id, level }) => ({ id, label: `Level ${level}` })),
-    { id: 'furtherStudying', label: SECTION_LABELS.further_studying },
-    { id: 'lectures', label: 'Lectures' },
-    { id: 'weekly', label: 'Weekly Recaps & Outlooks' },
-    ...MENTORSHIP_BATCHES.map(({ id, section }) => ({ id, label: SECTION_LABELS[section] })),
+  // The server returns only the tabs this member may open, in the order admins chose.
+  const allEntries: { id: ViewId; label: string }[] = [
+    ...tabs.map((t) => ({ id: tabView(t.id) as ViewId, label: t.title })),
     { id: 'recordings', label: isStaff ? 'Student Recordings' : 'My Recordings' }
   ]
-  const entries = allEntries.filter((e) => canSeeMentorshipPage(caps, e.id))
+  const entries = allEntries.filter((e) => canSeeMentorshipPage(caps, tabs, e.id))
   const checking = !caps && status === 'loading'
   const failed = !caps && status === 'error'
   if (entries.length === 0 && !checking && !failed) return null
@@ -254,7 +232,7 @@ export default function Sidebar({
   const clearTrades = useTrades((s) => s.clear)
   const resetData = useDataCollection((s) => s.reset)
   const confirm = useConfirm()
-  const isManager = useMentorship((s) => Boolean(s.capabilities?.isManager))
+  const showAdmin = useMentorship((s) => canOpenAdmin(s.capabilities))
 
   const handleReset = async (): Promise<void> => {
     const ok = await confirm({
@@ -314,7 +292,7 @@ export default function Sidebar({
         {items.slice(MENTORSHIP_AFTER + 1).map((item) => (
           <NavButton key={item.id} item={item} active={active} onChange={onChange} />
         ))}
-        {isManager && <NavButton item={adminItem} active={active} onChange={onChange} />}
+        {showAdmin && <NavButton item={adminItem} active={active} onChange={onChange} />}
       </nav>
 
       <div className="shrink-0 px-5 py-4 text-[11px] leading-relaxed text-muted/70">

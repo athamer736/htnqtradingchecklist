@@ -1,58 +1,45 @@
-import {
-  FURTHER_STUDYING_LEVEL,
-  levelsInclude,
-  type BatchId,
-  type MentorshipCapabilities,
-  type VideoLevel
-} from './video'
+import type { MentorshipCapabilities, MentorshipTab } from './video'
 
-export type MentorshipPageId =
-  | 'level1'
-  | 'level2'
-  | 'level3'
-  | 'furtherStudying'
-  | 'lectures'
-  | 'weekly'
-  | 'julyBatch'
-  | 'septBatch'
-  | 'batch5'
-  | 'recordings'
+// Mentorship navigation. The server decides which tabs a member may open (from
+// their live Discord roles and each tab's role lists) and returns only those, so
+// the sidebar simply shows what it was given, plus the fixed Recordings page.
+// This only hides navigation; every list and playback request is still
+// re-checked server-side.
 
-type Requirement =
-  | { kind: 'student' }
-  | { kind: 'level'; level: VideoLevel }
-  | { kind: 'batch'; batch: BatchId }
+/** The view id for a tab's page, e.g. `tab:3f2a…`. */
+export type TabViewId = `tab:${string}`
 
-const REQUIREMENTS: Record<MentorshipPageId, Requirement> = {
-  level1: { kind: 'level', level: 1 },
-  level2: { kind: 'level', level: 2 },
-  level3: { kind: 'level', level: 3 },
-  furtherStudying: { kind: 'level', level: FURTHER_STUDYING_LEVEL },
-  lectures: { kind: 'student' },
-  weekly: { kind: 'student' },
-  julyBatch: { kind: 'batch', batch: 'july_batch' },
-  septBatch: { kind: 'batch', batch: 'sept_batch' },
-  batch5: { kind: 'batch', batch: 'batch_5' },
-  recordings: { kind: 'student' }
+const TAB_PREFIX = 'tab:'
+
+export function tabView(tabId: string): TabViewId {
+  return `${TAB_PREFIX}${tabId}`
 }
 
-export const MENTORSHIP_PAGE_IDS = Object.keys(REQUIREMENTS) as MentorshipPageId[]
+/** The tab id a view id points at, or null when it is not a tab view. */
+export function tabIdFromView(view: string): string | null {
+  return view.startsWith(TAB_PREFIX) && view.length > TAB_PREFIX.length ? view.slice(TAB_PREFIX.length) : null
+}
 
-export function isMentorshipPage(id: string): id is MentorshipPageId {
-  return Object.prototype.hasOwnProperty.call(REQUIREMENTS, id)
+export function isMentorshipPage(view: string): boolean {
+  return view === 'recordings' || tabIdFromView(view) !== null
 }
 
 /**
- * Whether a page appears in the sidebar for these capabilities. This only hides
- * navigation; every list and playback request is still re-checked server-side.
- * Unknown capabilities (not loaded, or the check failed) show nothing.
+ * Whether a Mentorship page should appear for these capabilities and tabs. Unknown
+ * capabilities (not loaded, or the check failed) show nothing.
  */
-export function canSeeMentorshipPage(caps: MentorshipCapabilities | null, page: MentorshipPageId): boolean {
+export function canSeeMentorshipPage(
+  caps: MentorshipCapabilities | null,
+  tabs: readonly MentorshipTab[],
+  view: string
+): boolean {
   if (!caps) return false
-  if (caps.isStaff) return true
-  if (!caps.isStudent) return false
-  const req = REQUIREMENTS[page]
-  if (req.kind === 'student') return true
-  if (req.kind === 'level') return levelsInclude(caps.levels ?? [], req.level)
-  return (caps.batches ?? []).includes(req.batch)
+  if (view === 'recordings') return caps.isStaff || caps.isStudent
+  const id = tabIdFromView(view)
+  return id !== null && tabs.some((t) => t.id === id)
+}
+
+/** The Admin page: owners and admins, and anyone holding a "tab manager" role. */
+export function canOpenAdmin(caps: MentorshipCapabilities | null): boolean {
+  return Boolean(caps && (caps.isManager || caps.canManageTabs))
 }

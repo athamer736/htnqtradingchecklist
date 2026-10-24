@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Upload } from 'tus-js-client'
 import {
-  SECTION_LABELS,
   UPLOAD_ACCEPT,
   uploadMimeType,
   type UploadCredentials,
@@ -33,7 +32,7 @@ function fileKey(file: File): string {
 
 function targetKeyOf(target: UploadTarget): string {
   return target.kind === 'video'
-    ? `video:${target.section}:${target.level ?? ''}`
+    ? `video:${target.tabId}`
     : `recording:${target.studentDiscordId}`
 }
 
@@ -60,7 +59,7 @@ function titleFromFile(name: string): string {
 
 export function uploadTargetLabel(target: UploadTarget): string {
   if (target.kind === 'recording') return `1:1 recording for ${target.studentLabel}`
-  return target.section === 'level' ? `Level ${target.level}` : SECTION_LABELS[target.section]
+  return target.tabTitle
 }
 
 type Phase = 'form' | 'preparing' | 'uploading' | 'paused' | 'finishing' | 'done' | 'error'
