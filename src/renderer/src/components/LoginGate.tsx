@@ -89,7 +89,7 @@ export default function LoginGate({ children }: { children: ReactNode }): JSX.El
             alt="HTNQ"
             className="h-14 w-14 rounded-xl bg-white object-contain p-1"
           />
-          <h1 className="mt-4 text-lg font-semibold text-slate-100">HTNQ Trading Checklist</h1>
+          <h1 className="mt-4 text-lg font-semibold text-slate-100">HTNQ Trading Mentorship</h1>
           <p className="mt-1 text-sm text-muted">Sign in to continue</p>
         </div>
 

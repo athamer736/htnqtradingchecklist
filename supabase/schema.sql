@@ -1,4 +1,4 @@
--- HTNQ Trading Checklist - Supabase schema
+-- HTNQ Trading Mentorship - Supabase schema
 -- ---------------------------------------------------------------------------
 -- Run this ONCE in your Supabase project: Dashboard -> SQL Editor -> New query
 -- -> paste this whole file -> Run. It is safe to re-run (idempotent).

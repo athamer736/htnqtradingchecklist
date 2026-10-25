@@ -1,5 +1,5 @@
 appId: com.htnq.tradingchecklist
-productName: HTNQ Trading Checklist
+productName: HTNQ Trading Mentorship
 publish:
   provider: github
   owner: athamer736
@@ -32,6 +32,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: HTNQ Trading Checklist
+  shortcutName: HTNQ Trading Mentorship
 portable:
   artifactName: ${productName}-${version}-portable.${ext}

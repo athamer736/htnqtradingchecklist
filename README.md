@@ -1,4 +1,4 @@
-# HTNQ Trading Checklist
+# HTNQ Trading Mentorship
 
 A minimal desktop tool for an ICT + Quarterly Theory day-trading strategy. Pick the setup you
 spotted and the app generates the full ideal-setup confluence tree (with entries highlighted),

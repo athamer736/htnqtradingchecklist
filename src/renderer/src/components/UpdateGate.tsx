@@ -31,7 +31,7 @@ export default function UpdateGate(): JSX.Element | null {
   const percent = status.phase === 'progress' ? status.percent : status.phase === 'downloaded' ? 100 : null
 
   const headline =
-    status.phase === 'downloaded' ? 'Installing update…' : 'Updating HTNQ Trading Checklist'
+    status.phase === 'downloaded' ? 'Installing update…' : 'Updating HTNQ Trading Mentorship'
   const detail =
     status.phase === 'downloaded'
       ? 'The app will restart automatically to finish installing.'

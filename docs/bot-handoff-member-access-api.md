@@ -1,6 +1,6 @@
 # Bot-side handoff: `POST /api/v1/member-access`
 
-The HTNQ Trading Checklist video platform expects a **versioned HTTPS API** on
+The HTNQ Trading Mentorship video platform expects a **versioned HTTPS API** on
 the H4STH2 Mentorship Discord bot (Railway).
 
 **Status (2026-10-16):** implemented in the bot repository

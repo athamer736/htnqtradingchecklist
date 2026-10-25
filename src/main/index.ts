@@ -42,6 +42,13 @@ import {
 } from '../shared/dataCollection'
 import type { SyncAck, SyncRow } from '../shared/sync'
 
+// The installed app keeps its local journal database, saved login and preferences in a
+// folder named after the product. The product was renamed to "HTNQ Trading Mentorship"
+// in 2.0.4, so pin the folder to the original name: otherwise existing installs would
+// start with an empty journal. Never change this string.
+if (app.isPackaged) {
+  app.setPath('userData', join(app.getPath('appData'), 'HTNQ Trading Checklist'))
+}
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -51,7 +58,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0b0d12',
-    title: `HTNQ Trading Checklist Version ${app.getVersion()} Release`,
+    title: `HTNQ Trading Mentorship Version ${app.getVersion()} Release`,
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

@@ -7,7 +7,7 @@ to be added to the published privacy notice.**
 
 Suggested addition for the owner’s privacy notice:
 
-> When you watch mentorship videos in HTNQ Trading Checklist, we display your
+> When you watch mentorship videos in HTNQ Trading Mentorship, we display your
 > Discord user ID and current Discord username, and your legal name where we
 > hold one, on the video player as
 > a personalised watermark to discourage unauthorised sharing and to help

@@ -1,6 +1,6 @@
 # Web app hosting: app.htnq.org
 
-The browser version of HTNQ Trading Checklist is published to **GitHub Pages**
+The browser version of HTNQ Trading Mentorship is published to **GitHub Pages**
 from this repository by [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
 and served at **https://app.htnq.org**. The Windows desktop app is unchanged.
 There is no macOS desktop build: Mac users use the web app.

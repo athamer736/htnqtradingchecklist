@@ -269,7 +269,7 @@ export default function Sidebar({
           />
           <div className="leading-tight">
             <div className="text-sm font-semibold text-slate-100">HTNQ</div>
-            <div className="text-xs text-muted">Trading Checklist</div>
+            <div className="text-xs text-muted">Trading Mentorship</div>
           </div>
           <button
             onClick={onClose}
