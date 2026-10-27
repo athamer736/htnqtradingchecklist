@@ -1,0 +1,389 @@
+{
+  "fixture_version": 1,
+  "contract": "POST /api/v1/member-access",
+  "schema_version": 1,
+  "checked_at": "2026-10-27T12:00:00Z",
+  "classification": "Synthetic records only; no live IDs, credentials or documents",
+  "cases": [
+    {
+      "label": "entitled signed member",
+      "request": {
+        "discord_id": "100000000000000001"
+      },
+      "member": {
+        "joiningCompleted": true,
+        "membershipEnded": false,
+        "suspended": false,
+        "payment": "satisfied",
+        "terms": "satisfied",
+        "earlyAccess": "not_required",
+        "identityVerification": "not_required",
+        "winningApplicationId": "application-synthetic",
+        "applicationCount": 1,
+        "ndas": [
+          {
+            "id": "nda-synthetic",
+            "applicationId": "application-synthetic",
+            "signedName": "Ada Example",
+            "signedAt": "2026-10-01T12:00:00Z",
+            "voided": false,
+            "replacedById": null
+          }
+        ]
+      },
+      "staff": null,
+      "hasStaffRole": false,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000001",
+        "access": "allowed",
+        "legal_name": "Ada Example",
+        "identity_source": "signed_nda",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "onboarding incomplete",
+      "request": {
+        "discord_id": "100000000000000002"
+      },
+      "member": {
+        "joiningCompleted": false,
+        "membershipEnded": false,
+        "suspended": false,
+        "payment": "satisfied",
+        "terms": "satisfied",
+        "earlyAccess": "not_required",
+        "identityVerification": "not_required",
+        "winningApplicationId": "application-synthetic",
+        "applicationCount": 1,
+        "ndas": [
+          {
+            "id": "nda-synthetic",
+            "applicationId": "application-synthetic",
+            "signedName": "Ada Example",
+            "signedAt": "2026-10-01T12:00:00Z",
+            "voided": false,
+            "replacedById": null
+          }
+        ]
+      },
+      "staff": null,
+      "hasStaffRole": false,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000002",
+        "access": "denied",
+        "reason_code": "onboarding_incomplete",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "voided NDA",
+      "request": {
+        "discord_id": "100000000000000003"
+      },
+      "member": {
+        "joiningCompleted": true,
+        "membershipEnded": false,
+        "suspended": false,
+        "payment": "satisfied",
+        "terms": "satisfied",
+        "earlyAccess": "not_required",
+        "identityVerification": "not_required",
+        "winningApplicationId": "application-synthetic",
+        "applicationCount": 1,
+        "ndas": [
+          {
+            "id": "nda-synthetic",
+            "applicationId": "application-synthetic",
+            "signedName": "Ada Example",
+            "signedAt": "2026-10-01T12:00:00Z",
+            "voided": true,
+            "replacedById": null
+          }
+        ]
+      },
+      "staff": null,
+      "hasStaffRole": false,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000003",
+        "access": "denied",
+        "reason_code": "nda_missing",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "payment incomplete",
+      "request": {
+        "discord_id": "100000000000000004"
+      },
+      "member": {
+        "joiningCompleted": true,
+        "membershipEnded": false,
+        "suspended": false,
+        "payment": "unsatisfied",
+        "terms": "satisfied",
+        "earlyAccess": "not_required",
+        "identityVerification": "not_required",
+        "winningApplicationId": "application-synthetic",
+        "applicationCount": 1,
+        "ndas": [
+          {
+            "id": "nda-synthetic",
+            "applicationId": "application-synthetic",
+            "signedName": "Ada Example",
+            "signedAt": "2026-10-01T12:00:00Z",
+            "voided": false,
+            "replacedById": null
+          }
+        ]
+      },
+      "staff": null,
+      "hasStaffRole": false,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000004",
+        "access": "denied",
+        "reason_code": "payment_incomplete",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "membership ended",
+      "request": {
+        "discord_id": "100000000000000005"
+      },
+      "member": {
+        "joiningCompleted": true,
+        "membershipEnded": true,
+        "suspended": false,
+        "payment": "satisfied",
+        "terms": "satisfied",
+        "earlyAccess": "not_required",
+        "identityVerification": "not_required",
+        "winningApplicationId": "application-synthetic",
+        "applicationCount": 1,
+        "ndas": [
+          {
+            "id": "nda-synthetic",
+            "applicationId": "application-synthetic",
+            "signedName": "Ada Example",
+            "signedAt": "2026-10-01T12:00:00Z",
+            "voided": false,
+            "replacedById": null
+          }
+        ]
+      },
+      "staff": null,
+      "hasStaffRole": false,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000005",
+        "access": "denied",
+        "reason_code": "membership_inactive",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "suspended",
+      "request": {
+        "discord_id": "100000000000000006"
+      },
+      "member": {
+        "joiningCompleted": true,
+        "membershipEnded": false,
+        "suspended": true,
+        "payment": "satisfied",
+        "terms": "satisfied",
+        "earlyAccess": "not_required",
+        "identityVerification": "not_required",
+        "winningApplicationId": "application-synthetic",
+        "applicationCount": 1,
+        "ndas": [
+          {
+            "id": "nda-synthetic",
+            "applicationId": "application-synthetic",
+            "signedName": "Ada Example",
+            "signedAt": "2026-10-01T12:00:00Z",
+            "voided": false,
+            "replacedById": null
+          }
+        ]
+      },
+      "staff": null,
+      "hasStaffRole": false,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000006",
+        "access": "denied",
+        "reason_code": "suspended",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "unknown",
+      "request": {
+        "discord_id": "100000000000000007"
+      },
+      "member": null,
+      "staff": null,
+      "hasStaffRole": false,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000007",
+        "access": "denied",
+        "reason_code": "not_found",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "staff identity unresolved",
+      "request": {
+        "discord_id": "100000000000000008"
+      },
+      "member": null,
+      "staff": null,
+      "hasStaffRole": true,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000008",
+        "access": "denied",
+        "reason_code": "identity_unresolved",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    },
+    {
+      "label": "active staff record",
+      "request": {
+        "discord_id": "100000000000000009"
+      },
+      "member": null,
+      "staff": {
+        "active": true,
+        "legalName": "Staff Example"
+      },
+      "hasStaffRole": true,
+      "expected": {
+        "schema_version": 1,
+        "discord_id": "100000000000000009",
+        "access": "allowed",
+        "legal_name": "Staff Example",
+        "identity_source": "staff_record",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      }
+    }
+  ],
+  "invalid_requests": [
+    {
+      "request": {
+        "discord_id": 123
+      },
+      "error": "invalid_discord_id"
+    },
+    {
+      "request": {
+        "discord_id": "1234"
+      },
+      "error": "invalid_discord_id"
+    },
+    {
+      "request": {
+        "discord_id": "100000000000000001",
+        "organisation_id": "untrusted"
+      },
+      "error": "invalid_request"
+    },
+    {
+      "request": {
+        "discord_ids": [
+          "100000000000000001"
+        ]
+      },
+      "error": "invalid_request"
+    }
+  ],
+  "invalid_responses": [
+    {
+      "label": "future-schema",
+      "expected_discord_id": "100000000000000001",
+      "response": {
+        "schema_version": 2,
+        "discord_id": "100000000000000001",
+        "access": "allowed",
+        "legal_name": "Ada Example",
+        "identity_source": "signed_nda",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      },
+      "expected_error": "schema-mismatch"
+    },
+    {
+      "label": "unexpected-finance-field",
+      "expected_discord_id": "100000000000000001",
+      "response": {
+        "schema_version": 1,
+        "discord_id": "100000000000000001",
+        "access": "allowed",
+        "legal_name": "Ada Example",
+        "identity_source": "signed_nda",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300,
+        "financial_balance": 100
+      },
+      "expected_error": "unexpected-fields"
+    },
+    {
+      "label": "wrong-identity",
+      "expected_discord_id": "100000000000000001",
+      "response": {
+        "schema_version": 1,
+        "discord_id": "100000000000009999",
+        "access": "allowed",
+        "legal_name": "Ada Example",
+        "identity_source": "signed_nda",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300
+      },
+      "expected_error": "discord-id-mismatch"
+    },
+    {
+      "label": "name-on-denial",
+      "expected_discord_id": "100000000000000002",
+      "response": {
+        "schema_version": 1,
+        "discord_id": "100000000000000002",
+        "access": "denied",
+        "reason_code": "onboarding_incomplete",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": 300,
+        "legal_name": "Must Not Leak"
+      },
+      "expected_error": "denied-leaked-name"
+    },
+    {
+      "label": "invalid-recheck",
+      "expected_discord_id": "100000000000000001",
+      "response": {
+        "schema_version": 1,
+        "discord_id": "100000000000000001",
+        "access": "allowed",
+        "legal_name": "Ada Example",
+        "identity_source": "signed_nda",
+        "checked_at": "2026-10-27T12:00:00Z",
+        "recheck_after_seconds": -1
+      },
+      "expected_error": "bad-recheck"
+    }
+  ]
+}
