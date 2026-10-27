@@ -2,7 +2,8 @@ name: Verify platform
 on:
   pull_request:
   push:
-    branches: [codex/partial-plan-video-access]
+    branches: [main]
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -16,10 +17,12 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm test
-      - run: npm run typecheck
-      - run: npm run build:web
-        env:
-          # Build-only public placeholders; no deployment or production credentials.
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: build-verification-public-placeholder
+      - run: npm run check:f00
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: platform-isolated-verification
+          path: .f00-evidence/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7

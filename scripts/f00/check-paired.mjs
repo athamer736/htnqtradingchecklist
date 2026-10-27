@@ -1,0 +1,14 @@
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { isolatedEnv } from './isolated-env.mjs';
+const bot = process.argv[2];
+if (!bot || process.argv.length !== 3) throw new Error('Usage: node scripts/f00/check-paired.mjs <bot-checkout>');
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const result = spawnSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'scripts/f00/paired-contract.mts', resolve(bot)], { cwd: root, env: isolatedEnv(), encoding: 'utf8', timeout: 30000 });
+mkdirSync(resolve(root, '.f00-evidence'), { recursive: true });
+writeFileSync(resolve(root, '.f00-evidence/paired-contract.log'), (result.stdout ?? '') + (result.stderr ?? ''));
+process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
+if (result.error) console.error(result.error.message);
+process.exit(result.status ?? 1);

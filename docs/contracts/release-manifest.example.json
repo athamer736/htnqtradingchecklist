@@ -1,0 +1,65 @@
+{
+  "manifest_version": 1,
+  "feature": "F00",
+  "state": "template_not_a_release",
+  "owner_approval": "REQUIRED_BEFORE_MERGE_AND_DEPLOY",
+  "repositories": {
+    "app": {
+      "repository": "athamer736/htnqtradingchecklist",
+      "branch": "codex/f00-baseline-delivery",
+      "base_commit": "ae85b4e177a877d2a431af4ddd42d6e1eecacaa9",
+      "candidate_commit": "REQUIRED"
+    },
+    "bot": {
+      "repository": "athamer736/h4sth2-mentorship-bot",
+      "branch": "codex/f00-baseline-delivery",
+      "base_commit": "fab45a91f33e5332e16094f3b7dfade3008809c7",
+      "candidate_commit": "REQUIRED"
+    }
+  },
+  "contract": {
+    "endpoint": "/api/v1/member-access",
+    "schema_version": 1,
+    "register_revision": "F00.1",
+    "fixture_sha256": "REQUIRED"
+  },
+  "targets": {
+    "web": {
+      "service": "GitHub Pages app.htnq.org",
+      "revision_before": "VERIFY_ACTUAL",
+      "revision_after": "REQUIRED",
+      "rollback": "Previously approved known-good Pages artifact/commit through verification gate"
+    },
+    "desktop": {
+      "release": "UNCHANGED_F00",
+      "installed_versions": "NOT_VERIFIED"
+    },
+    "supabase": {
+      "project_reference": "VERIFY_ACTUAL",
+      "functions_changed": [],
+      "migrations_changed": []
+    },
+    "bot": {
+      "service_id": "VERIFY_ACTUAL",
+      "worker_revision_before": "VERIFY_ACTUAL",
+      "worker_revision_after": "REQUIRED_IF_DEPLOYED",
+      "single_active_worker": "REQUIRED"
+    },
+    "database": {
+      "instance_id": "VERIFY_ACTUAL",
+      "migrations_changed": []
+    }
+  },
+  "evidence": {
+    "isolated_app_report": "REQUIRED",
+    "isolated_bot_postgres_report": "REQUIRED",
+    "paired_contract": "REQUIRED",
+    "ci": "REQUIRED",
+    "actual_environment_inventory": "REQUIRED"
+  },
+  "rollback": {
+    "scope": "No schema or business-rule change in F00",
+    "paired_compatibility": "v1 preserved; previous/new combinations must be verified",
+    "procedure": "Revert only the named feature commits; rerun verification; owner-authorised redeploy of actual affected targets. Do not reset shared main, roll back a database destructively or restore production data for this CI/docs change."
+  }
+}

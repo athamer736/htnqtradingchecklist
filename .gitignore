@@ -12,3 +12,6 @@ test/
 
 # Supabase CLI local project-link state
 supabase/.temp/
+
+# Isolated F00 logs and synthetic builds
+.f00-evidence/

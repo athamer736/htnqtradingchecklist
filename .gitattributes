@@ -1,0 +1,4 @@
+# Canonical bytes for shared F00 contracts and verification controls only.
+docs/contracts/* text eol=lf
+docs/f00-delivery-controls.md text eol=lf
+scripts/f00/* text eol=lf
