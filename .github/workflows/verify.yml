@@ -23,4 +23,6 @@ jobs:
         with:
           name: platform-isolated-verification
           path: .f00-evidence/
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 7
