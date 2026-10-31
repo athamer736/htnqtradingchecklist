@@ -123,9 +123,9 @@ export default function NdaSettingsCard(): JSX.Element {
             type="button"
             className="btn-ghost px-2.5 py-1 text-xs"
             disabled={busy}
-            onClick={() => setValue(toLocalInput(Date.now() + 7 * DAY_MS))}
+            onClick={() => setValue(toLocalInput(Date.now() + 3 * DAY_MS))}
           >
-            In 7 days
+            In 3 days
           </button>
           <button type="button" className="btn-primary px-3 py-1 text-xs" disabled={busy || !value} onClick={apply}>
             {busy ? 'Saving…' : nda?.enforceFrom ? 'Change date' : 'Set date'}

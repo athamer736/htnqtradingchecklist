@@ -167,7 +167,7 @@ Do these in order; each step is safe on its own because nothing is enforced unti
    Members -> "Check who has signed" lists the right people, and that someone who signed in
    Discord earlier is shown as signed without signing again. Owner, admin and mentor see no
    banner and are never blocked.
-5. [ ] Owner sets the deadline (suggested 7 days) under Admin -> Members -> NDA requirement.
+5. [ ] Owner sets the deadline (3 days) under Admin -> Members -> NDA requirement.
    Students see a "Sign your NDA by <date>" banner until then; afterwards unsigned students see
    the sign screen and videos stay locked until they sign.
 6. [ ] After the deadline: check who is still unsigned; the owner can move the date or clear it

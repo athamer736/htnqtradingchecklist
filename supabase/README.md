@@ -246,7 +246,7 @@ Order matters:
    `issue-playback-token` and `list-content`.
 4. Nothing is enforced while `nda_enforce_from` is empty: the app only shows unsigned students a
    "Sign your NDA" banner. The owner sets the deadline in **Admin -> Members -> NDA requirement**
-   (suggested: 7 days) and can clear it to stop enforcing.
+   (planned: 3 days) and can clear it to stop enforcing.
 
 How the gate behaves on every playback request and renewal (non-staff only):
 
