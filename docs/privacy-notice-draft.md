@@ -34,3 +34,20 @@ Suggested addition for the owner’s privacy notice:
 > Watermarking is a deterrent. It does not prevent every form of screen
 > recording, guarantee that every leak can be traced, or by itself prove a legal
 > breach.
+
+## NDA signed in the app (added with the NDA requirement)
+
+**Draft wording. Not approved by the owner and not legal advice. Add to the published privacy
+notice only after the owner has approved it.**
+
+> To keep access to the mentorship videos you must have signed our non-disclosure agreement
+> (NDA). If you have not signed it in Discord you can sign it inside HTNQ Trading Mentorship by
+> reading it, typing your full legal name and typing "I AGREE". We record your Discord ID, the
+> name you typed, the date and time, the version of the NDA and a fingerprint of its text, and we
+> keep a signed PDF copy with the mentorship bot, which also sends a copy to you in Discord. We
+> use the name on your NDA as the legal name in your personal video watermark.
+>
+> The app only keeps a short record of when it last confirmed that you had signed (your Discord
+> ID and a timestamp, no name and no document) so that a brief outage of our bot does not stop
+> you watching. Owners and admins can see whether a member has signed, not the name on the NDA.
+> Signing is logged (your Discord ID and the time, without your name).

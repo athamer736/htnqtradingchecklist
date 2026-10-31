@@ -148,6 +148,7 @@ Set these in **Supabase → Edge Functions → Secrets** (or with
 | --- | --- |
 | `MENTORSHIP_API_BASE_URL` | The bot's HTTPS **origin** on Railway, without a path (e.g. `https://<service>.up.railway.app`) |
 | `MENTORSHIP_API_TOKEN` | The dedicated token for `POST /api/v1/member-access`; must equal the bot's `MEMBER_ACCESS_API_TOKEN` (not a Discord, Stripe, Checkout or Supabase key) |
+| `MENTORSHIP_NDA_SIGN_TOKEN` | A **separate write** token for the bot's `POST /api/v1/nda-sign` (in-app NDA signing); must equal the bot's `MEMBER_NDA_SIGN_TOKEN`. Used only by the `nda` function's `sign` action, never for reads, and must differ from every other secret |
 | `BUNNY_STREAM_LIBRARY_ID` | Bunny Stream video library ID |
 | `BUNNY_STREAM_TOKEN_KEY` | Library **Token Authentication** key (signs embed URLs) |
 | `BUNNY_STREAM_API_KEY` | Library **API key** (creates/deletes videos, signs TUS uploads, reads encoding status) |
@@ -182,6 +183,7 @@ supabase functions deploy admin-member-identity
 supabase functions deploy admin-member-name
 supabase functions deploy level-descriptions
 supabase functions deploy manage-tabs
+supabase functions deploy nda
 supabase functions deploy issue-playback-token
 supabase functions delete list-videos   # replaced by list-content
 ```
@@ -224,3 +226,38 @@ accounts have no Discord identity and cannot watch or manage mentorship content
 Playback is decided by the live Discord roles only; the Railway mentorship bot is asked
 for the viewer's legal name but never blocks playback. The watermark is the
 viewer's Discord ID and current Discord username (plus their legal name when one is on file), so staff do not need a recorded legal name to watch.
+
+### NDA required to keep access
+
+Every Student and Partial member needs a signed NDA; owner, admin and mentor are exempt. The
+Discord bot is the source of truth: anyone who already signed there is recognised automatically
+(whatever their payment or onboarding state) and only the rest sign in the app.
+
+Order matters:
+
+1. **Bot first.** Deploy the bot build that has `/api/v1/nda-status`, `/api/v1/nda-terms` and
+   `/api/v1/nda-sign` (it runs migration `012_member_ndas.sql` itself) and set
+   `MEMBER_NDA_SIGN_TOKEN` on Railway. Generate it independently; the bot refuses to start if it
+   matches any other secret.
+2. Set `MENTORSHIP_NDA_SIGN_TOKEN` here to the same value (`supabase secrets set` in your own
+   terminal).
+3. Run `migrations/20261025_nda_required.sql` (adds `mentorship_settings.nda_enforce_from`, the
+   boolean-only `nda_status_cache` and the new audit actions), then deploy `nda` and redeploy
+   `issue-playback-token` and `list-content`.
+4. Nothing is enforced while `nda_enforce_from` is empty: the app only shows unsigned students a
+   "Sign your NDA" banner. The owner sets the deadline in **Admin -> Members -> NDA requirement**
+   (suggested: 7 days) and can clear it to stop enforcing.
+
+How the gate behaves on every playback request and renewal (non-staff only):
+
+| Situation | Result |
+| --- | --- |
+| Bot says signed | Plays. The name on the NDA is the watermark legal name (admin-entered name stays the fallback) |
+| Bot says unsigned, before the deadline or no deadline | Plays (banner in the app) |
+| Bot says unsigned, deadline passed | `nda_required` (403); Mentorship pages show the sign screen |
+| Bot unreachable, before the deadline or no deadline | Plays |
+| Bot unreachable, deadline passed | Plays only if the bot confirmed this member within the last 7 days (boolean cache), else `service_unavailable` |
+
+`nda_status_cache` stores only a Discord ID and a timestamp, never a name or document. The audit
+log records who signed (`nda_signed`, Discord ID only) and who changed the deadline
+(`nda_enforcement_set` / `nda_enforcement_cleared`), never names.

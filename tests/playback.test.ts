@@ -92,6 +92,7 @@ function deps(over: Partial<PlaybackDeps> = {}): TestDeps {
       return allowed
     },
     readStoredName: async () => null,
+    checkNda: async () => ({ allow: true, reason: 'not_enforced', signed: false }),
     signEmbed: async (id, exp) => `https://player.mediadelivery.net/embed/1/${id}?token=t&expires=${exp}`,
     audit: async (row) => {
       state.audits.push(row)

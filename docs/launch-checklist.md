@@ -45,7 +45,8 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
    and `20261020_level_descriptions.sql` (Level page descriptions + audit widening),
    `20261020_section_descriptions.sql` (descriptions for the other Mentorship pages),
    `20261020_batch_sections.sql` (the three batch sections),
-   `20261024_mentorship_tabs.sql` (2.0.3 editable tabs; then deploy `manage-tabs` and redeploy `list-content`, `create-upload`, `manage-content`, `set-thumbnail`, `issue-playback-token`, `level-descriptions`)
+   `20261024_mentorship_tabs.sql` (2.0.3 editable tabs; then deploy `manage-tabs` and redeploy `list-content`, `create-upload`, `manage-content`, `set-thumbnail`, `issue-playback-token`, `level-descriptions`),
+   `20261025_nda_required.sql` (NDA required to keep access; then deploy `nda` and redeploy `issue-playback-token` and `list-content`)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -56,6 +57,7 @@ own terminal). Do not paste secrets into chat.
 
 - `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`
 - `MENTORSHIP_API_BASE_URL`, `MENTORSHIP_API_TOKEN`
+- `MENTORSHIP_NDA_SIGN_TOKEN` (write token for in-app NDA signing; must equal the bot's `MEMBER_NDA_SIGN_TOKEN`, never reuse another secret)
 - `BUNNY_STREAM_LIBRARY_ID`, `BUNNY_STREAM_TOKEN_KEY`, `BUNNY_STREAM_API_KEY`
 - Optional: `BUNNY_STREAM_CDN_HOSTNAME` (thumbnails), `PLAYBACK_TTL_SECONDS`
 - Optional: `DISCORD_ROLE_OWNER` / `_ADMIN` / `_MENTOR` / `_STUDENT` / `_LEVEL_1..3`
@@ -149,3 +151,24 @@ Supabase redirect URLs, Squarespace URL mapping, old-address redirect.
 
 Not yet. Blocked on deploying the bot's member-access API to a sandbox, cloud
 secrets, function deploys and a Bunny library.
+
+### NDA rollout (required to keep access)
+
+Do these in order; each step is safe on its own because nothing is enforced until step 5.
+
+1. [ ] Confirm the NDA text is right for current students. The existing text says it "does not
+   change the separate payment agreement"; check that still describes how current students joined.
+   Changing the text means a new bot constant (new version and hash).
+2. [ ] Bot: deploy the NDA endpoints build to Railway (migration `012_member_ndas.sql` runs on
+   start) and set `MEMBER_NDA_SIGN_TOKEN` (independent of every other secret).
+3. [ ] Supabase: set `MENTORSHIP_NDA_SIGN_TOKEN` to the same value, run
+   `20261025_nda_required.sql`, deploy `nda`, redeploy `issue-playback-token` and `list-content`.
+4. [ ] Verify with a test student: sign in the app, check the bot DM copy arrives, check Admin ->
+   Members -> "Check who has signed" lists the right people, and that someone who signed in
+   Discord earlier is shown as signed without signing again. Owner, admin and mentor see no
+   banner and are never blocked.
+5. [ ] Owner sets the deadline (suggested 7 days) under Admin -> Members -> NDA requirement.
+   Students see a "Sign your NDA by <date>" banner until then; afterwards unsigned students see
+   the sign screen and videos stay locked until they sign.
+6. [ ] After the deadline: check who is still unsigned; the owner can move the date or clear it
+   to stop enforcing at any time.

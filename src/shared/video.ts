@@ -270,6 +270,8 @@ export type PlaybackDenyReason =
   | 'upstream_failed'
   | 'tab_not_found'
   | 'tab_not_empty'
+  /** The member has not signed the NDA and the owner's deadline has passed. */
+  | 'nda_required'
   /** Client-side: the open player couldn't re-confirm access before it lapsed. */
   | 'access_expired'
 
@@ -359,6 +361,7 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   upstream_failed: 'The video service could not complete that request. Try again shortly.',
   tab_not_found: 'That tab no longer exists.',
   tab_not_empty: 'Delete every video in this tab before deleting it.',
+  nda_required: 'Sign the mentorship NDA to keep watching. Open any Mentorship page and choose Read and sign the NDA.',
   access_expired:
     'We could not re-confirm your access in time, so playback stopped. This is usually temporary: press play to try again.'
 }
@@ -371,3 +374,31 @@ export function isVideoLevel(n: unknown): n is VideoLevel {
 export function levelsInclude(levels: readonly number[], required: VideoLevel): boolean {
   return levels.some((l) => l >= required)
 }
+
+// --- NDA ---------------------------------------------------------------------
+
+/** The NDA text exactly as the bot holds it. `sha256` is what a signature is bound to. */
+export interface NdaTerms {
+  version: string
+  text: string
+  sha256: string
+  /** The sentence the signer agrees to by typing their name. */
+  statement: string
+  /** What the signer types to confirm, e.g. "I AGREE". */
+  consentPhrase: string
+}
+
+/**
+ * Whether the signed-in member must sign an NDA. Staff are exempt (`applies: false`).
+ * `signed: null` means the bot could not say right now, so no banner is shown.
+ */
+export interface NdaStatus {
+  applies: boolean
+  signed: boolean | null
+  /** ISO instant from which unsigned members lose playback, or null when not enforced. */
+  enforceFrom: string | null
+  enforced: boolean
+}
+
+/** What an NDA check says about one member in the Admin list (never a name). */
+export type MemberNdaState = 'signed' | 'unsigned' | 'unknown'

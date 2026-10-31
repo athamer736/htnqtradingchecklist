@@ -473,3 +473,65 @@ export function parseRecordingsQuery(body: unknown): Parsed<{ studentDiscordId: 
   if (!isSnowflake(o.studentDiscordId)) return { ok: false, error: 'invalid-student' }
   return { ok: true, value: { studentDiscordId: o.studentDiscordId } }
 }
+
+// --- nda --------------------------------------------------------------------
+
+export type NdaRequest =
+  | { action: 'status' }
+  | { action: 'terms' }
+  | { action: 'sign'; legalName: string; consent: string; termsSha256: string }
+  /** Owner only. ISO instant, or null to stop enforcing. */
+  | { action: 'set_enforcement'; enforceFrom: string | null }
+  /** Staff only. Which of these members have signed (ids in, booleans out, no names). */
+  | { action: 'members'; discordIds: string[] }
+
+export const NDA_MEMBERS_MAX = 50
+
+/**
+ * The Discord ID of the person signing always comes from the verified session, so any
+ * identity field in the body is refused. The signed name is validated like any other
+ * legal name and collapsed to single spaces, exactly as the bot stores it.
+ */
+export function parseNdaRequest(body: unknown): Parsed<NdaRequest> {
+  const o = asObject(body)
+  if (!o) return { ok: false, error: 'invalid-body' }
+  if (['discord_id', 'discordId', 'legal_name', 'user_id', 'userId'].some((k) => k in o)) {
+    return { ok: false, error: 'identity-not-accepted' }
+  }
+  switch (o.action) {
+    case undefined:
+    case 'status':
+      return { ok: true, value: { action: 'status' } }
+    case 'terms':
+      return { ok: true, value: { action: 'terms' } }
+    case 'sign': {
+      if (typeof o.legalName !== 'string' || o.legalName.length > 300) return { ok: false, error: 'invalid-name' }
+      const name = o.legalName.trim().replace(/\s+/g, ' ')
+      if (name.length < 2 || name.length > 100 || !usableLegalName(name)) return { ok: false, error: 'invalid-name' }
+      if (typeof o.consent !== 'string' || o.consent.trim().toUpperCase() !== 'I AGREE') {
+        return { ok: false, error: 'invalid-consent' }
+      }
+      if (typeof o.termsSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(o.termsSha256)) {
+        return { ok: false, error: 'invalid-terms-hash' }
+      }
+      return { ok: true, value: { action: 'sign', legalName: name, consent: 'I AGREE', termsSha256: o.termsSha256 } }
+    }
+    case 'set_enforcement': {
+      if (o.enforceFrom === null) return { ok: true, value: { action: 'set_enforcement', enforceFrom: null } }
+      if (typeof o.enforceFrom !== 'string' || o.enforceFrom.length > 40) return { ok: false, error: 'invalid-date' }
+      const ms = Date.parse(o.enforceFrom)
+      if (!Number.isFinite(ms)) return { ok: false, error: 'invalid-date' }
+      return { ok: true, value: { action: 'set_enforcement', enforceFrom: new Date(ms).toISOString() } }
+    }
+    case 'members': {
+      if (!Array.isArray(o.discordIds) || o.discordIds.length === 0 || o.discordIds.length > NDA_MEMBERS_MAX) {
+        return { ok: false, error: 'invalid-members' }
+      }
+      const ids = [...new Set(o.discordIds)]
+      if (!ids.every(isSnowflake)) return { ok: false, error: 'invalid-members' }
+      return { ok: true, value: { action: 'members', discordIds: ids as string[] } }
+    }
+    default:
+      return { ok: false, error: 'invalid-action' }
+  }
+}

@@ -8,11 +8,14 @@
  * and MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1 on the Edge Function.
  */
 
+import { createHash } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { timingSafeEqualString } from '../../supabase/functions/_shared/mentorshipApi.ts'
 
 const PORT = Number(process.env.MOCK_MENTORSHIP_PORT ?? 8787)
 const TOKEN = process.env.MOCK_MENTORSHIP_TOKEN ?? 'test-only-mentorship-token-32chars-min'
+/** Separate WRITE credential for nda-sign, like the real bot. */
+const SIGN_TOKEN = process.env.MOCK_NDA_SIGN_TOKEN ?? 'test-only-nda-signing-token-32chars-min'
 
 type Fixture = {
   access: 'allowed' | 'denied'
@@ -70,8 +73,102 @@ function readBody(req: IncomingMessage): Promise<string> {
   })
 }
 
+/** Mock NDA text. The hash is real so the platform's text/hash consistency check is exercised. */
+const NDA_TEXT = '1. Parties and purpose\nThis is the TEST-ONLY NDA text. Keep the mentorship content private.'
+const NDA_SHA = createHash('sha256').update(NDA_TEXT, 'utf8').digest('hex')
+
+type NdaFixture = { signedName?: string; conflicting?: boolean; status?: number; retryAfter?: string }
+/** Who has signed. nda-sign adds to this map; tests may reset it with resetNdaState(). */
+const NDA_DEFAULTS: Record<string, NdaFixture> = {
+  '100000000000000001': { signedName: 'Ada Example' },
+  // Signed, but the bot holds conflicting names: signed without a legal_name.
+  '100000000000000003': { signedName: 'Conflict Example', conflicting: true },
+  '100000000000000006': { signedName: 'Staff Example' },
+  '100000000000000008': { status: 429, retryAfter: '9' },
+  '100000000000000009': { status: 503, retryAfter: '5' }
+}
+let ndaState: Record<string, NdaFixture> = structuredClone(NDA_DEFAULTS)
+function resetNdaState(): void {
+  ndaState = structuredClone(NDA_DEFAULTS)
+}
+
+function json(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
+  res.statusCode = status
+  res.setHeader('Content-Type', 'application/json')
+  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v)
+  res.end(JSON.stringify(body))
+}
+
+function bearer(req: IncomingMessage): string {
+  return (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '')
+}
+
+async function ndaHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const path = req.url ?? ''
+  const sign = path === '/api/v1/nda-sign'
+  if (!sign && !timingSafeEqualString(bearer(req), TOKEN)) return json(res, 401, { error: 'unauthorized' })
+  if (sign && !timingSafeEqualString(bearer(req), SIGN_TOKEN)) return json(res, 401, { error: 'unauthorized' })
+  const checkedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+  if (path === '/api/v1/nda-terms' && req.method === 'GET') {
+    return json(res, 200, {
+      schema_version: 1,
+      version: 'test-v1',
+      text: NDA_TEXT,
+      sha256: NDA_SHA,
+      statement: 'I have read this NDA and agree; my typed name is my signature.',
+      consent_phrase: 'I AGREE'
+    })
+  }
+  if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' })
+  let body: Record<string, unknown>
+  try {
+    body = JSON.parse(await readBody(req)) as Record<string, unknown>
+  } catch {
+    return json(res, 400, { error: 'invalid_json' })
+  }
+  const id = body.discord_id
+  if (typeof id !== 'string' || !/^[1-9]\d{16,19}$/.test(id)) return json(res, 400, { error: 'invalid_discord_id' })
+  const f = ndaState[id]
+  if (f?.status) {
+    return json(res, f.status, { error: f.status === 429 ? 'rate_limited' : 'lookup_failed' }, f.retryAfter ? { 'Retry-After': f.retryAfter } : {})
+  }
+  if (path === '/api/v1/nda-status') {
+    return json(
+      res,
+      200,
+      f?.signedName
+        ? {
+            schema_version: 1,
+            discord_id: id,
+            signed: true,
+            signed_at: '2026-09-01T10:00:00Z',
+            ...(f.conflicting ? {} : { legal_name: f.signedName }),
+            checked_at: checkedAt,
+            recheck_after_seconds: 300
+          }
+        : { schema_version: 1, discord_id: id, signed: false, checked_at: checkedAt, recheck_after_seconds: 300 }
+    )
+  }
+  if (sign) {
+    if (body.consent !== 'I AGREE') return json(res, 400, { error: 'invalid_consent' })
+    if (typeof body.legal_name !== 'string' || body.legal_name.trim().length < 2) return json(res, 400, { error: 'invalid_name' })
+    if (body.terms_sha256 !== NDA_SHA) return json(res, 409, { error: 'terms_changed' })
+    const already = !!f?.signedName
+    if (!already) ndaState[id] = { signedName: body.legal_name.trim() }
+    return json(res, 200, {
+      schema_version: 1,
+      discord_id: id,
+      result: already ? 'already_signed' : 'signed',
+      signed_at: checkedAt,
+      checked_at: checkedAt
+    })
+  }
+  return json(res, 404, { error: 'not_found' })
+}
+
 async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   res.setHeader('Cache-Control', 'no-store')
+  if (req.url?.startsWith('/api/v1/nda-')) return ndaHandler(req, res)
   if (req.method !== 'POST' || req.url !== '/api/v1/member-access') {
     res.statusCode = 404
     res.end('not found')
@@ -146,4 +243,4 @@ if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith
   })
 }
 
-export { handler, FIXTURES, TOKEN }
+export { handler, FIXTURES, TOKEN, SIGN_TOKEN, NDA_TEXT, NDA_SHA, resetNdaState }

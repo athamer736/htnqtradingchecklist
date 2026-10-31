@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import NdaBanner, { useNdaGate } from '../components/nda/NdaBanner'
+import NdaGateView from '../components/nda/NdaGateView'
 import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
 import PageDescriptionDialog, { DescriptionCard } from '../components/video/PageDescriptionDialog'
 import PlaybackNotice from '../components/video/PlaybackNotice'
@@ -59,6 +61,7 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
   const saveTabDescription = useMentorship((s) => s.saveTabDescription)
   const [uploading, setUploading] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
+  const ndaGate = useNdaGate()
 
   useEffect(() => {
     void load()
@@ -67,6 +70,8 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
 
   const gate = <MentorshipStatus />
   if (status !== 'ready' || !caps) return gate
+  // Past the owner's deadline with no signed NDA: show how to sign instead of the page.
+  if (ndaGate.locked) return <NdaGateView />
 
   if (playing) {
     const current = videos.find((v) => v.id === playTarget?.id)
@@ -134,6 +139,7 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
         </div>
       </div>
 
+      <NdaBanner />
       {playError && <PlaybackNotice error={playError} onDismiss={stop} />}
 
       {descriptionText && <DescriptionCard label={`About ${tab.title}`} text={descriptionText} />}

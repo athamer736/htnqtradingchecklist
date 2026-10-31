@@ -15,6 +15,8 @@ import { loadContext, thumbnailUrl } from '../_shared/context.ts'
 import { canUploadRecording, type EncodingStatus, type Visibility } from '../_shared/decisions.ts'
 import { handleOptions, json } from '../_shared/http.ts'
 import { deny } from '../_shared/messages.ts'
+import { isEnforced } from '../_shared/ndaGate.ts'
+import { readEnforceFrom } from '../_shared/ndaStore.ts'
 import {
   canDeleteTabVideo,
   canEditTabVideo,
@@ -46,8 +48,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!auth.ok) return deny(auth.reasonCode)
   const { caps, roles } = auth
 
-  const [allTabs, settings] = await Promise.all([listTabs(admin), loadTabSettings(admin)])
+  const [allTabs, settings, enforce] = await Promise.all([listTabs(admin), loadTabSettings(admin), readEnforceFrom(admin)])
   if (!allTabs.ok || !settings.ok) return deny('upstream_failed')
+  // A failed settings read just hides the banner; playback itself is gated separately.
+  const ndaEnforceFrom = enforce.ok ? enforce.at : null
   const tabs = allTabs.value.filter((t) => canViewTab(caps, roles, t))
   const tabById = new Map(tabs.map((t) => [t.id, t]))
   const tabBySlug = new Map(tabs.map((t) => [t.slug, t]))
@@ -170,6 +174,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       canUpload: canUploadToTab(caps, roles, t),
       canManage: canManageTabContent(caps, roles, t)
     })),
-    videos
+    videos,
+    // Whether the NDA applies and when it is enforced. No bot call here: the app asks the `nda`
+    // function whether this member has signed, so listing stays fast and the bot is not hit on
+    // every page load.
+    nda: {
+      applies: !caps.isStaff,
+      enforceFrom: ndaEnforceFrom === null ? null : new Date(ndaEnforceFrom).toISOString(),
+      enforced: isEnforced(ndaEnforceFrom, Date.now())
+    }
   })
 })

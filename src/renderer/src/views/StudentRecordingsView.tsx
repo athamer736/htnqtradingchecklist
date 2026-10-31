@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import NdaBanner, { useNdaGate } from '../components/nda/NdaBanner'
+import NdaGateView from '../components/nda/NdaGateView'
 import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
 import PageDescriptionDialog, { DescriptionCard } from '../components/video/PageDescriptionDialog'
 import PlaybackNotice from '../components/video/PlaybackNotice'
@@ -129,6 +131,7 @@ export default function StudentRecordingsView(): JSX.Element {
   const canEditDescriptions = useMentorship((s) => s.canEditRecordingsDescription)
   const loadDescriptions = useMentorship((s) => s.loadRecordingsDescription)
   const saveRecordingsDescription = useMentorship((s) => s.saveRecordingsDescription)
+  const ndaGate = useNdaGate()
 
   useEffect(() => {
     void load()
@@ -146,6 +149,7 @@ export default function StudentRecordingsView(): JSX.Element {
   }, [status, canView, isStaff, student, loadRecordings])
 
   if (status !== 'ready' || !caps) return <MentorshipStatus />
+  if (ndaGate.locked) return <NdaGateView />
 
   if (playing) {
     const current = recordings.find((r) => r.id === playTarget?.id)
@@ -232,6 +236,7 @@ export default function StudentRecordingsView(): JSX.Element {
         </div>
       </div>
 
+      <NdaBanner />
       {playError && <PlaybackNotice error={playError} onDismiss={stop} />}
 
       {canView && recordingsDescription && (

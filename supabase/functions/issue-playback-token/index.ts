@@ -24,6 +24,9 @@ import { handleOptions, json, newSessionRef, readJsonBody } from '../_shared/htt
 import { readStoredName } from '../_shared/memberNameStore.ts'
 import { deny } from '../_shared/messages.ts'
 import { fetchMentorshipAccess } from '../_shared/mentorshipApi.ts'
+import { fetchNdaStatus } from '../_shared/mentorshipNdaApi.ts'
+import { evaluateNda } from '../_shared/ndaGate.ts'
+import { readEnforceFrom, readNdaCache, writeNdaCache } from '../_shared/ndaStore.ts'
 import { runPlayback, type LoadedRecording, type LoadedVideo } from '../_shared/playback.ts'
 import { slugForLegacy } from '../_shared/tabCompat.ts'
 import { getTab } from '../_shared/tabStore.ts'
@@ -99,6 +102,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
         token: mentorshipToken,
         discordId,
         allowLocalHttp: env.allowLocalHttp
+      }),
+    checkNda: ({ discordId, isStaff }) =>
+      evaluateNda({
+        isStaff,
+        discordId,
+        now: Date.now(),
+        lookup: (id) =>
+          fetchNdaStatus({
+            baseUrl: mentorshipBaseUrl,
+            token: mentorshipToken,
+            discordId: id,
+            allowLocalHttp: env.allowLocalHttp
+          }),
+        readEnforceFrom: () => readEnforceFrom(admin),
+        readCache: (id) => readNdaCache(admin, id),
+        writeCache: (id) => writeNdaCache(admin, id)
       }),
     readStoredName: async (discordId) => {
       const stored = await readStoredName(admin, discordId)

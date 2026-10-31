@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAdmin, type IdentityEntry } from '../../store/useAdmin'
+import { useNda } from '../../store/useNda'
+import NdaSettingsCard from './NdaSettingsCard'
 import {
   IDENTITY_DENY_LABELS,
   type AdminMember,
@@ -180,6 +182,7 @@ export default function MembersTab(): JSX.Element {
   const loadMembers = useAdmin((s) => s.loadMembers)
   const lookupIdentity = useAdmin((s) => s.lookupIdentity)
   const hideIdentity = useAdmin((s) => s.hideIdentity)
+  const ndaStates = useNda((s) => s.memberStates)
 
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -212,6 +215,7 @@ export default function MembersTab(): JSX.Element {
 
   return (
     <div>
+      <NdaSettingsCard />
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           className="field max-w-xs"
@@ -282,6 +286,15 @@ export default function MembersTab(): JSX.Element {
                       <span className="chip bg-emerald-400/10 text-emerald-200">Name on file</span>
                     )}
                     {m.hasStoredName === false && <span className="chip bg-bg-soft text-muted">No name added</span>}
+                    {!m.isStaff && ndaStates[m.discordId] === 'signed' && (
+                      <span className="chip bg-emerald-400/10 text-emerald-200">NDA signed</span>
+                    )}
+                    {!m.isStaff && ndaStates[m.discordId] === 'unsigned' && (
+                      <span className="chip bg-amber-400/15 text-amber-200">NDA not signed</span>
+                    )}
+                    {!m.isStaff && ndaStates[m.discordId] === 'unknown' && (
+                      <span className="chip bg-bg-soft text-muted">NDA unknown</span>
+                    )}
                   </div>
                   <div className="truncate text-[11px] text-muted">
                     @{m.username} · {m.discordId}

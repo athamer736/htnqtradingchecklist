@@ -19,6 +19,8 @@ export interface MentorshipEnv {
   bunnyCdnHostname: string | null
   mentorshipBaseUrl: string | null
   mentorshipToken: string | null
+  /** WRITE credential for the bot's nda-sign endpoint. Never reused for reads. */
+  mentorshipNdaSignToken: string | null
   allowLocalHttp: boolean
   playbackTtlSeconds: number
 }
@@ -63,6 +65,7 @@ export function loadContext(): MentorshipContext | null {
     bunnyCdnHostname: optional('BUNNY_STREAM_CDN_HOSTNAME'),
     mentorshipBaseUrl: optional('MENTORSHIP_API_BASE_URL'),
     mentorshipToken: optional('MENTORSHIP_API_TOKEN'),
+    mentorshipNdaSignToken: optional('MENTORSHIP_NDA_SIGN_TOKEN'),
     allowLocalHttp: Deno.env.get('MENTORSHIP_API_ALLOW_HTTP_LOCALHOST') === '1',
     // Bounded: 1-30 minutes, default 12. Clients renew before expiry.
     playbackTtlSeconds: clampInt(optional('PLAYBACK_TTL_SECONDS'), 12 * 60, 60, 30 * 60)

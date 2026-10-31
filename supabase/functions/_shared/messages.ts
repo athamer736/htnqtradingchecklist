@@ -25,6 +25,10 @@ export type DenyCode =
   | 'upstream_failed'
   | 'tab_not_found'
   | 'tab_not_empty'
+  | 'nda_required'
+  | 'nda_terms_changed'
+  | 'invalid_consent'
+  | 'invalid_date'
 
 export const DENY_MESSAGES: Record<DenyCode, string> = {
   unauthenticated: 'Sign in with Discord to watch mentorship videos.',
@@ -57,7 +61,12 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
     'That is not a valid legal name. Enter the full name using letters (2 to 200 characters), with no placeholders.',
   upstream_failed: 'The video service could not complete that request. Try again shortly.',
   tab_not_found: 'That tab no longer exists.',
-  tab_not_empty: 'Delete or move every video out of this tab before deleting it.'
+  tab_not_empty: 'Delete or move every video out of this tab before deleting it.',
+  nda_required:
+    'Sign the mentorship NDA to keep watching. It takes a minute: open the Mentorship page and choose Sign NDA.',
+  nda_terms_changed: 'The NDA was updated while you were reading it. Reload it and read the new version before signing.',
+  invalid_consent: 'Type I AGREE exactly to sign.',
+  invalid_date: 'That is not a valid date.'
 }
 
 export const DENY_STATUS: Record<DenyCode, number> = {
@@ -81,7 +90,11 @@ export const DENY_STATUS: Record<DenyCode, number> = {
   invalid_name: 400,
   upstream_failed: 502,
   tab_not_found: 404,
-  tab_not_empty: 409
+  tab_not_empty: 409,
+  nda_required: 403,
+  nda_terms_changed: 409,
+  invalid_consent: 400,
+  invalid_date: 400
 }
 
 export function denyBody(reasonCode: DenyCode): { ok: false; reasonCode: DenyCode; message: string } {

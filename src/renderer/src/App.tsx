@@ -17,6 +17,7 @@ import { useTrades } from './store/useTrades'
 import { useDataCollection } from './store/useDataCollection'
 import { useAuth } from './store/useAuth'
 import { useMentorship } from './store/useMentorship'
+import { useNda } from './store/useNda'
 import { startSync, stopSync, isCloudSyncEnabled } from './sync/syncEngine'
 import { canOpenAdmin, canSeeMentorshipPage, isMentorshipPage, tabIdFromView } from '../../shared/mentorshipNav'
 
@@ -31,6 +32,7 @@ export default function App(): JSX.Element {
   const userId = useAuth((s) => s.user?.id ?? null)
   const loadMentorship = useMentorship((s) => s.load)
   const resetMentorship = useMentorship((s) => s.reset)
+  const resetNda = useNda((s) => s.reset)
 
   useEffect(() => {
     installGlobalLogCapture()
@@ -52,8 +54,9 @@ export default function App(): JSX.Element {
   // Cleared on sign-out / account switch so nothing leaks between accounts.
   useEffect(() => {
     resetMentorship()
+    resetNda()
     if (authStatus === 'in' && userId) void loadMentorship()
-  }, [authStatus, userId, loadMentorship, resetMentorship])
+  }, [authStatus, userId, loadMentorship, resetMentorship, resetNda])
 
   const capabilities = useMentorship((s) => s.capabilities)
   const tabs = useMentorship((s) => s.tabs)

@@ -74,6 +74,7 @@ function deps(token = TOKEN, timeoutMs = 1_000): PlaybackDeps & { audits: AuditR
     }),
     loadRecording: async () => null,
     readStoredName: async () => null,
+    checkNda: async () => ({ allow: true, reason: 'not_enforced', signed: false }),
     checkMentorship: (discordId) =>
       fetchMentorshipAccess({ baseUrl, token, discordId, allowLocalHttp: true, timeoutMs, retries: 1, sleep: async () => {} }),
     signEmbed: async (id, exp) => `https://player.mediadelivery.net/embed/1/${id}?token=t&expires=${exp}`,

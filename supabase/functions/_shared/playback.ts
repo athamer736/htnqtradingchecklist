@@ -7,6 +7,7 @@ import { canPlayRecording, type EncodingStatus, type RecordingItem, type Visibil
 import { pickWatermarkName } from './memberNames.ts'
 import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
 import { MENTORSHIP_MAX_RECHECK_SECONDS, type MentorshipLookupResult } from './mentorshipApi.ts'
+import type { NdaDecision } from './ndaGate.ts'
 import { canPlayTabVideo, canSeeUnpublishedInTab, type TabAccess } from './tabAccess.ts'
 import type { PlaybackRequest } from './validation.ts'
 
@@ -43,6 +44,12 @@ export interface PlaybackDeps {
   loadVideo: (id: string) => Promise<LoadedVideo | null>
   loadRecording: (id: string) => Promise<LoadedRecording | null>
   checkMentorship: (discordId: string) => Promise<MentorshipLookupResult>
+  /**
+   * The NDA gate: every non-staff viewer needs a signed NDA once the owner's deadline has
+   * passed (see ndaGate.ts). Called on every issue and renewal, so a revoked or newly signed
+   * NDA takes effect within one renewal.
+   */
+  checkNda: (viewer: { discordId: string; isStaff: boolean }) => Promise<NdaDecision>
   /** The admin-entered legal name for this member, or null (also null if it can't be read). */
   readStoredName: (discordId: string) => Promise<string | null>
   signEmbed: (bunnyVideoId: string, expiresAt: number) => Promise<string>
@@ -118,25 +125,35 @@ export async function runPlayback(
     return denied(code)
   }
 
-  // Access is decided only by the live Discord checks above: only members of the
-  // private mentorship server can sign in, and their roles decide what they can
-  // open. The bot never blocks playback (whatever it answers, or if it is down);
-  // it only supplies the viewer's legal name for the watermark. Always the
-  // Discord ID from the verified linked identity, never the request.
-  const mentorship = await deps.checkMentorship(auth.discordId)
+  // Access is decided by the live Discord checks above plus the NDA gate: only members of
+  // the private mentorship server can sign in, their roles decide what they can open, and
+  // non-staff members need a signed NDA once the owner's deadline has passed. The bot's
+  // member-access answer never blocks playback (whatever it says, or if it is down); it only
+  // supplies the recheck interval and a legal name for the watermark. Always the Discord ID
+  // from the verified linked identity, never the request.
+  const [nda, mentorship] = await Promise.all([
+    deps.checkNda({ discordId: auth.discordId, isStaff: auth.caps.isStaff }),
+    deps.checkMentorship(auth.discordId)
+  ])
+  if (!nda.allow) {
+    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: nda.code })
+    return denied(nda.code)
+  }
   const recheckAfterSeconds =
     mentorship.kind === 'allowed' || mentorship.kind === 'denied'
       ? mentorship.body.recheck_after_seconds
       : MENTORSHIP_MAX_RECHECK_SECONDS
 
-  // Name shown beside the Discord ID: the bot's, else the admin-entered one. It is
+  // Name shown beside the Discord ID: the name on the member's signed NDA first, then the
+  // bot's member-access name, then the admin-entered one. It is
   // only ever sent back to this same verified viewer (it is their own watermark),
   // never written to the audit log, and a failed read just means "no name". A
   // staff_record name is only used while the viewer still holds a live staff role.
   const botName =
-    mentorship.kind === 'allowed' && (mentorship.body.identity_source !== 'staff_record' || auth.caps.isStaff)
+    nda.legalName ??
+    (mentorship.kind === 'allowed' && (mentorship.body.identity_source !== 'staff_record' || auth.caps.isStaff)
       ? mentorship.body.legal_name
-      : null
+      : null)
   let legalName = pickWatermarkName(botName, null)
   if (!legalName) {
     const stored = await deps.readStoredName(auth.discordId).catch(() => null)

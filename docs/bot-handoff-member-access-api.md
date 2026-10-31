@@ -201,3 +201,30 @@ authorisation).
 `tests/mocks/mentorshipAccessMock.ts` implements this contract for local tests.
 It must never be used as a production substitute. Production playback **fails
 closed** when the real endpoint is missing or misconfigured.
+
+## NDA endpoints (NDA required to keep access)
+
+Added after the member-access contract above; the platform needs all three. Full bot-side
+description: the bot repo's `docs/MEMBER-ACCESS-API.md` ("NDA status and in-app signing"). The
+platform clients (`supabase/functions/_shared/mentorshipNdaApi.ts`) validate every response
+strictly and treat anything unexpected as "bot unavailable".
+
+| Endpoint | Token | Request | Response (`schema_version` 1) |
+| --- | --- | --- | --- |
+| `POST /api/v1/nda-status` | `MENTORSHIP_API_TOKEN` (read, the same one as member-access) | `{discord_id}` | unsigned: `{schema_version, discord_id, signed:false, checked_at, recheck_after_seconds}`; signed: the same plus `signed_at` and, only when every valid NDA agrees on a usable name, `legal_name` |
+| `GET /api/v1/nda-terms` | read | none | `{schema_version, version, text, sha256, statement, consent_phrase:"I AGREE"}`; `sha256` must be the SHA-256 of `text` (the platform checks) |
+| `POST /api/v1/nda-sign` | `MENTORSHIP_NDA_SIGN_TOKEN` (**separate write token**) | exactly `{discord_id, legal_name, consent:"I AGREE", terms_sha256, request_id}` | `{schema_version, discord_id, result:"signed"\|"already_signed", signed_at, checked_at}`; errors `invalid_name` / `invalid_consent` (400), `terms_changed` (409) |
+
+Rules the platform relies on:
+
+- **Signed means any non-voided NDA signed by this exact Discord ID**, application-bound
+  (`ndas.signed_by`) or in-app (`member_ndas`), regardless of payment, onboarding or whether any
+  application exists. A legacy student with no application is `signed:true` if they signed.
+- The read token must never create signatures and the sign token must never be accepted by the
+  read endpoints. Neither may equal any other secret.
+- `nda-sign` is idempotent per person (a second call returns `already_signed`) and binds the
+  signature to `terms_sha256`; a mismatch must be refused so nobody signs text they were not shown.
+- Logs: endpoint, outcome and last 4 digits of the Discord ID only. Never names or tokens.
+- The platform asks `nda-status` on every playback issue and renewal for non-staff members, so
+  expect roughly one call per viewer per renewal (about every 3 to 5 minutes while watching).
+  Per-Discord-ID limit on the bot is 30/min, per-credential 600/min.

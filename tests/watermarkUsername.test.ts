@@ -88,6 +88,7 @@ describe('playback watermark', () => {
     loadRecording: async () => null,
     checkMentorship: async () => allowed,
     readStoredName: async () => null,
+    checkNda: async () => ({ allow: true, reason: 'not_enforced', signed: false }),
     signEmbed: async () => 'https://player.example/embed',
     audit: async () => {},
     newSessionRef: () => 'ref123',
