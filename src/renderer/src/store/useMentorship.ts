@@ -40,6 +40,8 @@ export type ManageAction =
   | { action: 'refresh_status' }
   /** Owner/admin, videos only: swap with the neighbour in the same section/Level. */
   | { action: 'move'; direction: 'up' | 'down' }
+  /** Drag and drop, videos only: the dragged video's tab, in its full new order. */
+  | { action: 'reorder'; ids: string[] }
 
 export type CreateUploadRequest =
   | {
@@ -171,6 +173,8 @@ interface MentorshipState {
   tick: () => void
   stop: () => void
   manage: (kind: 'video' | 'recording', id: string, action: ManageAction) => Promise<Result<object>>
+  /** Drag and drop: video `id` was dropped into `ids`, the full new order of its tab. Error message or null. */
+  reorderVideos: (id: string, ids: string[]) => Promise<string | null>
   createUpload: (req: CreateUploadRequest) => Promise<UploadCredentials | Failure>
   /** Staff: replace a ready video's thumbnail with a JPEG/PNG/WebP image (max 2 MB). */
   setThumbnail: (videoId: string, image: File) => Promise<Result<object>>
@@ -464,6 +468,24 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
     const body = await invoke('manage-content', { kind, id, ...action })
     if (body?.ok === true) return { ok: true }
     return toFailure(body, 'That change could not be saved.')
+  },
+
+  reorderVideos: async (id, ids) => {
+    // Show the new order at once: the tab's videos swap places among their own slots.
+    const before = get().videos
+    const byId = new Map(before.map((v) => [v.id, v]))
+    if (ids.every((x) => byId.has(x))) {
+      const slots = before.map((v, i) => (ids.includes(v.id) ? i : -1)).filter((i) => i >= 0)
+      const next = [...before]
+      slots.forEach((slot, k) => {
+        const v = byId.get(ids[k])
+        if (v) next[slot] = v
+      })
+      set({ videos: next })
+    }
+    const res = await get().manage('video', id, { action: 'reorder', ids })
+    await get().load()
+    return res.ok ? null : res.message
   },
 
   createUpload: async (req) => {

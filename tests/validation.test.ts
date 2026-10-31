@@ -193,3 +193,31 @@ describe('student queries', () => {
     assert.equal(parseRecordingsQuery({ discordId: STUDENT }).ok, false)
   })
 })
+describe('parseManageRequest reorder (drag and drop)', () => {
+  const UUID2 = '7a1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b'
+  it('accepts the dragged video inside a duplicate-free list of video ids', () => {
+    assert.deepEqual(parseManageRequest({ kind: 'video', id: UUID, action: 'reorder', ids: [UUID2, UUID] }), {
+      ok: true,
+      value: { kind: 'video', id: UUID, action: 'reorder', ids: [UUID2, UUID] }
+    })
+  })
+
+  it('rejects recordings, missing or duplicate ids, junk and oversized lists', () => {
+    const bad: unknown[] = [
+      { kind: 'recording', id: UUID, action: 'reorder', ids: [UUID] },
+      { kind: 'video', id: UUID, action: 'reorder', ids: [UUID2] },
+      { kind: 'video', id: UUID, action: 'reorder', ids: [UUID, UUID] },
+      { kind: 'video', id: UUID, action: 'reorder', ids: [] },
+      { kind: 'video', id: UUID, action: 'reorder', ids: ['x', UUID] },
+      { kind: 'video', id: UUID, action: 'reorder', ids: 'nope' },
+      { kind: 'video', id: UUID, action: 'reorder' },
+      {
+        kind: 'video',
+        id: UUID,
+        action: 'reorder',
+        ids: Array.from({ length: 501 }, (_, i) => `6f1d2c3b-4a59-4e6f-8a7b-${String(i).padStart(12, '0')}`)
+      }
+    ]
+    for (const b of bad) assert.equal(parseManageRequest(b).ok, false, JSON.stringify(b).slice(0, 80))
+  })
+})
