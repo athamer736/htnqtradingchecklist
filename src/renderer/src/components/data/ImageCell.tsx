@@ -6,7 +6,7 @@ import { ShotThumbs } from '../../journal/SetupBlock'
 export default function ImageCell({
   images,
   max = 3,
-  size = 'h-11 w-16'
+  size = 'h-20 w-32'
 }: {
   images: DataImage[]
   max?: number

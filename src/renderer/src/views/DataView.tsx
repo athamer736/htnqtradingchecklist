@@ -194,9 +194,9 @@ export default function DataView(): JSX.Element {
       if (!text && n === 0) return <span className="text-muted">-</span>
       if (preview) {
         return (
-          <div className="flex flex-col gap-1.5">
-            {text && <span className="line-clamp-3 whitespace-pre-line text-slate-200">{text}</span>}
-            {n > 0 && <ImageCell images={entry.columnImages?.[col.id] ?? []} />}
+          <div className="flex items-center gap-3">
+            {text && <span className="line-clamp-4 min-w-0 flex-1 whitespace-pre-line text-slate-200">{text}</span>}
+            {n > 0 && (<div className="shrink-0"><ImageCell images={entry.columnImages?.[col.id] ?? []} max={2} /></div>)}
           </div>
         )
       }
@@ -302,7 +302,7 @@ export default function DataView(): JSX.Element {
         id: col.id,
         name: col.name,
         type,
-        width: col.type === 'textimages' || col.type === 'text' ? 260 : col.type === 'images' ? 220 : 180,
+        width: col.type === 'textimages' ? 480 : col.type === 'text' ? 260 : col.type === 'images' ? 440 : 180,
         render: (e) => renderCell(col, e, true),
         sort: (e) => cellText(col, e),
         text: (e) => cellText(col, e),
@@ -321,7 +321,7 @@ export default function DataView(): JSX.Element {
       id: '__images',
       name: 'Screenshots',
       type: 'images',
-      width: 230,
+      width: 440,
       render: (e) => <ImageCell images={allImages(e)} />,
       sort: (e) => imageCount(e) || null
     },
