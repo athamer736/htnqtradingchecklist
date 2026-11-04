@@ -24,6 +24,8 @@ import {
   canListTabVideo,
   canManageTabContent,
   canManageTabs,
+  canRenameTabVideo,
+  canReorderTabVideoList,
   canReorderTabVideos,
   canSeeUnpublishedInTab,
   canSetTabVideoVisibility,
@@ -127,9 +129,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
           createdAt: r.created_at as string,
           sortOrd: r.sort_ord as number,
           canSetVisibility: canSetTabVideoVisibility(caps, roles, tab),
-          canEdit: canEditTabVideo(caps, roles, tab),
+          canEdit: canRenameTabVideo(caps, roles, tab),
           canDelete: canDeleteTabVideo(caps, roles, tab),
-          canReorder: canReorderTabVideos(caps, roles, tab)
+          canReorder: canReorderTabVideoList(caps, roles, tab)
         }
       })
   )

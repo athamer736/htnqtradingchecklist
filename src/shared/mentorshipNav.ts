@@ -39,7 +39,12 @@ export function canSeeMentorshipPage(
   return id !== null && tabs.some((t) => t.id === id)
 }
 
-/** The Admin page: owners and admins, and anyone holding a "tab manager" role. */
+/** The Admin page: owners and admins, anyone holding a "tab manager" role, and moderators (Mentors). */
 export function canOpenAdmin(caps: MentorshipCapabilities | null): boolean {
-  return Boolean(caps && (caps.isManager || caps.canManageTabs))
+  return Boolean(caps && (caps.isManager || caps.canManageTabs || caps.isStaff))
+}
+
+/** The Library page (video order and details): managers and moderators. */
+export function canOpenLibrary(caps: MentorshipCapabilities | null): boolean {
+  return Boolean(caps && (caps.isManager || caps.isStaff))
 }

@@ -13,6 +13,7 @@ import type {
   DataColumn,
   DataEntry,
   DataExport,
+  DataImage,
   DataValue,
   ImportMode
 } from '../../../shared/dataCollection'
@@ -21,6 +22,7 @@ import { viewKeyForSection } from '../../../shared/viewConfig'
 import { useViewConfig } from '../store/useViewPrefs'
 import EntryTable, { type TableColumn, type TableColumnType } from '../components/data/EntryTable'
 import ViewToggle from '../components/data/ViewToggle'
+import ImageCell from '../components/data/ImageCell'
 
 export default function DataView(): JSX.Element {
   const {
@@ -153,6 +155,12 @@ export default function DataView(): JSX.Element {
     setRenamingId(null)
   }
 
+  // Every image on an entry: its own plus those attached to individual columns.
+  const allImages = (entry: DataEntry): DataImage[] => [
+    ...entry.images,
+    ...Object.values(entry.columnImages ?? {}).flat()
+  ]
+
   const imageCount = (entry: DataEntry): number => {
     const perColumn = Object.values(entry.columnImages ?? {}).reduce(
       (sum, imgs) => sum + imgs.length,
@@ -161,8 +169,10 @@ export default function DataView(): JSX.Element {
     return entry.images.length + perColumn
   }
 
-  const renderCell = (col: DataColumn, entry: DataEntry): JSX.Element => {
+  // 'preview' shows real thumbnails (table rows); otherwise a compact count (cards).
+  const renderCell = (col: DataColumn, entry: DataEntry, preview = false): JSX.Element => {
     const value = entry.values[col.id]
+    if (col.type === 'images' && preview) return <ImageCell images={entry.columnImages?.[col.id] ?? []} />
     if (col.type === 'images') {
       const n = (entry.columnImages?.[col.id] ?? []).length
       return n > 0 ? (
@@ -182,6 +192,14 @@ export default function DataView(): JSX.Element {
       const text = value ? String(value) : ''
       const n = (entry.columnImages?.[col.id] ?? []).length
       if (!text && n === 0) return <span className="text-muted">-</span>
+      if (preview) {
+        return (
+          <div className="flex flex-col gap-1.5">
+            {text && <span className="line-clamp-3 whitespace-pre-line text-slate-200">{text}</span>}
+            {n > 0 && <ImageCell images={entry.columnImages?.[col.id] ?? []} />}
+          </div>
+        )
+      }
       return (
         <div className="flex flex-col gap-1">
           {text && <span className="whitespace-pre-line text-slate-200">{text}</span>}
@@ -284,8 +302,8 @@ export default function DataView(): JSX.Element {
         id: col.id,
         name: col.name,
         type,
-        width: col.type === 'textimages' || col.type === 'text' ? 240 : 170,
-        render: (e) => renderCell(col, e),
+        width: col.type === 'textimages' || col.type === 'text' ? 260 : col.type === 'images' ? 220 : 180,
+        render: (e) => renderCell(col, e, true),
         sort: (e) => cellText(col, e),
         text: (e) => cellText(col, e),
         ...(isTag
@@ -303,9 +321,8 @@ export default function DataView(): JSX.Element {
       id: '__images',
       name: 'Screenshots',
       type: 'images',
-      width: 110,
-      defaultVisible: false,
-      render: (e) => (imageCount(e) > 0 ? <span className="text-xs text-slate-300">{imageCount(e)}</span> : <span className="text-muted">-</span>),
+      width: 230,
+      render: (e) => <ImageCell images={allImages(e)} />,
       sort: (e) => imageCount(e) || null
     },
     {

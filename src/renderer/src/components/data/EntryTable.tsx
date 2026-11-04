@@ -218,10 +218,10 @@ export default function EntryTable<R>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5 text-xs">
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-xs font-medium">
         {sortCol && config.sort && (
           <button
-            className="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-sky-300"
+            className="inline-flex items-center gap-1 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-sky-200 transition hover:bg-accent/20"
             onClick={() => onConfig({ ...config, sort: null })}
             title="Clear sort"
           >
@@ -231,8 +231,10 @@ export default function EntryTable<R>({
 
         <div className="relative" ref={filterRef}>
           <button
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 transition ${
-              activeFilter ? 'bg-accent/15 text-sky-300' : 'text-muted hover:bg-bg-hover hover:text-slate-200'
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all duration-200 ${
+              activeFilter
+                ? 'border-accent/50 bg-accent/15 text-sky-200'
+                : 'border-line bg-bg-card text-slate-300 hover:border-accent/40 hover:bg-bg-hover hover:text-white'
             }`}
             onClick={() => setFilterOpen((o) => !o)}
             disabled={filterable.length === 0}
@@ -292,7 +294,7 @@ export default function EntryTable<R>({
           {searchOpen || search ? (
             <input
               autoFocus
-              className="field w-44 py-1 text-xs"
+              className="field w-56 py-1.5 text-xs"
               placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -300,7 +302,7 @@ export default function EntryTable<R>({
             />
           ) : (
             <button
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-muted transition hover:bg-bg-hover hover:text-slate-200"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-bg-card px-3 py-1.5 text-slate-300 transition-all duration-200 hover:border-accent/40 hover:bg-bg-hover hover:text-white"
               onClick={() => setSearchOpen(true)}
             >
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -314,8 +316,10 @@ export default function EntryTable<R>({
 
         <div className="relative" ref={propsRef}>
           <button
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 transition ${
-              propsOpen ? 'bg-accent/15 text-sky-300' : 'text-muted hover:bg-bg-hover hover:text-slate-200'
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all duration-200 ${
+              propsOpen
+                ? 'border-accent/50 bg-accent/15 text-sky-200'
+                : 'border-line bg-bg-card text-slate-300 hover:border-accent/40 hover:bg-bg-hover hover:text-white'
             }`}
             onClick={() => setPropsOpen((o) => !o)}
           >
@@ -381,7 +385,7 @@ export default function EntryTable<R>({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-line bg-bg-card/40">
+      <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-white/10 bg-gradient-to-b from-[#161c27] to-[#11151e] shadow-card">
         <table className="border-collapse text-sm" style={{ tableLayout: 'fixed', width: Math.max(totalWidth, 1) }}>
           <colgroup>
             {visible.map((c) => (
@@ -402,9 +406,9 @@ export default function EntryTable<R>({
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => dropOn(c.id)}
                     onClick={() => col.sort && onConfig({ ...config, sort: nextSort(config.sort, c.id) })}
-                    className={`sticky top-0 border-b border-r border-line bg-bg-soft px-2.5 py-2 text-left text-xs font-medium text-muted ${
+                    className={`sticky top-0 border-b-2 border-r border-b-accent/30 border-r-white/5 bg-[#1a2130] px-3.5 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-300 transition-colors ${
                       idx === 0 ? 'left-0 z-20' : 'z-10'
-                    } ${col.sort ? 'cursor-pointer hover:text-slate-200' : ''} ${dragId === c.id ? 'opacity-50' : ''}`}
+                    } ${col.sort ? 'cursor-pointer hover:bg-[#202a3d] hover:text-white' : ''} ${dragId === c.id ? 'opacity-50' : ''}`}
                   >
                     <span className="flex items-center gap-1.5">
                       <TypeIcon type={col.type} />
@@ -424,32 +428,35 @@ export default function EntryTable<R>({
             </tr>
           </thead>
           <tbody>
-            {shown.map((row) => (
+            {shown.map((row, ri) => (
               <tr
                 key={rowKey(row)}
                 onClick={() => onOpen(row)}
-                className="group cursor-pointer transition hover:bg-white/[0.035]"
+                style={{ animation: `fadeIn 0.3s ease-out ${Math.min(ri, 14) * 28}ms both` }}
+                className="group cursor-pointer transition-colors duration-200 hover:bg-accent/[0.08]"
               >
                 {visible.map((c, idx) => {
                   const col = colById.get(c.id)!
                   return (
                     <td
                       key={c.id}
-                      className={`overflow-hidden border-b border-r border-line/60 px-2.5 py-1.5 align-top ${
-                        idx === 0 ? 'sticky left-0 z-[5] bg-bg group-hover:bg-[#1b2230]' : ''
+                      className={`overflow-hidden border-b border-r border-white/5 px-3.5 py-3 align-middle transition-colors duration-200 ${
+                        idx === 0
+                          ? 'sticky left-0 z-[5] bg-[#141923] font-semibold text-white shadow-[inset_0_0_0_0_#3b82f6] group-hover:bg-[#18233a] group-hover:shadow-[inset_3px_0_0_0_#3b82f6]'
+                          : ''
                       }`}
                     >
-                      <div className="max-h-24 overflow-hidden text-slate-200">{col.render(row)}</div>
+                      <div className="max-h-28 overflow-hidden text-[13.5px] leading-snug text-slate-200">{col.render(row)}</div>
                     </td>
                   )
                 })}
               </tr>
             ))}
             {onAdd && (
-              <tr onClick={onAdd} className="cursor-pointer transition hover:bg-white/[0.035]">
+              <tr onClick={onAdd} className="cursor-pointer transition-colors duration-200 hover:bg-accent/[0.08]">
                 <td
                   colSpan={Math.max(visible.length, 1)}
-                  className="sticky left-0 border-b border-line/60 px-2.5 py-2 text-xs text-muted hover:text-slate-200"
+                  className="sticky left-0 border-b border-white/5 px-3.5 py-3 text-xs font-medium text-sky-300/80 transition-colors hover:text-sky-200"
                 >
                   <span className="sticky left-2.5 inline-flex items-center gap-1.5">
                     <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
@@ -463,12 +470,12 @@ export default function EntryTable<R>({
           </tbody>
         </table>
         {shown.length === 0 && (
-          <div className="px-4 py-6 text-center text-xs text-muted">
+          <div className="px-4 py-10 text-center text-sm text-muted">
             {rows.length === 0 ? emptyText : 'Nothing matches your search or filter.'}
           </div>
         )}
       </div>
-      <div className="mt-1.5 text-[11px] text-muted">
+      <div className="mt-2 text-xs font-medium text-muted">
         {shown.length} {shown.length === 1 ? 'entry' : 'entries'}
         {shown.length !== rows.length ? ` of ${rows.length}` : ''}
       </div>

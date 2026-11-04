@@ -3,13 +3,15 @@
 // { kind: 'video' | 'recording', id, action, ... }
 //   set_visibility   video: the tab's upload/manage roles (or owner/admin);
 //                    recording: any staff
-//   update_metadata  video: the tab's manage roles (or owner/admin); recording: owner/admin
+//   update_metadata  video: the tab's manage roles, owner/admin, or a moderator (Mentor);
+//                    recording: owner/admin
 //   delete           same people as update_metadata; deletes the Bunny video, then
 //                    soft-deletes the row
 //   refresh_status   anyone who sees unfinished items in that tab (recordings: staff);
 //                    re-reads encoding status from Bunny
-//   move             video only: the tab's manage roles (or owner/admin); swap with the
-//                    neighbour above/below inside its tab
+//   move / reorder   video only: the tab's manage roles, owner/admin, or a moderator
+//                    (Mentor); swap with the neighbour above/below, or set the whole
+//                    order of the tab
 //
 // Every permission is decided from LIVE Discord roles and every action is
 // written to content_audit.
@@ -28,8 +30,8 @@ import { deny } from '../_shared/messages.ts'
 import { planMove, sortOrdUpdates } from '../_shared/ordering.ts'
 import {
   canDeleteTabVideo,
-  canEditTabVideo,
-  canReorderTabVideos,
+  canRenameTabVideo,
+  canReorderTabVideoList,
   canSeeUnpublishedInTab,
   canSetTabVideoVisibility,
   canViewTab
@@ -116,7 +118,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'update_metadata': {
-      const allowed = tab ? canEditTabVideo(caps, roles, tab) : canEditRecording(caps)
+      const allowed = tab ? canRenameTabVideo(caps, roles, tab) : canEditRecording(caps)
       if (!allowed) return deny('forbidden')
       const patch: Record<string, unknown> = { updated_at: nowIso() }
       if (request.title !== null) patch.title = request.title
@@ -146,7 +148,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'move': {
-      if (!tab || !canReorderTabVideos(caps, roles, tab)) return deny('forbidden')
+      if (!tab || !canReorderTabVideoList(caps, roles, tab)) return deny('forbidden')
       // The group is whatever shares this video's tab, ordered exactly as
       // list-content shows it.
       const { data: group, error: groupErr } = await admin
@@ -178,7 +180,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'reorder': {
-      if (!tab || !canReorderTabVideos(caps, roles, tab)) return deny('forbidden')
+      if (!tab || !canReorderTabVideoList(caps, roles, tab)) return deny('forbidden')
       const { data: group, error: groupErr } = await admin
         .from('videos')
         .select('id, sort_ord')

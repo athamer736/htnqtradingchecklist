@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import LibraryTab from '../components/admin/LibraryTab'
 import MembersTab from '../components/admin/MembersTab'
 import TabsTab from '../components/admin/TabsTab'
-import { canOpenAdmin } from '../../../shared/mentorshipNav'
+import { canOpenAdmin, canOpenLibrary } from '../../../shared/mentorshipNav'
 import { useAdmin } from '../store/useAdmin'
 import { useMentorship } from '../store/useMentorship'
 import { MentorshipStatus } from './ContentSectionView'
@@ -32,18 +32,14 @@ export default function AdminView(): JSX.Element {
   if (!canOpenAdmin(caps)) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted">
-        This panel is for owners, admins and tab managers.
+        This panel is for owners, admins, moderators and tab managers.
       </div>
     )
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    ...(caps.isManager
-      ? ([
-          { id: 'members', label: 'Members' },
-          { id: 'library', label: 'Library' }
-        ] as const)
-      : []),
+    ...(caps.isManager ? ([{ id: 'members', label: 'Members' }] as const) : []),
+    ...(canOpenLibrary(caps) ? ([{ id: 'library', label: 'Library' }] as const) : []),
     ...(caps.canManageTabs ? ([{ id: 'tabs', label: 'Tabs' }] as const) : [])
   ]
   const current: Tab = tab && tabs.some((t) => t.id === tab) ? tab : tabs[0].id
@@ -53,7 +49,11 @@ export default function AdminView(): JSX.Element {
       <div className="mb-4">
         <h1 className="text-xl font-semibold text-slate-100">Admin</h1>
         <p className="mt-1 text-sm text-muted">
-          {caps.isManager ? 'Members, the video library order, and the Mentorship tabs.' : 'The Mentorship tabs.'}
+          {caps.isManager
+            ? 'Members, the video library order, and the Mentorship tabs.'
+            : canOpenLibrary(caps)
+              ? 'Rename and reorder videos in every tab.'
+              : 'The Mentorship tabs.'}
         </p>
       </div>
       <div className="mb-5 flex gap-1">

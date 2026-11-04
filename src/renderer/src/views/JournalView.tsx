@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTrades } from '../store/useTrades'
+import { useConfirm } from '../components/ConfirmProvider'
 import { TIMEFRAME_ORDER } from '../strategy/strategy'
 import { verdict } from '../strategy/points'
 import { uid } from '../util/id'
@@ -160,16 +161,18 @@ function DetailItem({ label, value }: { label: string; value: string | JSX.Eleme
 function TradeDetails({
   t,
   tags,
-  templateColumns
+  templateColumns,
+  shotSize
 }: {
   t: TradeRecord
   tags: DataTag[]
   templateColumns: DataColumn[]
+  shotSize?: string
 }): JSX.Element {
   const custom = customJournalColumns(templateColumns)
   return (
-    <div className="animate-fadeIn border-t border-line/60 bg-bg-soft/40 px-5 py-4">
-      <SetupBlock trade={t} tags={tags} />
+    <div>
+      <SetupBlock trade={t} tags={tags} shotSize={shotSize} />
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
         <DetailItem label="Contract" value={`${t.contract}${t.contracts !== null ? ` x${t.contracts}` : ''}`} />
         <DetailItem label="Setup" value={t.startSetup} />
@@ -214,7 +217,9 @@ export default function JournalView(): JSX.Element {
   const [draft, setDraft] = useState<TradeRecord | null>(null)
   const [closing, setClosing] = useState(false)
   const [filter, setFilter] = useState<string>('all')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // The trade whose full details are open (click any row, landscape or vertical).
+  const [viewingId, setViewingId] = useState<string | null>(null)
+  const confirm = useConfirm()
   const [showTemplate, setShowTemplate] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
 
@@ -245,8 +250,31 @@ export default function JournalView(): JSX.Element {
     }, 220)
   }
 
-  const filtered = useMemo(
-    () => (filter === 'all' ? trades : trades.filter((t) => t.startSetup === filter)),
+  const viewing = viewingId ? trades.find((t) => t.id === viewingId) ?? null : null
+
+  // Esc closes the details window.
+  useEffect(() => {
+    if (!viewingId) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setViewingId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [viewingId])
+
+  const removeTrade = async (t: TradeRecord): Promise<void> => {
+    const ok = await confirm({
+      title: 'Delete this trade?',
+      message: `${t.contract} ${t.direction} on ${t.tradedAt} will be removed from your journal.`,
+      confirmLabel: 'Delete',
+      danger: true
+    })
+    if (!ok) return
+    setViewingId((id) => (id === t.id ? null : id))
+    await remove(t.id)
+  }
+
+  const filtered = useMemo(    () => (filter === 'all' ? trades : trades.filter((t) => t.startSetup === filter)),
     [trades, filter]
   )
 
@@ -380,7 +408,7 @@ export default function JournalView(): JSX.Element {
               rowKey={(t) => t.id}
               config={viewConfig}
               onConfig={setViewConfig}
-              onOpen={openDraft}
+              onOpen={(t) => setViewingId(t.id)}
               onAdd={() => openDraft(emptyTrade())}
               addLabel="New trade"
               emptyText="No trades logged yet."
@@ -395,54 +423,71 @@ export default function JournalView(): JSX.Element {
           <div className="card divide-y divide-line/60">
             {filtered.map((t, i) => (
               <div key={t.id} style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }} className="animate-fadeInUp">
-              <div className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-bg-hover/40">
-                <button
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-all duration-200 hover:bg-bg-hover hover:text-white ${
-                    expandedId === t.id ? 'rotate-180 text-white' : ''
-                  }`}
-                  onClick={() => setExpandedId((id) => (id === t.id ? null : t.id))}
-                  title="Show details"
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setViewingId(t.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setViewingId(t.id)
+                    }
+                  }}
+                  className="group flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3.5 transition-colors duration-200 hover:bg-accent/[0.08] focus:bg-accent/[0.08] focus:outline-none"
+                  title="Open trade details"
                 >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-                <div className="w-20 text-xs text-muted">{t.tradedAt}</div>
-                <div className="w-20 text-sm font-medium text-slate-200">
-                  {t.contract}
-                  {t.contracts !== null && <span className="text-muted"> x{t.contracts}</span>}
-                </div>
-                <div className="flex-1 truncate text-sm text-slate-300">
-                  {t.startSetup}
-                  <span className="text-muted"> -&gt; {t.entryTimeframe} entry</span>
-                  {t.entryPrice !== null && <span className="text-muted"> @ {t.entryPrice}</span>}
-                </div>
-                <span
-                  className={`chip ${
-                    t.direction === 'long' ? 'text-emerald-400' : 'text-rose-400'
-                  } bg-bg-hover`}
-                >
-                  {t.direction}
-                </span>
-                <span className={`w-12 text-sm font-semibold ${resultColor(t.result)}`}>
-                  {t.result.toUpperCase()}
-                </span>
-                <span className="w-12 text-right text-sm text-slate-300">
-                  {t.rMultiple !== null ? `${t.rMultiple}R` : '-'}
-                </span>
-                <div className="flex gap-1">
-                  <button className="btn-ghost px-2 py-1 text-xs" onClick={() => openDraft(t)}>
-                    Edit
-                  </button>
-                  <button
-                    className="btn-ghost px-2 py-1 text-xs text-rose-300"
-                    onClick={() => remove(t.id)}
+                  <div className="w-24 text-xs text-muted">{t.tradedAt}</div>
+                  <div className="w-20 text-sm font-semibold text-white">
+                    {t.contract}
+                    {t.contracts !== null && <span className="font-normal text-muted"> x{t.contracts}</span>}
+                  </div>
+                  <div className="min-w-[8rem] flex-1 truncate text-sm text-slate-300">
+                    {t.startSetup}
+                    <span className="text-muted"> -&gt; {t.entryTimeframe} entry</span>
+                    {t.entryPrice !== null && <span className="text-muted"> @ {t.entryPrice}</span>}
+                  </div>
+                  <span
+                    className={`chip ${
+                      t.direction === 'long' ? 'text-emerald-400' : 'text-rose-400'
+                    } bg-bg-hover`}
                   >
-                    Delete
-                  </button>
+                    {t.direction}
+                  </span>
+                  <span className={`w-12 text-sm font-bold ${resultColor(t.result)}`}>{t.result.toUpperCase()}</span>
+                  <span className="w-12 text-right text-sm text-slate-300">
+                    {t.rMultiple !== null ? `${t.rMultiple}R` : '-'}
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      className="btn-ghost px-2 py-1 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openDraft(t)
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn-ghost px-2 py-1 text-xs text-rose-300"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void removeTrade(t)
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-sky-300"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </div>
-              </div>
-              {expandedId === t.id && <TradeDetails t={t} tags={template.tags} templateColumns={template.columns} />}
               </div>
             ))}
           </div>
@@ -772,6 +817,63 @@ export default function JournalView(): JSX.Element {
         </div>
       )}
 
+      {viewing && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-6">
+          <div className="absolute inset-0 animate-fadeIn bg-black/70 backdrop-blur-sm" onClick={() => setViewingId(null)} />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Trade details"
+            className="relative z-10 flex max-h-full w-full max-w-3xl animate-scaleIn flex-col overflow-hidden rounded-2xl border border-white/10 bg-bg-soft shadow-card"
+          >
+            <div className="flex flex-wrap items-center gap-3 border-b border-line bg-gradient-to-r from-[#1a2130] to-bg-soft px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold text-white">
+                    {viewing.contract}
+                    {viewing.contracts !== null && <span className="font-normal text-muted"> x{viewing.contracts}</span>}
+                  </h2>
+                  <span
+                    className={`chip bg-bg-hover ${viewing.direction === 'long' ? 'text-emerald-400' : 'text-rose-400'}`}
+                  >
+                    {viewing.direction}
+                  </span>
+                  <span className={`text-sm font-bold ${resultColor(viewing.result)}`}>{viewing.result.toUpperCase()}</span>
+                  {viewing.rMultiple !== null && <span className="text-sm text-slate-300">{viewing.rMultiple}R</span>}
+                </div>
+                <p className="mt-0.5 text-xs text-muted">
+                  {viewing.tradedAt} - {viewing.startSetup} -&gt; {viewing.entryTimeframe} entry
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  className="btn-primary px-3 py-1.5 text-xs"
+                  onClick={() => {
+                    const t = viewing
+                    setViewingId(null)
+                    openDraft(t)
+                  }}
+                >
+                  Edit
+                </button>
+                <button className="btn-ghost px-3 py-1.5 text-xs text-rose-300" onClick={() => void removeTrade(viewing)}>
+                  Delete
+                </button>
+                <button
+                  className="btn-ghost px-3 py-1.5 text-xs"
+                  onClick={() => setViewingId(null)}
+                  aria-label="Close details"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <TradeDetails t={viewing} tags={template.tags} templateColumns={template.columns} shotSize="h-28 w-44" />
+            </div>
+          </div>
+        </div>
+      )}
       {showTemplate && (
         <ColumnManager
           title="Customise journal template"

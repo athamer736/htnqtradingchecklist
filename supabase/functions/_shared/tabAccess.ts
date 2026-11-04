@@ -127,6 +127,25 @@ export function canReorderTabVideos(caps: Capabilities, roles: readonly string[]
   return canManageTabContent(caps, roles, tab)
 }
 
+/**
+ * Moderators (the Mentor role) may also rename and reorder VIDEOS in every tab they can
+ * open. This is deliberately separate from the manage permission above: it does not
+ * allow deleting, publishing or hiding, and documents are unaffected.
+ */
+export function canModerateTabVideos(caps: Capabilities, roles: readonly string[], tab: TabAccess): boolean {
+  return !caps.isPartial && caps.isMentor && canViewTab(caps, roles, tab)
+}
+
+/** Rename a video and edit its description: managers, and moderators. */
+export function canRenameTabVideo(caps: Capabilities, roles: readonly string[], tab: TabAccess): boolean {
+  return canEditTabVideo(caps, roles, tab) || canModerateTabVideos(caps, roles, tab)
+}
+
+/** Reorder videos inside a tab: managers, and moderators. */
+export function canReorderTabVideoList(caps: Capabilities, roles: readonly string[], tab: TabAccess): boolean {
+  return canReorderTabVideos(caps, roles, tab) || canModerateTabVideos(caps, roles, tab)
+}
+
 export function canEditTabDescription(caps: Capabilities, roles: readonly string[], tab: TabAccess): boolean {
   return canManageTabContent(caps, roles, tab)
 }

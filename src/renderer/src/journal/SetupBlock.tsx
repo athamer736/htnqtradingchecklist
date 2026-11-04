@@ -58,7 +58,15 @@ export function ShotThumbs({
 
 // The setup shown as a card: the chain of what was used, then points bias,
 // session, date, notes and the setup screenshots.
-export default function SetupBlock({ trade, tags }: { trade: TradeRecord; tags: DataTag[] }): JSX.Element {
+export default function SetupBlock({
+  trade,
+  tags,
+  shotSize = 'h-20 w-32'
+}: {
+  trade: TradeRecord
+  tags: DataTag[]
+  shotSize?: string
+}): JSX.Element {
   const chain = setupChain(trade, tags)
   const bias = pointsBiasOf(trade)
   const shots = setupShots(trade)
@@ -104,7 +112,7 @@ export default function SetupBlock({ trade, tags }: { trade: TradeRecord; tags: 
       {shots.length > 0 && (
         <div className="mt-3">
           <div className="mb-1 text-[10px] uppercase tracking-wide text-muted">Setup screenshots</div>
-          <ShotThumbs images={shots} max={6} size="h-20 w-32" />
+          <ShotThumbs images={shots} max={6} size={shotSize} />
         </div>
       )}
     </div>
