@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { DataImage, DataTag } from '../../../shared/dataCollection'
 import type { TradeRecord } from '../types'
 import { pointsBiasOf, setupChain, setupShots } from './journalModel'
@@ -41,17 +42,19 @@ export function ShotThumbs({
         ))}
         {rest > 0 && <span className="text-[11px] text-muted">+{rest} more</span>}
       </div>
-      {preview && (
+      {preview &&
+        createPortal(
         <div
-          className="fixed inset-0 z-50 flex animate-fadeIn items-center justify-center bg-black/80 p-8"
+          className="fixed inset-0 z-[100] flex animate-fadeIn items-center justify-center bg-black/80 p-8"
           onClick={(e) => {
             e.stopPropagation()
             setPreview(null)
           }}
         >
           <img src={preview.dataUrl} alt={preview.name} className="max-h-full max-w-full rounded-lg object-contain shadow-card" />
-        </div>
-      )}
+        </div>,
+        document.body
+        )}
     </>
   )
 }
