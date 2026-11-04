@@ -50,7 +50,7 @@ export default function WatermarkOverlay({
       {/* Scales with the player (container query units), so it stays legible in fullscreen and small on phones. */}
       <div
         className="rounded bg-black/35 px-[0.6em] py-[0.3em] leading-snug text-white/80 shadow-sm backdrop-blur-[1px]"
-        style={{ fontSize: 'clamp(7.5px, 0.94cqw, 13.75px)', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+        style={{ fontSize: 'clamp(11px, 1.41cqw, 20.6px)', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
       >
         {nameLine && <div className="break-words font-semibold tracking-wide">{nameLine}</div>}
         <div className="break-words font-medium tracking-wide">{line}</div>
