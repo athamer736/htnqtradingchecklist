@@ -47,9 +47,9 @@ export default function WatermarkOverlay({
       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
       aria-hidden
     >
-      {/* Scales with the player (container query units). Phones (under 640px wide) use 50% of the original size, desktop and web use 25%. */}
+      {/* Scales with the player (container query units). Phones (under 640px wide) use 50% of the original size, desktop and web use 75%. */}
       <div
-        className="rounded bg-black/35 px-[0.6em] py-[0.3em] text-[length:clamp(4px,0.75cqw,11px)] leading-snug text-white/80 shadow-sm backdrop-blur-[1px] sm:text-[length:clamp(2px,0.375cqw,5.5px)]"
+        className="rounded bg-black/35 px-[0.6em] py-[0.3em] text-[length:clamp(4px,0.75cqw,11px)] leading-snug text-white/80 shadow-sm backdrop-blur-[1px] sm:text-[length:clamp(6px,1.125cqw,16.5px)]"
         style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
       >
         {nameLine && <div className="break-words font-semibold tracking-wide">{nameLine}</div>}
