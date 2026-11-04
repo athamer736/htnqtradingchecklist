@@ -171,6 +171,11 @@ export type ManageRequest =
   | { kind: 'video' | 'recording'; id: string; action: 'refresh_status' }
   /** Videos only (recordings have no manual order). Swaps with the neighbour in its section/level. */
   | { kind: 'video'; id: string; action: 'move'; direction: MoveDirection }
+  /** Videos only, drag and drop: `id` was dropped into the full new order `ids` of its tab. */
+  | { kind: 'video'; id: string; action: 'reorder'; ids: string[] }
+
+/** Upper bound on videos in one reorder request. */
+export const VIDEO_REORDER_MAX = 500
 
 export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
   const o = asObject(body)
@@ -198,6 +203,19 @@ export function parseManageRequest(body: unknown): Parsed<ManageRequest> {
       if (o.kind !== 'video') return { ok: false, error: 'move-videos-only' }
       if (o.direction !== 'up' && o.direction !== 'down') return { ok: false, error: 'invalid-direction' }
       return { ok: true, value: { kind: 'video', id: o.id, action: 'move', direction: o.direction } }
+    case 'reorder': {
+      if (o.kind !== 'video') return { ok: false, error: 'move-videos-only' }
+      if (!Array.isArray(o.ids) || o.ids.length < 1 || o.ids.length > VIDEO_REORDER_MAX) {
+        return { ok: false, error: 'invalid-order' }
+      }
+      const ids: string[] = []
+      for (const v of o.ids) {
+        if (!isUuid(v) || ids.includes(v)) return { ok: false, error: 'invalid-order' }
+        ids.push(v)
+      }
+      if (!ids.includes(o.id)) return { ok: false, error: 'invalid-order' }
+      return { ok: true, value: { kind: 'video', id: o.id, action: 'reorder', ids } }
+    }
     default:
       return { ok: false, error: 'invalid-action' }
   }

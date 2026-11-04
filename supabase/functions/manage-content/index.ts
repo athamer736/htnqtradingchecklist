@@ -177,6 +177,38 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ ok: true, kind: 'video', id: request.id, moved: true })
     }
 
+    case 'reorder': {
+      if (!tab || !canReorderTabVideos(caps, roles, tab)) return deny('forbidden')
+      const { data: group, error: groupErr } = await admin
+        .from('videos')
+        .select('id, sort_ord')
+        .is('deleted_at', null)
+        .eq('tab_id', tab.id)
+        .order('sort_ord', { ascending: true })
+        .order('created_at', { ascending: false })
+      if (groupErr || !group) return deny('upstream_failed')
+
+      // The order must be exactly this tab's videos, so a stale screen cannot drop,
+      // add or move in a video that belongs to another tab.
+      const currentIds = group.map((g) => g.id as string)
+      if (request.ids.length !== currentIds.length || !request.ids.every((x) => currentIds.includes(x))) {
+        return deny('invalid_request')
+      }
+      const before = currentIds.indexOf(request.id)
+      const after = request.ids.indexOf(request.id)
+      const current = new Map(group.map((g) => [g.id as string, g.sort_ord as number]))
+      const updates = sortOrdUpdates(request.ids, current)
+      if (updates.length === 0) return json({ ok: true, kind: 'video', id: request.id, moved: false })
+      const results = await Promise.all(
+        updates.map((u) =>
+          admin.from('videos').update({ sort_ord: u.sort_ord, updated_at: nowIso() }).eq('id', u.id)
+        )
+      )
+      if (results.some((r) => r.error)) return deny('upstream_failed')
+      await audit('reordered', { dragged: true, from: before + 1, to: after + 1 })
+      return json({ ok: true, kind: 'video', id: request.id, moved: true })
+    }
+
     case 'refresh_status': {
       if (tab && !canSeeUnpublishedInTab(caps, roles, tab)) return deny('forbidden')
       if (!env.bunnyLibraryId || !env.bunnyApiKey) return deny('misconfigured')

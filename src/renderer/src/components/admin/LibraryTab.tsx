@@ -41,13 +41,40 @@ export default function LibraryTab(): JSX.Element {
   const documents = useMentorship((s) => s.documents)
   const manage = useMentorship((s) => s.manage)
   const load = useMentorship((s) => s.load)
+  const reorderVideos = useMentorship((s) => s.reorderVideos)
   const confirm = useConfirm()
 
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<ContentVideo | null>(null)
+  // Drag and drop: the video being dragged (and its tab) and the slot (0..n) it would drop into.
+  const [drag, setDrag] = useState<{ id: string; groupKey: string } | null>(null)
+  const [slot, setSlot] = useState<number | null>(null)
 
   const groups = useMemo(() => buildGroups(tabs, videos, documents), [tabs, videos, documents])
+
+  const endDrag = (): void => {
+    setDrag(null)
+    setSlot(null)
+  }
+
+  const drop = async (g: Group): Promise<void> => {
+    const dragged = drag
+    const to = slot
+    endDrag()
+    if (!dragged || dragged.groupKey !== g.key || to === null) return
+    const from = g.videos.findIndex((v) => v.id === dragged.id)
+    if (from < 0) return
+    // The slot counts positions in the list that still contains the dragged row.
+    const target = to > from ? to - 1 : to
+    if (target === from) return
+    const ids = g.videos.map((v) => v.id)
+    ids.splice(from, 1)
+    ids.splice(target, 0, dragged.id)
+    setError(null)
+    const err = await reorderVideos(dragged.id, ids)
+    if (err) setError(err)
+  }
 
   const run = async (video: ContentVideo, action: ManageAction): Promise<string | null> => {
     setBusyId(video.id)
@@ -75,7 +102,7 @@ export default function LibraryTab(): JSX.Element {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-[11px] leading-relaxed text-muted">
-        Order here is the order members see inside each tab. Upload new videos and PDFs from the tab pages in the Mentorship
+        Order here is the order members see inside each tab. Drag a video by its handle to reorder it within its tab. Upload new videos and PDFs from the tab pages in the Mentorship
         menu; add, rename or reorder the tabs themselves under Tabs.
       </p>
       {error && (
@@ -101,8 +128,70 @@ export default function LibraryTab(): JSX.Element {
                 const isPrivate = v.visibility === 'private'
                 const duration = formatDuration(v.durationSeconds)
                 return (
-                  <div key={v.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-bg-card px-4 py-2.5">
-                    <span className="w-6 shrink-0 text-xs font-semibold text-muted">{i + 1}</span>
+                  <div
+                    key={v.id}
+                    data-video-row
+                    onDragOver={(e) => {
+                      // Videos only reorder inside their own tab.
+                      if (!drag || drag.groupKey !== g.key) return
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      const r = e.currentTarget.getBoundingClientRect()
+                      setSlot(e.clientY < r.top + r.height / 2 ? i : i + 1)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      void drop(g)
+                    }}
+                    className={`flex flex-wrap items-center gap-2 rounded-xl border bg-bg-card px-4 py-2.5 transition-opacity ${
+                      drag?.id === v.id ? 'opacity-40' : ''
+                    } ${
+                      drag?.groupKey === g.key && slot === i
+                        ? 'border-accent border-t-2'
+                        : drag?.groupKey === g.key && slot === i + 1 && i === g.videos.length - 1
+                          ? 'border-accent border-b-2'
+                          : 'border-line'
+                    }`}
+                  >
+                    {v.canReorder ? (
+                      <button
+                        type="button"
+                        draggable={!busy}
+                        aria-label={`Reorder ${v.title}: drag, or use the up and down arrow keys`}
+                        title="Drag to reorder"
+                        onDragStart={(e) => {
+                          const row = e.currentTarget.closest('[data-video-row]')
+                          if (row) e.dataTransfer.setDragImage(row, 16, 16)
+                          e.dataTransfer.effectAllowed = 'move'
+                          e.dataTransfer.setData('text/plain', v.id)
+                          setDrag({ id: v.id, groupKey: g.key })
+                        }}
+                        onDragEnd={endDrag}
+                        onKeyDown={(e) => {
+                          if (busy) return
+                          if (e.key === 'ArrowUp' && i > 0) {
+                            e.preventDefault()
+                            void run(v, { action: 'move', direction: 'up' })
+                          } else if (e.key === 'ArrowDown' && i < g.videos.length - 1) {
+                            e.preventDefault()
+                            void run(v, { action: 'move', direction: 'down' })
+                          }
+                        }}
+                        className="flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded text-muted transition-colors hover:bg-bg-hover hover:text-slate-200 active:cursor-grabbing"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+                          <circle cx="9" cy="6" r="1.6" />
+                          <circle cx="15" cy="6" r="1.6" />
+                          <circle cx="9" cy="12" r="1.6" />
+                          <circle cx="15" cy="12" r="1.6" />
+                          <circle cx="9" cy="18" r="1.6" />
+                          <circle cx="15" cy="18" r="1.6" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <span className="w-6 shrink-0" aria-hidden="true" />
+                    )}
+                    <span className="w-5 shrink-0 text-xs font-semibold text-muted">{i + 1}</span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-slate-100">{v.title}</div>
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
@@ -112,24 +201,6 @@ export default function LibraryTab(): JSX.Element {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1">
-                      <button
-                        type="button"
-                        className="btn-ghost px-2 py-1 text-xs"
-                        disabled={busy || i === 0 || !v.canReorder}
-                        title="Move up"
-                        onClick={() => void run(v, { action: 'move', direction: 'up' })}
-                      >
-                        Up
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-ghost px-2 py-1 text-xs"
-                        disabled={busy || i === g.videos.length - 1 || !v.canReorder}
-                        title="Move down"
-                        onClick={() => void run(v, { action: 'move', direction: 'down' })}
-                      >
-                        Down
-                      </button>
                       {v.canSetVisibility && (
                         <button
                           type="button"
