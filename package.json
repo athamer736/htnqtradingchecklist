@@ -21,7 +21,9 @@
     "@supabase/supabase-js": "^2.110.5",
     "better-sqlite3": "^12.10.0",
     "electron-updater": "^6.8.9",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

@@ -46,7 +46,8 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
    `20261020_section_descriptions.sql` (descriptions for the other Mentorship pages),
    `20261020_batch_sections.sql` (the three batch sections),
    `20261024_mentorship_tabs.sql` (2.0.3 editable tabs; then deploy `manage-tabs` and redeploy `list-content`, `create-upload`, `manage-content`, `set-thumbnail`, `issue-playback-token`, `level-descriptions`),
-   `20261025_nda_required.sql` (NDA required to keep access; then deploy `nda` and redeploy `issue-playback-token` and `list-content`)
+   `20261025_nda_required.sql` (NDA required to keep access; then deploy `nda` and redeploy `issue-playback-token` and `list-content`),
+   `20261102_documents.sql` (watermarked PDFs: `documents` table, private `mentorship-documents` bucket, `playback_audit.document_id`; then deploy `create-document-upload`, `manage-documents`, `issue-document` and redeploy `list-content`, `manage-tabs`, `issue-playback-token`)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -86,6 +87,9 @@ supabase functions deploy admin-member-identity
 supabase functions deploy admin-member-name
 supabase functions deploy level-descriptions
 supabase functions deploy issue-playback-token   # also reads member_legal_names
+supabase functions deploy create-document-upload
+supabase functions deploy manage-documents
+supabase functions deploy issue-document
 supabase functions delete list-videos
 ```
 
@@ -172,3 +176,22 @@ Do these in order; each step is safe on its own because nothing is enforced unti
    the sign screen and videos stay locked until they sign.
 6. [ ] After the deadline: check who is still unsigned; the owner can move the date or clear it
    to stop enforcing at any time.
+
+### Watermarked PDF documents (before release)
+
+1. [ ] Run `20261102_documents.sql`; in Supabase Storage confirm `mentorship-documents` exists, is **not**
+   public, and has the 25 MB / `application/pdf` limits.
+2. [ ] Deploy `create-document-upload`, `manage-documents`, `issue-document`; redeploy `list-content`,
+   `manage-tabs`, `issue-playback-token`. Check `issue-document` boots (it needs its `deno.json`).
+3. [ ] Rebuild the web bundle (it grows by about 2 MB: pdf.js and its worker are bundled in). Hosting
+   headers, if you set a CSP, need `worker-src blob:`; the Windows app's CSP already has it.
+4. [ ] As a mentor/admin: upload a PDF in a tab, see it as "Uploading" then ready, publish it, open it,
+   check every page shows your name, username, Discord ID and a reference, and that Fullscreen and
+   zoom work.
+5. [ ] As a student with the right role: open it (name from the NDA), confirm a private document and a
+   tab you do not have do not appear. As a student without the role: nothing listed, opening by id fails.
+6. [ ] Remove the student's role while a document is open: it closes within about 5 minutes (the next
+   recheck). With the NDA deadline passed and the student unsigned: sign screen, no document.
+7. [ ] Delete a PDF and check the file is gone from the bucket; try to delete a tab that still has
+   documents (it must refuse).
+8. [ ] Check `playback_audit` rows for opens carry `document_id` and no names.

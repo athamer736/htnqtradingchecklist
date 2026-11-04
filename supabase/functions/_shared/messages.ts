@@ -29,6 +29,11 @@ export type DenyCode =
   | 'nda_terms_changed'
   | 'invalid_consent'
   | 'invalid_date'
+  | 'document_not_found'
+  | 'document_not_ready'
+  | 'document_unavailable'
+  | 'document_too_large'
+  | 'rate_limited'
 
 export const DENY_MESSAGES: Record<DenyCode, string> = {
   unauthenticated: 'Sign in with Discord to watch mentorship videos.',
@@ -40,7 +45,7 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
   roles_unavailable:
     'We could not confirm your Discord roles right now. Try again shortly, or contact staff if this persists.',
   level_insufficient:
-    'Your Discord roles do not include access to this video. Contact staff if you believe this is wrong.',
+    'Your Discord roles do not include access to this content. Contact staff if you believe this is wrong.',
   forbidden: 'Your Discord roles do not allow this action.',
   onboarding_incomplete:
     'Your mentorship onboarding is incomplete. Finish joining in Discord (documents and payment) before watching videos.',
@@ -61,12 +66,18 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
     'That is not a valid legal name. Enter the full name using letters (2 to 200 characters), with no placeholders.',
   upstream_failed: 'The video service could not complete that request. Try again shortly.',
   tab_not_found: 'That tab no longer exists.',
-  tab_not_empty: 'Delete or move every video out of this tab before deleting it.',
+  tab_not_empty: 'Delete or move every video, and delete every document, in this tab before deleting it.',
   nda_required:
     'Sign the mentorship NDA to keep watching. It takes a minute: open the Mentorship page and choose Sign NDA.',
   nda_terms_changed: 'The NDA was updated while you were reading it. Reload it and read the new version before signing.',
   invalid_consent: 'Type I AGREE exactly to sign.',
-  invalid_date: 'That is not a valid date.'
+  invalid_date: 'That is not a valid date.',
+  document_not_found: 'That document is not available.',
+  document_not_ready: 'This document is still being uploaded. Try again in a minute.',
+  document_unavailable:
+    'This document could not be prepared for viewing. Contact staff so they can upload it again.',
+  document_too_large: 'PDFs can be up to 25 MB.',
+  rate_limited: 'You are opening documents too quickly. Wait a moment and try again.'
 }
 
 export const DENY_STATUS: Record<DenyCode, number> = {
@@ -94,7 +105,12 @@ export const DENY_STATUS: Record<DenyCode, number> = {
   nda_required: 403,
   nda_terms_changed: 409,
   invalid_consent: 400,
-  invalid_date: 400
+  invalid_date: 400,
+  document_not_found: 404,
+  document_not_ready: 409,
+  document_unavailable: 422,
+  document_too_large: 413,
+  rate_limited: 429
 }
 
 export function denyBody(reasonCode: DenyCode): { ok: false; reasonCode: DenyCode; message: string } {

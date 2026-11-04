@@ -13,6 +13,9 @@ import {
   DC_SCHEMA_VERSION,
   DEFAULT_SECTIONS,
   buildDefaults,
+  buildVisibleDefaults,
+  journalTemplateRows,
+  missingBuiltinRows,
   prepareImport,
   type DataColumn,
   type DataEntry,
@@ -182,16 +185,11 @@ async function seedDefaults(db: IDBDatabase): Promise<void> {
 async function ensureBuiltinSections(db: IDBDatabase): Promise<void> {
   const sections = await getAll<DataSection>(db, STORE_SECTIONS)
   const existing = new Set(sections.map((s) => s.id))
-  const missing = DEFAULT_SECTIONS.filter((s) => !existing.has(s.id))
+  const { sections: missing, columns, tags } = missingBuiltinRows(existing)
   if (missing.length === 0) return
-  const missingIds = new Set(missing.map((s) => s.id))
-  const { columns, tags } = buildDefaults()
   for (const s of missing) await put(db, STORE_SECTIONS, seeded(s))
-  for (const c of columns) if (missingIds.has(c.sectionId)) await put(db, STORE_COLUMNS, seeded(c))
-  for (const t of tags) {
-    const col = columns.find((c) => c.id === t.columnId)
-    if (col && missingIds.has(col.sectionId)) await put(db, STORE_TAGS, seeded(t))
-  }
+  for (const c of columns) await put(db, STORE_COLUMNS, seeded(c))
+  for (const t of tags) await put(db, STORE_TAGS, seeded(t))
 }
 
 async function seedIfEmpty(db: IDBDatabase): Promise<void> {
@@ -211,7 +209,7 @@ async function seedIfEmpty(db: IDBDatabase): Promise<void> {
     await clearStore(db, STORE_SECTIONS)
     await seedDefaults(db)
   } else {
-    // 7 -> 8 (additive): keep user data; add missing built-in sections.
+    // 7 -> 8 -> 9 (additive): keep user data; add missing built-in sections.
     await ensureBuiltinSections(db)
     localStorage.setItem(DC_VERSION_KEY, String(DC_SCHEMA_VERSION))
   }
@@ -346,8 +344,15 @@ function pickImportFile(): Promise<ImportFileResult> {
 
 // Reseeds default sections/columns/tags via upsert (clears any tombstone on the
 // built-in ids). Non-default rows are left untouched.
-async function reseedDefaults(db: IDBDatabase): Promise<void> {
-  const { sections, columns, tags } = buildDefaults()
+async function reseedDefaults(
+  db: IDBDatabase,
+  journal: ReturnType<typeof journalTemplateRows>
+): Promise<void> {
+  // The hidden journal template is carried over untouched by a reset.
+  const defaults = buildVisibleDefaults()
+  const sections = [...defaults.sections, ...journal.sections]
+  const columns = [...defaults.columns, ...journal.columns]
+  const tags = [...defaults.tags, ...journal.tags]
   const ts = nowIso()
   for (const s of sections) await put(db, STORE_SECTIONS, { ...s, updatedAt: ts, deletedAt: null, dirty: 1 })
   for (const c of columns) await put(db, STORE_COLUMNS, { ...c, updatedAt: ts, deletedAt: null, dirty: 1 })
@@ -438,11 +443,12 @@ if (!window.htnq) {
       },
       reset: async () => {
         const db = await getDb()
+        const journal = journalTemplateRows(await snapshot(db))
         await tombstoneStore(db, STORE_ENTRIES)
         await tombstoneStore(db, STORE_TAGS)
         await tombstoneStore(db, STORE_COLUMNS)
         await tombstoneStore(db, STORE_SECTIONS)
-        await reseedDefaults(db)
+        await reseedDefaults(db, journal)
         localStorage.setItem(DC_VERSION_KEY, String(DC_SCHEMA_VERSION))
         return snapshot(db)
       },

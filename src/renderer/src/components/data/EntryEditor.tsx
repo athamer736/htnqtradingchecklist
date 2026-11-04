@@ -6,7 +6,7 @@ import type {
   DataTag,
   DataValue
 } from '../../../../shared/dataCollection'
-import TagPicker from './TagPicker'
+import ColumnField from './ColumnField'
 import ImageUploader from './ImageUploader'
 
 // A short signature of the user-entered content (ignores id / timestamps) so we
@@ -63,7 +63,6 @@ export default function EntryEditor({
     }
     return base
   })
-  const [shotsOpen, setShotsOpen] = useState<Record<string, boolean>>({})
 
   // Persist the draft to local cache whenever it changes so an accidental close
   // (backdrop click, X, Cancel) never loses work. Clears the cache once the
@@ -142,107 +141,18 @@ export default function EntryEditor({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-1 items-start gap-x-5 gap-y-4 sm:grid-cols-2">
-          {columns.map((col) => {
-            const count = colImages(col.id).length
-            const open = !!shotsOpen[col.id]
-            const inlineShots = col.type === 'images' || col.type === 'textimages'
-            // Image-bearing fields (and any field whose screenshot panel is open)
-            // need the full width to lay out their gallery comfortably.
-            const fullWidth = inlineShots || open
-            const spanClass = fullWidth ? 'sm:col-span-2' : ''
-            return (
-              <div
-                key={col.id}
-                className={`rounded-xl border border-white/10 bg-white/[0.03] p-3.5 transition-colors hover:border-white/20 ${spanClass}`}
-              >
-                <div className="flex items-center justify-between">
-                  <label className="label mb-0 text-sky-400/80">{col.name}</label>
-                  {!inlineShots && (
-                    <button
-                      type="button"
-                      onClick={() => setShotsOpen((s) => ({ ...s, [col.id]: !s[col.id] }))}
-                      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] transition ${
-                        open || count > 0
-                          ? 'text-sky-300'
-                          : 'text-muted hover:text-slate-200'
-                      }`}
-                      title="Attach screenshots"
-                    >
-                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6">
-                        <rect x="3" y="5" width="18" height="14" rx="2" />
-                        <circle cx="8.5" cy="10" r="1.5" />
-                        <path d="M21 17l-5-5L5 19" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      {count > 0 ? count : 'Add'}
-                    </button>
-                  )}
-                </div>
-                <div className="mt-1.5">
-                  {(col.type === 'text' || col.type === 'textimages') && (
-                    <textarea
-                      className="field min-h-[42px] resize-y"
-                      rows={2}
-                      value={(draft.values[col.id] as string) ?? ''}
-                      onChange={(e) => setValue(col.id, e.target.value)}
-                    />
-                  )}
-                  {col.type === 'date' && (
-                    <input
-                      type="date"
-                      className="field"
-                      value={(draft.values[col.id] as string) ?? ''}
-                      onChange={(e) => setValue(col.id, e.target.value)}
-                    />
-                  )}
-                  {col.type === 'checkbox' && (
-                    <button
-                      type="button"
-                      onClick={() => setValue(col.id, !(draft.values[col.id] as boolean))}
-                      className={`flex h-6 w-11 items-center rounded-full border border-line p-0.5 transition ${
-                        draft.values[col.id] ? 'bg-accent' : 'bg-bg-soft'
-                      }`}
-                    >
-                      <span
-                        className={`h-4 w-4 rounded-full bg-white transition ${
-                          draft.values[col.id] ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  )}
-                  {(col.type === 'select' || col.type === 'multiselect') && (
-                    <TagPicker
-                      columnId={col.id}
-                      tags={tags}
-                      multiple={col.type === 'multiselect'}
-                      value={
-                        col.type === 'multiselect'
-                          ? ((draft.values[col.id] as string[]) ?? [])
-                          : ((draft.values[col.id] as string) ?? null)
-                      }
-                      onChange={(v) => setValue(col.id, v)}
-                      onCreateTag={onCreateTag}
-                    />
-                  )}
-                  {inlineShots && (
-                    <div className={col.type === 'textimages' ? 'mt-2' : ''}>
-                      <ImageUploader
-                        images={colImages(col.id)}
-                        onChange={(imgs) => setColImages(col.id, imgs)}
-                      />
-                    </div>
-                  )}
-                  {!inlineShots && open && (
-                    <div className="mt-2">
-                      <ImageUploader
-                        images={colImages(col.id)}
-                        onChange={(imgs) => setColImages(col.id, imgs)}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+          {columns.map((col) => (
+            <ColumnField
+              key={col.id}
+              column={col}
+              value={draft.values[col.id]}
+              images={colImages(col.id)}
+              tags={tags}
+              onValue={(v) => setValue(col.id, v)}
+              onImages={(imgs) => setColImages(col.id, imgs)}
+              onCreateTag={onCreateTag}
+            />
+          ))}
 
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 sm:col-span-2">
             <label className="label text-sky-400/80">Additional screenshots</label>

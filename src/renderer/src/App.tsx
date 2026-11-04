@@ -98,7 +98,7 @@ export default function App(): JSX.Element {
             </svg>
           </button>
         )}
-        <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pl-12'}`}>
+        <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pt-12 md:pl-12 md:pt-0'}`}>
           {view === 'start' && <StartView />}
           {tabIdFromView(view) && <ContentSectionView tabId={tabIdFromView(view) as string} />}
           {view === 'recordings' && <StudentRecordingsView />}

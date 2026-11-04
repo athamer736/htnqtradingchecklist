@@ -1,3 +1,5 @@
+import type { TradeExtra } from '../../shared/dataCollection'
+
 export interface TradeRecord {
   id: string
   createdAt: string
@@ -19,6 +21,8 @@ export interface TradeRecord {
   session: string
   mmxm?: string
   notes: string
+  // Journal template values + screenshots (SSMT, TPD, custom properties).
+  extra?: TradeExtra
   // Sync metadata (stamped by the local store on write).
   updatedAt?: string
   deletedAt?: string | null

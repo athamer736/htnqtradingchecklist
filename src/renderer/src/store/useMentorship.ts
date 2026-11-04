@@ -3,6 +3,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import {
   PLAYBACK_MESSAGES,
   type AdminTab,
+  type ContentDocument,
   type ContentVideo,
   type DiscordRole,
   type MentorshipCapabilities,
@@ -20,6 +21,7 @@ import {
   type Visibility,
   thumbnailFileProblem
 } from '../../../shared/video'
+import type { DocumentUploadCredentials } from '../../../shared/documents'
 import {
   afterRenewFailure,
   grantFromSuccess,
@@ -40,6 +42,21 @@ export type ManageAction =
   | { action: 'refresh_status' }
   /** Owner/admin, videos only: swap with the neighbour in the same section/Level. */
   | { action: 'move'; direction: 'up' | 'down' }
+
+export type DocumentManageAction =
+  /** After the file is uploaded: checks it is a readable PDF and marks it ready. */
+  | { action: 'finalize' }
+  | { action: 'set_visibility'; visibility: Visibility }
+  | { action: 'update_metadata'; title?: string; description?: string | null }
+  | { action: 'delete' }
+  | { action: 'move'; direction: 'up' | 'down' }
+
+export interface DocumentUploadRequest {
+  tabId: string
+  title: string
+  description: string | null
+  sizeBytes: number
+}
 
 export type CreateUploadRequest =
   | {
@@ -112,6 +129,8 @@ interface MentorshipState {
   /** The tabs the caller may open, in display order. */
   tabs: MentorshipTab[]
   videos: ContentVideo[]
+  /** PDF documents in the same tabs. */
+  documents: ContentDocument[]
 
   /** The Recordings page text, when the caller may read it and one is set. */
   recordingsDescription: RecordingsDescription | null
@@ -172,6 +191,9 @@ interface MentorshipState {
   stop: () => void
   manage: (kind: 'video' | 'recording', id: string, action: ManageAction) => Promise<Result<object>>
   createUpload: (req: CreateUploadRequest) => Promise<UploadCredentials | Failure>
+  manageDocument: (id: string, action: DocumentManageAction) => Promise<Result<object>>
+  /** Records a private, uploading document and returns a one-time URL token for the private bucket. */
+  createDocumentUpload: (req: DocumentUploadRequest) => Promise<DocumentUploadCredentials | Failure>
   /** Staff: replace a ready video's thumbnail with a JPEG/PNG/WebP image (max 2 MB). */
   setThumbnail: (videoId: string, image: File) => Promise<Result<object>>
   reset: () => void
@@ -183,6 +205,7 @@ const initial = {
   capabilities: null,
   tabs: [],
   videos: [],
+  documents: [],
   recordingsDescription: null,
   canEditRecordingsDescription: false,
   adminTabs: [],
@@ -235,7 +258,8 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
         error: toFailure(body, 'Could not load mentorship content.'),
         capabilities: null,
         tabs: [],
-        videos: []
+        videos: [],
+        documents: []
       })
       return
     }
@@ -243,7 +267,8 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
       status: 'ready',
       capabilities: body.capabilities as MentorshipCapabilities,
       tabs: Array.isArray(body.tabs) ? (body.tabs as MentorshipTab[]) : [],
-      videos: (body.videos as ContentVideo[] | undefined) ?? []
+      videos: (body.videos as ContentVideo[] | undefined) ?? [],
+      documents: Array.isArray(body.documents) ? (body.documents as ContentDocument[]) : []
     })
   },
 
@@ -481,6 +506,20 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
           }
     const body = await invoke('create-upload', payload)
     if (body?.ok === true && typeof body.signature === 'string') return body as unknown as UploadCredentials
+    return toFailure(body, 'Could not start the upload.')
+  },
+
+  manageDocument: async (id, action) => {
+    const body = await invoke('manage-documents', { id, ...action })
+    if (body?.ok === true) return { ok: true }
+    return toFailure(body, 'That change could not be saved.')
+  },
+
+  createDocumentUpload: async (req) => {
+    const body = await invoke('create-document-upload', req)
+    if (body?.ok === true && typeof body.token === 'string' && typeof body.path === 'string') {
+      return body as unknown as DocumentUploadCredentials
+    }
     return toFailure(body, 'Could not start the upload.')
   },
 

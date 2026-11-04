@@ -1,9 +1,37 @@
 import { useMemo, useState } from 'react'
 import { useTrades } from '../store/useTrades'
-import { STARTING_TIMEFRAMES, TIMEFRAME_ORDER } from '../strategy/strategy'
+import { TIMEFRAME_ORDER } from '../strategy/strategy'
 import { verdict } from '../strategy/points'
 import { uid } from '../util/id'
 import type { TradeRecord } from '../types'
+import {
+  JOURNAL_COL_SHOTS,
+  JOURNAL_COL_SSMT,
+  JOURNAL_COL_TPD,
+  type DataColumn,
+  type DataTag
+} from '../../../shared/dataCollection'
+import { viewKeyForJournal } from '../../../shared/viewConfig'
+import { useViewConfig } from '../store/useViewPrefs'
+import EntryTable from '../components/data/EntryTable'
+import ColumnField from '../components/data/ColumnField'
+import ColumnManager from '../components/data/ColumnManager'
+import ViewToggle from '../components/data/ViewToggle'
+import ImageUploader from '../components/data/ImageUploader'
+import FvgPicker from '../journal/FvgPicker'
+import SetupBlock, { ShotThumbs } from '../journal/SetupBlock'
+import JournalExportDialog from '../journal/JournalExportDialog'
+import { useJournalTemplate } from '../journal/useJournalTemplate'
+import { buildJournalColumns } from '../journal/journalColumns'
+import {
+  JOURNAL_PROTECTED_IDS,
+  customJournalColumns,
+  customValueText,
+  extraOf,
+  fvgOptions,
+  withExtraImages,
+  withExtraValue
+} from '../journal/journalModel'
 
 const RESULTS: TradeRecord['result'][] = ['win', 'loss', 'be']
 const SESSIONS = ['Asia', 'London', 'NY AM', 'NY PM', 'Other']
@@ -129,30 +157,19 @@ function DetailItem({ label, value }: { label: string; value: string | JSX.Eleme
   )
 }
 
-function TradeDetails({ t }: { t: TradeRecord }): JSX.Element {
-  const bias =
-    t.highsPoints !== null || t.lowsPoints !== null
-      ? verdict(t.highsPoints ?? 0, t.lowsPoints ?? 0)
-      : null
-  const biasEl = bias ? (
-    <span
-      className={
-        bias.side === 'buy'
-          ? 'text-emerald-400'
-          : bias.side === 'sell'
-            ? 'text-rose-400'
-            : 'text-slate-300'
-      }
-    >
-      {bias.side === 'buy' ? 'Buys' : bias.side === 'sell' ? 'Sells' : 'Neutral'}
-      {bias.side !== 'neutral' ? ` +${bias.margin}` : ''}
-    </span>
-  ) : (
-    '-'
-  )
-
+function TradeDetails({
+  t,
+  tags,
+  templateColumns
+}: {
+  t: TradeRecord
+  tags: DataTag[]
+  templateColumns: DataColumn[]
+}): JSX.Element {
+  const custom = customJournalColumns(templateColumns)
   return (
     <div className="animate-fadeIn border-t border-line/60 bg-bg-soft/40 px-5 py-4">
+      <SetupBlock trade={t} tags={tags} />
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
         <DetailItem label="Contract" value={`${t.contract}${t.contracts !== null ? ` x${t.contracts}` : ''}`} />
         <DetailItem label="Setup" value={t.startSetup} />
@@ -166,18 +183,25 @@ function TradeDetails({ t }: { t: TradeRecord }): JSX.Element {
         <DetailItem label="$ TP" value={t.dollarTp !== null ? `$${t.dollarTp}` : '-'} />
         <DetailItem label="Points highs" value={fmt(t.highsPoints)} />
         <DetailItem label="Points lows" value={fmt(t.lowsPoints)} />
-        <DetailItem label="Points bias" value={biasEl} />
-        <DetailItem label="Session" value={t.session} />
         <DetailItem label="MMXM" value={t.mmxm || '-'} />
-        <DetailItem label="Result" value={t.result.toUpperCase()} />
-        <DetailItem label="Date" value={t.tradedAt} />
+        {custom.map((col) => {
+          const text = customValueText(t, col, tags)
+          const imgs = t.extra?.columnImages?.[col.id] ?? []
+          if (!text && imgs.length === 0) return null
+          return (
+            <DetailItem
+              key={col.id}
+              label={col.name}
+              value={
+                <span className="flex flex-col gap-1">
+                  {text && <span className="whitespace-pre-wrap">{text}</span>}
+                  {imgs.length > 0 && <ShotThumbs images={imgs} max={4} size="h-12 w-16" />}
+                </span>
+              }
+            />
+          )
+        })}
       </div>
-      {t.notes && (
-        <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-wide text-muted">Notes</div>
-          <p className="whitespace-pre-wrap text-sm text-slate-300">{t.notes}</p>
-        </div>
-      )}
     </div>
   )
 }
@@ -191,6 +215,22 @@ export default function JournalView(): JSX.Element {
   const [closing, setClosing] = useState(false)
   const [filter, setFilter] = useState<string>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [showTemplate, setShowTemplate] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+
+  // The customisable template (FVG / SSMT / TPD lists, setup screenshots and any
+  // properties the user added) and the Landscape / Vertical layout choice.
+  const template = useJournalTemplate()
+  const [viewConfig, setViewConfig] = useViewConfig(viewKeyForJournal())
+  const tableColumns = useMemo(
+    () => buildJournalColumns(template.tags, trades, template.columns),
+    [template.tags, template.columns, trades]
+  )
+  const setupChoices = useMemo(() => fvgOptions(template.tags, trades), [template.tags, trades])
+  const customColumns = useMemo(() => customJournalColumns(template.columns), [template.columns])
+  const ssmtColumn = template.columns.find((c) => c.id === JOURNAL_COL_SSMT)
+  const tpdColumn = template.columns.find((c) => c.id === JOURNAL_COL_TPD)
+  const shotsColumn = template.columns.find((c) => c.id === JOURNAL_COL_SHOTS)
 
   const openDraft = (trade: TradeRecord): void => {
     setClosing(false)
@@ -267,15 +307,24 @@ export default function JournalView(): JSX.Element {
 
   return (
     <div className="flex h-full">
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto px-6 py-5">
-        <header className="mb-4 flex items-center justify-between">
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto px-3 py-4 md:px-6 md:py-5">
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-base font-semibold text-slate-100">Trade journal</h1>
             <p className="text-xs text-muted">Log setups against the checklist and track your edge.</p>
           </div>
-          <button className="btn-primary" onClick={() => openDraft(emptyTrade())}>
-            + Log trade
-          </button>
+          <div className="flex flex-wrap items-center gap-2 md:justify-end [&>button]:whitespace-nowrap">
+            <ViewToggle mode={viewConfig.mode} onChange={(mode) => setViewConfig({ ...viewConfig, mode })} />
+            <button className="btn-ghost text-xs" onClick={() => setShowTemplate(true)} title="Customise FVG, SSMT, TPD and your own properties">
+              Customise template
+            </button>
+            <button className="btn-ghost text-xs" onClick={() => setExportOpen(true)} disabled={trades.length === 0}>
+              Export
+            </button>
+            <button className="btn-primary" onClick={() => openDraft(emptyTrade())}>
+              + Log trade
+            </button>
+          </div>
         </header>
 
         <div className="mb-5 flex flex-wrap gap-3">
@@ -315,13 +364,29 @@ export default function JournalView(): JSX.Element {
           <span className="text-xs text-muted">Filter:</span>
           <select className="field max-w-[200px]" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="all">All setups</option>
-            {STARTING_TIMEFRAMES.map((tf) => (
-              <option key={tf} value={`${tf} FVG`}>{`${tf} FVG`}</option>
+            {setupChoices.map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
             ))}
           </select>
         </div>
 
-        {filtered.length === 0 ? (
+        {viewConfig.mode === 'landscape' ? (
+          <div className="flex min-h-[420px] flex-1 flex-col">
+            <EntryTable
+              columns={tableColumns}
+              rows={filtered}
+              rowKey={(t) => t.id}
+              config={viewConfig}
+              onConfig={setViewConfig}
+              onOpen={openDraft}
+              onAdd={() => openDraft(emptyTrade())}
+              addLabel="New trade"
+              emptyText="No trades logged yet."
+            />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="card flex flex-col items-center justify-center gap-2 py-16 text-center">
             <p className="text-sm text-slate-300">No trades logged yet.</p>
             <p className="text-xs text-muted">Click &ldquo;Log trade&rdquo; to record your first setup.</p>
@@ -377,7 +442,7 @@ export default function JournalView(): JSX.Element {
                   </button>
                 </div>
               </div>
-              {expandedId === t.id && <TradeDetails t={t} />}
+              {expandedId === t.id && <TradeDetails t={t} tags={template.tags} templateColumns={template.columns} />}
               </div>
             ))}
           </div>
@@ -455,17 +520,31 @@ export default function JournalView(): JSX.Element {
             </div>
 
             <div>
-              <label className="label">Starting setup</label>
-              <select
-                className="field"
+              <label className="label">Starting setup (FVG)</label>
+              <FvgPicker
                 value={draft.startSetup}
-                onChange={(e) => update('startSetup', e.target.value)}
-              >
-                {STARTING_TIMEFRAMES.map((tf) => (
-                  <option key={tf} value={`${tf} FVG`}>{`${tf} FVG`}</option>
-                ))}
-              </select>
+                tags={template.tags}
+                onChange={(label) => update('startSetup', label)}
+                onCreateTag={template.createTag}
+              />
             </div>
+
+            {[ssmtColumn, tpdColumn].map(
+              (col) =>
+                col && (
+                  <ColumnField
+                    key={col.id}
+                    column={col}
+                    value={extraOf(draft).values[col.id]}
+                    images={extraOf(draft).columnImages[col.id] ?? []}
+                    tags={template.tags}
+                    onValue={(v) => setDraft((d) => (d ? withExtraValue(d, col.id, v) : d))}
+                    onImages={(imgs) => setDraft((d) => (d ? withExtraImages(d, col.id, imgs) : d))}
+                    onCreateTag={template.createTag}
+                    className=""
+                  />
+                )
+            )}
 
             <div>
               <label className="label">MMXM used</label>
@@ -642,6 +721,20 @@ export default function JournalView(): JSX.Element {
               </div>
             </div>
 
+            {customColumns.map((col) => (
+              <ColumnField
+                key={col.id}
+                column={col}
+                value={extraOf(draft).values[col.id]}
+                images={extraOf(draft).columnImages[col.id] ?? []}
+                tags={template.tags}
+                onValue={(v) => setDraft((d) => (d ? withExtraValue(d, col.id, v) : d))}
+                onImages={(imgs) => setDraft((d) => (d ? withExtraImages(d, col.id, imgs) : d))}
+                onCreateTag={template.createTag}
+                className=""
+              />
+            ))}
+
             <div>
               <label className="label">Notes</label>
               <textarea
@@ -651,6 +744,16 @@ export default function JournalView(): JSX.Element {
                 placeholder="Confluences confirmed, what went well / wrong..."
               />
             </div>
+
+            {shotsColumn && (
+              <div>
+                <label className="label">{shotsColumn.name}</label>
+                <ImageUploader
+                  images={extraOf(draft).columnImages[shotsColumn.id] ?? []}
+                  onChange={(imgs) => setDraft((d) => (d ? withExtraImages(d, shotsColumn.id, imgs) : d))}
+                />
+              </div>
+            )}
 
             {errors.length > 0 && (
               <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
@@ -667,6 +770,33 @@ export default function JournalView(): JSX.Element {
             </button>
           </div>
         </div>
+      )}
+
+      {showTemplate && (
+        <ColumnManager
+          title="Customise journal template"
+          columns={template.columns}
+          sectionId={template.sectionId}
+          sectionName="Trade journal"
+          tags={template.tags}
+          protectedIds={JOURNAL_PROTECTED_IDS}
+          onSaveTag={(tag) => void template.saveTag(tag)}
+          onDeleteTag={(id) => void template.deleteTag(id)}
+          onSave={(c) => void template.saveColumn(c)}
+          onReorder={(ids) => void template.reorderColumns(ids)}
+          onDelete={(id) => void template.deleteColumn(id)}
+          onClose={() => setShowTemplate(false)}
+        />
+      )}
+
+      {exportOpen && (
+        <JournalExportDialog
+          trades={trades}
+          setups={setupChoices}
+          tags={template.tags}
+          templateColumns={template.columns}
+          onClose={() => setExportOpen(false)}
+        />
       )}
     </div>
   )

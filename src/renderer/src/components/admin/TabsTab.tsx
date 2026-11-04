@@ -247,7 +247,7 @@ export default function TabsTab(): JSX.Element {
                   <span>Upload: {roleSummary(t.uploadRoleIds.length, 'owner/admin')}</span>
                   <span>Manage: {roleSummary(t.manageRoleIds.length, 'owner/admin')}</span>
                   <span>
-                    {t.videoCount} video{t.videoCount === 1 ? '' : 's'}
+                    {t.videoCount} item{t.videoCount === 1 ? '' : 's'}
                   </span>
                 </div>
               </div>
@@ -259,7 +259,7 @@ export default function TabsTab(): JSX.Element {
                   type="button"
                   className="btn border border-line bg-bg-soft px-2.5 py-1 text-xs text-rose-300 hover:bg-bg-hover disabled:opacity-40"
                   disabled={busy || t.videoCount > 0}
-                  title={t.videoCount > 0 ? 'Delete or move every video out of this tab first' : 'Delete this tab'}
+                  title={t.videoCount > 0 ? 'Delete or move every video, and delete every document, in this tab first' : 'Delete this tab'}
                   onClick={() => void remove(t)}
                 >
                   Delete

@@ -16,10 +16,15 @@ import type {
   DataValue,
   ImportMode
 } from '../../../shared/dataCollection'
+import { visibleSections } from '../../../shared/dataCollection'
+import { viewKeyForSection } from '../../../shared/viewConfig'
+import { useViewConfig } from '../store/useViewPrefs'
+import EntryTable, { type TableColumn, type TableColumnType } from '../components/data/EntryTable'
+import ViewToggle from '../components/data/ViewToggle'
 
 export default function DataView(): JSX.Element {
   const {
-    sections,
+    sections: allSections,
     columns,
     tags,
     entries,
@@ -30,11 +35,15 @@ export default function DataView(): JSX.Element {
     saveEntry,
     deleteSection,
     deleteColumn,
+    deleteTag,
     deleteEntry,
     exportData,
     importData
   } = useDataCollection()
   const confirm = useConfirm()
+  // The Trade journal's template section lives in the same store but is not a
+  // Data Collection tab.
+  const sections = useMemo(() => visibleSections(allSections), [allSections])
 
   const [activeId, setActiveId] = useState<string>('')
   const [draft, setDraft] = useState<{ entry: DataEntry; isNew: boolean } | null>(null)
@@ -90,6 +99,8 @@ export default function DataView(): JSX.Element {
     [columns, activeId]
   )
   const activeSection = sections.find((s) => s.id === activeId)
+  // Landscape (table) vs Vertical (cards), remembered per section.
+  const [viewConfig, setViewConfig] = useViewConfig(viewKeyForSection(activeId || 'none'))
 
   const handleCreateTag = async (
     columnId: string,
@@ -248,6 +259,71 @@ export default function DataView(): JSX.Element {
     )
   }
 
+  // Plain-text value of a cell, used for sorting, searching and filtering the table.
+  const cellText = (col: DataColumn, entry: DataEntry): string => {
+    const value = entry.values[col.id]
+    if (col.type === 'images') return String((entry.columnImages?.[col.id] ?? []).length || '')
+    if (col.type === 'checkbox') return value === true ? 'Yes' : ''
+    if (col.type === 'select' || col.type === 'multiselect') {
+      const ids = col.type === 'multiselect' ? ((value as string[]) ?? []) : value ? [value as string] : []
+      return ids.map((id) => tagById.get(id)?.label ?? '').filter(Boolean).join(' | ')
+    }
+    const text = value != null ? String(value) : ''
+    if (col.type === 'textimages') {
+      const n = (entry.columnImages?.[col.id] ?? []).length
+      return `${text}${n ? ` [${n} image${n === 1 ? '' : 's'}]` : ''}`.trim()
+    }
+    return text
+  }
+
+  const tableColumns: TableColumn<DataEntry>[] = [
+    ...sectionColumns.map((col): TableColumn<DataEntry> => {
+      const isTag = col.type === 'select' || col.type === 'multiselect'
+      const type: TableColumnType = col.type === 'textimages' ? 'text' : col.type
+      return {
+        id: col.id,
+        name: col.name,
+        type,
+        width: col.type === 'textimages' || col.type === 'text' ? 240 : 170,
+        render: (e) => renderCell(col, e),
+        sort: (e) => cellText(col, e),
+        text: (e) => cellText(col, e),
+        ...(isTag
+          ? {
+              filterValues: (e: DataEntry) => cellText(col, e).split(' | ').filter(Boolean),
+              filterOptions: tags
+                .filter((t) => t.columnId === col.id)
+                .sort((a, b) => a.ord - b.ord)
+                .map((t) => ({ value: t.label, label: t.label }))
+            }
+          : {})
+      }
+    }),
+    {
+      id: '__images',
+      name: 'Screenshots',
+      type: 'images',
+      width: 110,
+      defaultVisible: false,
+      render: (e) => (imageCount(e) > 0 ? <span className="text-xs text-slate-300">{imageCount(e)}</span> : <span className="text-muted">-</span>),
+      sort: (e) => imageCount(e) || null
+    },
+    {
+      id: '__comments',
+      name: 'Comments',
+      type: 'text',
+      width: 260,
+      render: (e) =>
+        e.comments.trim() ? (
+          <span className="line-clamp-2 whitespace-pre-wrap text-slate-300">{e.comments.trim()}</span>
+        ) : (
+          <span className="text-muted">-</span>
+        ),
+      sort: (e) => e.comments,
+      text: (e) => e.comments
+    }
+  ]
+
   // True when the entry has meaningful content for this column, so empty
   // fields can be hidden to keep each card clean.
   const hasValue = (col: DataColumn, entry: DataEntry): boolean => {
@@ -263,15 +339,15 @@ export default function DataView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-line px-6 py-4">
-        <div className="flex items-center justify-between">
+      <header className="border-b border-line px-3 py-3 md:px-6 md:py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-base font-semibold text-slate-100">Data collection</h1>
             <p className="text-xs text-muted">
               Log research across weeks, news events and confluences. Stored locally.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 [&>button]:whitespace-nowrap">
             <button className="btn-ghost" onClick={() => setExportOpen(true)}>
               Export
             </button>
@@ -373,18 +449,33 @@ export default function DataView(): JSX.Element {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm text-muted">
             {activeSection?.name} - {sectionEntries.length}{' '}
             {sectionEntries.length === 1 ? 'entry' : 'entries'}
           </div>
-          <button className="btn-primary" onClick={newEntry}>
-            + Add entry
-          </button>
+          <div className="flex items-center gap-2 [&>button]:whitespace-nowrap">
+            <ViewToggle mode={viewConfig.mode} onChange={(mode) => setViewConfig({ ...viewConfig, mode })} />
+            <button className="btn-primary" onClick={newEntry}>
+              + Add entry
+            </button>
+          </div>
         </div>
 
-        {sectionEntries.length === 0 ? (
+        {viewConfig.mode === 'landscape' ? (
+          <EntryTable
+            columns={tableColumns}
+            rows={sectionEntries}
+            rowKey={(e) => e.id}
+            config={viewConfig}
+            onConfig={setViewConfig}
+            onOpen={(e) => setViewing(e)}
+            onAdd={newEntry}
+            addLabel="New entry"
+            emptyText={`No entries yet for ${activeSection?.name ?? 'this section'}.`}
+          />
+        ) : sectionEntries.length === 0 ? (
           <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-line">
             <div className="text-center">
               <p className="text-sm text-slate-300">No entries yet</p>
@@ -488,6 +579,9 @@ export default function DataView(): JSX.Element {
           columns={sectionColumns}
           sectionId={activeId}
           sectionName={activeSection?.name ?? ''}
+          tags={tags}
+          onSaveTag={(t) => void saveTag(t)}
+          onDeleteTag={(id) => void deleteTag(id)}
           onSave={(c) => void saveColumn(c)}
           onReorder={(ids) => void reorderColumns(ids)}
           onDelete={(id) => void deleteColumn(id)}

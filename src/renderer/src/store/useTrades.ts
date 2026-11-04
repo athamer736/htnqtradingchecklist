@@ -1,12 +1,15 @@
 import { create } from 'zustand'
 import type { TradeRecord } from '../types'
-import { sanitizeName, sanitizeText } from '../../../shared/security'
+import { sanitizeName, sanitizeText, sanitizeTradeExtra } from '../../../shared/security'
 import { requestSync } from '../sync/syncEngine'
 
 // Normalizes user-entered text fields before a trade is persisted.
 function cleanTrade(trade: TradeRecord): TradeRecord {
+  const extra = sanitizeTradeExtra(trade.extra)
+  const { extra: _drop, ...rest } = trade
   return {
-    ...trade,
+    ...rest,
+    ...(extra ? { extra } : {}),
     startSetup: sanitizeName(trade.startSetup),
     entryTimeframe: sanitizeName(trade.entryTimeframe),
     contract: sanitizeName(trade.contract),

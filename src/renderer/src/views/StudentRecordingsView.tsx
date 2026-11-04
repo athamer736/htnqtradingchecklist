@@ -154,7 +154,7 @@ export default function StudentRecordingsView(): JSX.Element {
   if (playing) {
     const current = recordings.find((r) => r.id === playTarget?.id)
     return (
-      <div className="h-full p-4 md:p-6">
+      <div className="h-full p-2 sm:p-4 md:p-6">
         <VideoPlayer
           embedUrl={playing.embedUrl}
           watermark={playing.watermark}
@@ -222,7 +222,7 @@ export default function StudentRecordingsView(): JSX.Element {
               : 'Your private 1:1 calls with the mentorship team. Only you and staff can see these.'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(!isStaff || student) && (
             <button type="button" className="btn-ghost" onClick={refresh}>
               Refresh

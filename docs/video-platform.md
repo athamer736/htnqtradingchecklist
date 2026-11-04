@@ -243,6 +243,55 @@ expires. We do **not** promise instant CDN revocation.
   or by itself establish a legal breach. Burned-in or provider-side
   watermarking is not implemented; do not buy add-ons without approval.
 
+## Watermarked PDF documents
+
+PDFs sit in the same Mentorship tabs as videos ("Documents" under the videos, plus an **Upload PDF**
+button for people who can upload to that tab) and follow the **same rules**:
+
+- who sees, opens, uploads, publishes, edits, deletes and reorders them is decided by the tab's
+  view / upload / manage roles through the same `tabAccess.ts` functions the videos use, from LIVE
+  Discord roles, including the Student requirement and the Partial-member fence;
+- the private / published switch works the same way, and an unfinished (still uploading) or failed
+  document is invisible to members;
+- the NDA gate, the bot recheck interval and the watermark name come from one shared step
+  (`_shared/viewerGate.ts`, also used by `issue-playback-token`), so a video and a PDF are gated and
+  named identically (signed NDA name, then the bot's name, then the admin-entered name);
+- every grant and refusal is written to `playback_audit` with the document id, and uploads, publish
+  changes, edits, moves and deletes go to `content_audit` (target kind `document`). Names are never
+  logged.
+
+Documents are not added to 1:1 student recordings.
+
+**Storage.** Files live in the private Supabase Storage bucket `mentorship-documents` (service role
+only, 25 MB limit, `application/pdf` only). There is no public or signed URL to the stored file
+anywhere. `create-document-upload` records a private "uploading" document and returns a one-time
+signed upload token; the browser uploads straight to Storage; `manage-documents` `finalize` then
+checks the file is a readable, unencrypted PDF of at most 25 MB and 300 pages, records the page
+count and marks it ready. Delete removes the stored file first, then soft-deletes the row.
+
+**Opening.** `issue-document` mode `open` re-runs every check, downloads the file with the service
+role and **stamps the viewer onto every page** (`_shared/pdfStamp.ts`): a footer line with legal
+name, `@username`, Discord ID and a session reference, plus a faint tiled diagonal copy of the same
+text. The response is the stamped PDF (`no-store`); the grant (watermark identity and the access
+window) travels in the `X-Htnq-Grant` header as base64 of UTF-8 JSON. If the stamp cannot be
+applied the request fails: the original is never returned. Opening is limited to 10 per person per
+minute. Mode `recheck` returns only the decision; the viewer calls it on the same schedule as the
+video player (access window at most 300 s, renewed about 90 s before it ends), so a revoked role,
+a suspension or an unsigned NDA closes an open document at the next check and drops its bytes.
+
+**Viewing.** The app renders pages with pdf.js onto canvases (no text layer, no download or print
+button; context menu, drag and the print/save/copy shortcuts are blocked; printing the window prints
+nothing) inside the same fullscreen shell as the video player, with the same moving
+`WatermarkOverlay` on top. The worker is bundled into the app (`?worker&inline`), so the Electron CSP
+only needs `worker-src 'self' blob:`. The bytes live in memory only.
+
+**Honest limits.** This is a deterrent and an investigation aid, not DRM. Someone can photograph or
+screen-record a page, and the on-screen overlay can be removed in DevTools. What cannot be removed
+by the viewer is the per-viewer stamp inside the PDF they were given, which ties a leaked copy back
+to the person and session it was issued to. A viewer who types the text out by hand is not stopped.
+Sizes: stamping a 19 MB / 150-page file takes about 0.3 s in tests; very large, image-heavy files
+use more memory in an Edge Function, which is why the cap is 25 MB / 300 pages.
+
 ## Secrets (server only: Supabase Edge Function secrets)
 
 Never use `VITE_` prefixes for these. Never put them in Electron bundles,

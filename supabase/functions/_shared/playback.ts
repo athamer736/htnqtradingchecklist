@@ -4,12 +4,15 @@
 
 import type { AuthzResult } from './authz.ts'
 import { canPlayRecording, type EncodingStatus, type RecordingItem, type Visibility } from './decisions.ts'
-import { pickWatermarkName } from './memberNames.ts'
 import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
-import { MENTORSHIP_MAX_RECHECK_SECONDS, type MentorshipLookupResult } from './mentorshipApi.ts'
+import type { MentorshipLookupResult } from './mentorshipApi.ts'
 import type { NdaDecision } from './ndaGate.ts'
 import { canPlayTabVideo, canSeeUnpublishedInTab, type TabAccess } from './tabAccess.ts'
 import type { PlaybackRequest } from './validation.ts'
+import { resolveViewerGate } from './viewerGate.ts'
+
+// Kept here so existing importers (and tests) are unaffected by the move to viewerGate.ts.
+export { playbackGrantWindow } from './viewerGate.ts'
 
 export interface LoadedVideo {
   id: string
@@ -32,6 +35,7 @@ export interface AuditRow {
   discord_id: string | null
   video_id?: string | null
   recording_id?: string | null
+  document_id?: string | null
   bunny_video_id?: string | null
   session_ref: string
   outcome: 'issued' | 'denied'
@@ -128,39 +132,14 @@ export async function runPlayback(
   // Access is decided by the live Discord checks above plus the NDA gate: only members of
   // the private mentorship server can sign in, their roles decide what they can open, and
   // non-staff members need a signed NDA once the owner's deadline has passed. The bot's
-  // member-access answer never blocks playback (whatever it says, or if it is down); it only
-  // supplies the recheck interval and a legal name for the watermark. Always the Discord ID
-  // from the verified linked identity, never the request.
-  const [nda, mentorship] = await Promise.all([
-    deps.checkNda({ discordId: auth.discordId, isStaff: auth.caps.isStaff }),
-    deps.checkMentorship(auth.discordId)
-  ])
-  if (!nda.allow) {
-    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: nda.code })
-    return denied(nda.code)
+  // member-access answer never blocks playback; see viewerGate.ts, which documents the steps
+  // shared with documents (NDA gate, watermark name, access window).
+  const gate = await resolveViewerGate(auth, deps)
+  if (!gate.ok) {
+    await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: gate.code })
+    return denied(gate.code)
   }
-  const recheckAfterSeconds =
-    mentorship.kind === 'allowed' || mentorship.kind === 'denied'
-      ? mentorship.body.recheck_after_seconds
-      : MENTORSHIP_MAX_RECHECK_SECONDS
-
-  // Name shown beside the Discord ID: the name on the member's signed NDA first, then the
-  // bot's member-access name, then the admin-entered one. It is
-  // only ever sent back to this same verified viewer (it is their own watermark),
-  // never written to the audit log, and a failed read just means "no name". A
-  // staff_record name is only used while the viewer still holds a live staff role.
-  const botName =
-    nda.legalName ??
-    (mentorship.kind === 'allowed' && (mentorship.body.identity_source !== 'staff_record' || auth.caps.isStaff)
-      ? mentorship.body.legal_name
-      : null)
-  let legalName = pickWatermarkName(botName, null)
-  if (!legalName) {
-    const stored = await deps.readStoredName(auth.discordId).catch(() => null)
-    legalName = pickWatermarkName(null, stored)
-  }
-
-  const grant = playbackGrantWindow(recheckAfterSeconds, deps.ttlSeconds, deps.renewLeadSeconds)
+  const { legalName, grant } = gate
   const expiresAt = Math.floor(deps.now() / 1000) + grant.embedTtlSeconds
   const embedUrl = await deps.signEmbed(bunnyVideoId, expiresAt)
   await deps.audit({
@@ -189,29 +168,5 @@ export async function runPlayback(
         ...(auth.username ? { username: auth.username } : {})
       }
     }
-  }
-}
-
-const MIN_ACCESS_VALID_SECONDS = 30
-
-/**
- * How long an allowed decision may be used. Access lapses after the bot's
- * recheck interval (never more than 300 s); the client renews early enough
- * to leave room for a bounded retry before that deadline.
- */
-export function playbackGrantWindow(
-  recheckAfterSeconds: number,
-  ttlSeconds: number,
-  renewLeadSeconds: number
-): { accessValidForSeconds: number; renewAfterSeconds: number; embedTtlSeconds: number } {
-  const accessValidForSeconds = Math.max(
-    Math.min(recheckAfterSeconds, MENTORSHIP_MAX_RECHECK_SECONDS),
-    MIN_ACCESS_VALID_SECONDS
-  )
-  const lead = Math.min(renewLeadSeconds, Math.floor(accessValidForSeconds / 2))
-  return {
-    accessValidForSeconds,
-    renewAfterSeconds: Math.max(accessValidForSeconds - lead, 15),
-    embedTtlSeconds: Math.min(ttlSeconds, accessValidForSeconds + renewLeadSeconds)
   }
 }

@@ -12,6 +12,11 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 export const isSupabaseConfigured = Boolean(url && anonKey)
 
+// For the few calls that need raw response headers or bytes (watermarked PDFs) and so can't use
+// supabase.functions.invoke.
+export const SUPABASE_ANON_KEY = anonKey ?? null
+export const SUPABASE_FUNCTIONS_URL = url ? `${url.replace(/\/+$/, '')}/functions/v1` : null
+
 // Bucket that holds per-user entry screenshots (see supabase/schema.sql).
 export const SCREENSHOTS_BUCKET = 'screenshots'
 

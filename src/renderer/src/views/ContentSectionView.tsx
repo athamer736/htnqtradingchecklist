@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react'
 import NdaBanner, { useNdaGate } from '../components/nda/NdaBanner'
 import NdaGateView from '../components/nda/NdaGateView'
 import ContentCard, { formatDate, formatDuration } from '../components/video/ContentCard'
+import DocumentCard, { documentMeta } from '../components/video/DocumentCard'
+import DocumentUploadDialog from '../components/video/DocumentUploadDialog'
 import PageDescriptionDialog, { DescriptionCard } from '../components/video/PageDescriptionDialog'
+import PdfViewer from '../components/video/PdfViewer'
 import PlaybackNotice from '../components/video/PlaybackNotice'
 import UploadDialog from '../components/video/UploadDialog'
 import VideoPlayer from '../components/video/VideoPlayer'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { useDocumentViewer } from '../store/useDocumentViewer'
 import { useMentorship } from '../store/useMentorship'
 
 export function MentorshipStatus(): JSX.Element | null {
@@ -52,6 +56,7 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
   const caps = useMentorship((s) => s.capabilities)
   const tab = useMentorship((s) => s.tabs.find((t) => t.id === tabId))
   const videos = useMentorship((s) => s.videos)
+  const documents = useMentorship((s) => s.documents)
   const load = useMentorship((s) => s.load)
   const playing = useMentorship((s) => s.playing)
   const playTarget = useMentorship((s) => s.playTarget)
@@ -59,24 +64,51 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
   const tick = useMentorship((s) => s.tick)
   const stop = useMentorship((s) => s.stop)
   const saveTabDescription = useMentorship((s) => s.saveTabDescription)
+  const openDocument = useDocumentViewer((s) => s.current)
+  const documentError = useDocumentViewer((s) => s.error)
+  const documentTick = useDocumentViewer((s) => s.tick)
+  const closeDocument = useDocumentViewer((s) => s.close)
   const [uploading, setUploading] = useState(false)
+  const [uploadingDocument, setUploadingDocument] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
   const ndaGate = useNdaGate()
 
   useEffect(() => {
     void load()
-    return () => stop()
-  }, [load, stop])
+    return () => {
+      stop()
+      closeDocument()
+    }
+  }, [load, stop, closeDocument])
 
   const gate = <MentorshipStatus />
   if (status !== 'ready' || !caps) return gate
   // Past the owner's deadline with no signed NDA: show how to sign instead of the page.
   if (ndaGate.locked) return <NdaGateView />
 
+  if (openDocument) {
+    const current = documents.find((d) => d.id === openDocument.documentId)
+    return (
+      <div className="h-full p-4 md:p-6">
+        <PdfViewer
+          bytes={openDocument.bytes}
+          watermark={openDocument.watermark}
+          details={
+            current
+              ? { title: current.title, description: current.description, meta: documentMeta(current) }
+              : null
+          }
+          onClose={closeDocument}
+          onTick={documentTick}
+        />
+      </div>
+    )
+  }
+
   if (playing) {
     const current = videos.find((v) => v.id === playTarget?.id)
     return (
-      <div className="h-full p-4 md:p-6">
+      <div className="h-full p-2 sm:p-4 md:p-6">
         <VideoPlayer
           embedUrl={playing.embedUrl}
           watermark={playing.watermark}
@@ -109,6 +141,7 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
   }
 
   const items = videos.filter((v) => v.tabId === tab.id)
+  const tabDocuments = documents.filter((d) => d.tabId === tab.id)
   // People who upload to or manage the tab also see its private videos.
   const seesPrivate = caps.isStaff || tab.canUpload || tab.canManage
   const descriptionText = tab.description ?? undefined
@@ -119,10 +152,10 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
         <div>
           <h1 className="text-xl font-semibold text-slate-100">{tab.title}</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Playback shows your Discord ID and username (and your legal name, if one is on file) as a watermark.
+            Videos and PDFs show your Discord ID and username (and your legal name, if one is on file) as a watermark.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-ghost" onClick={() => void load()}>
             Refresh
           </button>
@@ -136,30 +169,50 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
               Upload video
             </button>
           )}
+          {tab.canUpload && (
+            <button type="button" className="btn-primary" onClick={() => setUploadingDocument(true)}>
+              Upload PDF
+            </button>
+          )}
         </div>
       </div>
 
       <NdaBanner />
       {playError && <PlaybackNotice error={playError} onDismiss={stop} />}
+      {documentError && <PlaybackNotice error={documentError} onDismiss={closeDocument} title="Document blocked" />}
 
       {descriptionText && <DescriptionCard label={`About ${tab.title}`} text={descriptionText} />}
 
-      {items.length === 0 ? (
+      {items.length === 0 && tabDocuments.length === 0 ? (
         <p className="text-sm text-muted">
-          {seesPrivate ? 'Nothing here yet.' : 'No videos have been published here yet.'}
+          {seesPrivate ? 'Nothing here yet.' : 'Nothing has been published here yet.'}
         </p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map((v) => (
-            <ContentCard
-              key={v.id}
-              kind="video"
-              item={v}
-              isStaff={seesPrivate}
-              onChanged={() => void load()}
-            />
-          ))}
-        </div>
+        <>
+          {items.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {items.map((v) => (
+                <ContentCard
+                  key={v.id}
+                  kind="video"
+                  item={v}
+                  isStaff={seesPrivate}
+                  onChanged={() => void load()}
+                />
+              ))}
+            </div>
+          )}
+          {tabDocuments.length > 0 && (
+            <section className={items.length > 0 ? 'mt-8' : ''} aria-label="Documents">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Documents</h2>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {tabDocuments.map((d) => (
+                  <DocumentCard key={d.id} doc={d} isStaff={seesPrivate} onChanged={() => void load()} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {editingDescription && (
@@ -170,6 +223,15 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
           initial={descriptionText ?? ''}
           onSave={(text) => saveTabDescription(tab.id, text)}
           onClose={() => setEditingDescription(false)}
+        />
+      )}
+
+      {uploadingDocument && (
+        <DocumentUploadDialog
+          tabId={tab.id}
+          tabTitle={tab.title}
+          onClose={() => setUploadingDocument(false)}
+          onUploaded={() => void load()}
         />
       )}
 

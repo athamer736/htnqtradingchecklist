@@ -15,6 +15,7 @@ import {
   type DataSection,
   type DataTag,
   type DataValue,
+  type TradeExtra,
   TAG_COLORS
 } from './dataCollection'
 
@@ -376,6 +377,51 @@ function sanitizeEntry(value: unknown): DataEntry | null {
     updatedAt: isoDate(v.updatedAt) || now,
     deletedAt: typeof v.deletedAt === 'string' ? isoDate(v.deletedAt) : v.deletedAt === null ? null : undefined
   }
+}
+
+// Sanitises the journal extras stored on a trade. Unlike imported files this is
+// the app's own data, so images that haven't been downloaded yet (empty dataUrl,
+// only a storagePath) are kept; any non-empty dataUrl must still be a real image.
+export function sanitizeTradeExtra(value: unknown): TradeExtra | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const v = value as Partial<TradeExtra>
+  const keep = (list: unknown): DataImage[] => {
+    if (!Array.isArray(list)) return []
+    const out: DataImage[] = []
+    for (const item of list) {
+      if (out.length >= MAX_IMAGES_PER_FIELD) break
+      if (!item || typeof item !== 'object') continue
+      const img = item as Partial<DataImage>
+      const id = sanitizeId(img.id)
+      if (!id) continue
+      let dataUrl = ''
+      if (typeof img.dataUrl === 'string' && img.dataUrl !== '') {
+        const validated = validateImageDataUrl(img.dataUrl)
+        if (!validated) continue
+        dataUrl = validated.dataUrl
+      }
+      const clean: DataImage = { id, name: sanitizeFileName(img.name), dataUrl }
+      if (
+        typeof img.storagePath === 'string' &&
+        /^[a-zA-Z0-9._/-]{1,512}$/.test(img.storagePath) &&
+        !img.storagePath.includes('..')
+      ) {
+        clean.storagePath = img.storagePath
+      }
+      out.push(clean)
+    }
+    return out
+  }
+  const columnImages: Record<string, DataImage[]> = {}
+  if (v.columnImages && typeof v.columnImages === 'object') {
+    for (const [key, val] of Object.entries(v.columnImages)) {
+      const id = sanitizeId(key)
+      if (!id) continue
+      const imgs = keep(val)
+      if (imgs.length) columnImages[id] = imgs
+    }
+  }
+  return { values: sanitizeValues(v.values), columnImages, images: keep(v.images) }
 }
 
 function mapCapped<T>(arr: unknown, cap: number, fn: (item: unknown) => T | null): T[] {

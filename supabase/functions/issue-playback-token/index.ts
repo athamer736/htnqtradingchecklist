@@ -21,16 +21,12 @@ import { buildBunnyEmbedUrl, signBunnyEmbedToken } from '../_shared/bunnyAuth.ts
 import { loadContext } from '../_shared/context.ts'
 import type { EncodingStatus, Visibility } from '../_shared/decisions.ts'
 import { handleOptions, json, newSessionRef, readJsonBody } from '../_shared/http.ts'
-import { readStoredName } from '../_shared/memberNameStore.ts'
 import { deny } from '../_shared/messages.ts'
-import { fetchMentorshipAccess } from '../_shared/mentorshipApi.ts'
-import { fetchNdaStatus } from '../_shared/mentorshipNdaApi.ts'
-import { evaluateNda } from '../_shared/ndaGate.ts'
-import { readEnforceFrom, readNdaCache, writeNdaCache } from '../_shared/ndaStore.ts'
 import { runPlayback, type LoadedRecording, type LoadedVideo } from '../_shared/playback.ts'
 import { slugForLegacy } from '../_shared/tabCompat.ts'
 import { getTab } from '../_shared/tabStore.ts'
 import { parsePlaybackRequest } from '../_shared/validation.ts'
+import { playbackAuditWriter, viewerGateDeps } from '../_shared/viewerWiring.ts'
 
 const RENEW_LEAD_SECONDS = 90
 
@@ -56,6 +52,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!parsed.ok) return deny('invalid_request')
 
   const auth = await authorize(req, ctx.authzDeps)
+  const gate = viewerGateDeps(admin, env, { baseUrl: mentorshipBaseUrl, token: mentorshipToken }, RENEW_LEAD_SECONDS)
 
   const outcome = await runPlayback(parsed.value, auth, {
     loadVideo: async (id): Promise<LoadedVideo | null> => {
@@ -96,48 +93,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
         encodingStatus: data.encoding_status as EncodingStatus
       }
     },
-    checkMentorship: (discordId) =>
-      fetchMentorshipAccess({
-        baseUrl: mentorshipBaseUrl,
-        token: mentorshipToken,
-        discordId,
-        allowLocalHttp: env.allowLocalHttp
-      }),
-    checkNda: ({ discordId, isStaff }) =>
-      evaluateNda({
-        isStaff,
-        discordId,
-        now: Date.now(),
-        lookup: (id) =>
-          fetchNdaStatus({
-            baseUrl: mentorshipBaseUrl,
-            token: mentorshipToken,
-            discordId: id,
-            allowLocalHttp: env.allowLocalHttp
-          }),
-        readEnforceFrom: () => readEnforceFrom(admin),
-        readCache: (id) => readNdaCache(admin, id),
-        writeCache: (id) => writeNdaCache(admin, id)
-      }),
-    readStoredName: async (discordId) => {
-      const stored = await readStoredName(admin, discordId)
-      return stored.ok ? stored.value : null
-    },
+    ...gate,
     signEmbed: async (bunnyVideoId, expiresAt) => {
       const token = await signBunnyEmbedToken(tokenKey, bunnyVideoId, expiresAt)
       return buildBunnyEmbedUrl({ libraryId, videoId: bunnyVideoId, token, expiresUnixSeconds: expiresAt })
     },
-    audit: async (row) => {
-      try {
-        await admin.from('playback_audit').insert(row)
-      } catch {
-        // Audit must never break the response path.
-      }
-    },
+    audit: playbackAuditWriter(admin),
     newSessionRef,
-    now: () => Date.now(),
-    ttlSeconds: env.playbackTtlSeconds,
-    renewLeadSeconds: RENEW_LEAD_SECONDS
+    now: () => Date.now()
   })
 
   const retryAfter = outcome.body.retryAfterSeconds

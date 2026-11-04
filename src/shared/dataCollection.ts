@@ -14,11 +14,27 @@ export type ColumnType =
 // Bump when the built-in columns/tags change so existing local stores refresh
 // their built-ins. As of v7 columns/tags are per-section. v8 adds the mandatory
 // "Imported Data" section additively (existing data is preserved on 7 -> 8).
-export const DC_SCHEMA_VERSION = 8
+export const DC_SCHEMA_VERSION = 9
 
 // The mandatory built-in section that holds data brought in via Import. It ships
 // with no built-in columns; columns are created from imported files.
 export const IMPORTED_SECTION_ID = 'sec-imported'
+
+// v9: the Trade journal's "template" lives in this section (FVG / SSMT / TPD tag
+// lists, setup screenshots and any user-added properties). It reuses the Data
+// Collection column + tag engine but is hidden from the Data Collection tabs,
+// exports and imports, since its values are stored on the trades themselves.
+export const JOURNAL_SECTION_ID = 'sec-journal'
+
+export function isHiddenSection(id: string): boolean {
+  return id === JOURNAL_SECTION_ID
+}
+
+// Built-in journal columns (stable ids so trades can reference them).
+export const JOURNAL_COL_FVG = `${JOURNAL_SECTION_ID}::fvg`
+export const JOURNAL_COL_SSMT = `${JOURNAL_SECTION_ID}::ssmt`
+export const JOURNAL_COL_TPD = `${JOURNAL_SECTION_ID}::tpd`
+export const JOURNAL_COL_SHOTS = `${JOURNAL_SECTION_ID}::shots`
 
 // Sync metadata carried by every syncable record. Optional so existing code
 // that constructs these objects keeps compiling; the local stores stamp them
@@ -80,6 +96,20 @@ export interface DataEntry extends SyncFields {
   updatedAt: string
 }
 
+// Template-driven extras stored on a trade (v9): values and screenshots for the
+// journal's custom columns (SSMT, TPD, setup screenshots, user-added properties).
+// Same shape as the matching DataEntry fields so the shared field editors,
+// image uploader and screenshot sync work on both.
+export interface TradeExtra {
+  values: Record<string, DataValue>
+  columnImages: Record<string, DataImage[]>
+  images: DataImage[]
+}
+
+export function emptyTradeExtra(): TradeExtra {
+  return { values: {}, columnImages: {}, images: [] }
+}
+
 export interface DataSnapshot {
   sections: DataSection[]
   columns: DataColumn[]
@@ -111,8 +141,14 @@ export const DEFAULT_SECTIONS: DataSection[] = [
   { id: 'sec-cpi', name: 'CPI Week', ord: 3, builtin: true, createdAt: SEED_TIME },
   { id: 'sec-nfp', name: 'NFP Week', ord: 4, builtin: true, createdAt: SEED_TIME },
   { id: 'sec-halving', name: 'Weekly Halving', ord: 5, builtin: true, createdAt: SEED_TIME },
-  { id: IMPORTED_SECTION_ID, name: 'Imported Data', ord: 6, builtin: true, createdAt: SEED_TIME }
+  { id: IMPORTED_SECTION_ID, name: 'Imported Data', ord: 6, builtin: true, createdAt: SEED_TIME },
+  { id: JOURNAL_SECTION_ID, name: 'Trade journal', ord: 7, builtin: true, createdAt: SEED_TIME }
 ]
+
+// Sections the Data Collection UI lists (everything except the hidden journal).
+export function visibleSections<T extends { id: string }>(sections: T[]): T[] {
+  return sections.filter((s) => !isHiddenSection(s.id))
+}
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 const BIAS = ['Bullish', 'Bearish', 'Neutral']
@@ -169,6 +205,53 @@ export function columnId(sectionId: string, baseId: string): string {
   return `${sectionId}::${baseId}`
 }
 
+// Default option lists for the journal's setup pickers. Users can add, rename,
+// recolour and remove these per account.
+const JOURNAL_FVG_TAGS = [
+  'Weekly FVG',
+  'Daily FVG',
+  'H6 FVG',
+  'H4 FVG',
+  'H1 FVG',
+  '90M FVG',
+  'M15 FVG',
+  'M5 FVG'
+]
+const JOURNAL_SSMT_TAGS = [
+  'Monthly SSMT',
+  'Weekly SSMT',
+  'Daily SSMT',
+  'H6 SSMT',
+  'H4 SSMT',
+  'H1 SSMT',
+  '90M SSMT'
+]
+const JOURNAL_TPD_TAGS = [
+  'Daily TPD',
+  'H6 TPD',
+  'H4 TPD',
+  'H1 TPD',
+  '90M TPD',
+  'M15 TPD',
+  'M5 TPD'
+]
+
+const JOURNAL_BLUEPRINTS: ColumnBlueprint[] = [
+  { baseId: 'fvg', name: 'FVG', type: 'select', tags: JOURNAL_FVG_TAGS },
+  { baseId: 'ssmt', name: 'SSMT', type: 'multiselect', tags: JOURNAL_SSMT_TAGS },
+  { baseId: 'tpd', name: 'TPD', type: 'multiselect', tags: JOURNAL_TPD_TAGS },
+  // Screenshots only: the trade's own Notes field is the text half of "notes
+  // with a screenshot of the setup".
+  { baseId: 'shots', name: 'Setup screenshots', type: 'images' }
+]
+
+// The first option of the FVG list; used as the default for a new trade.
+export const DEFAULT_JOURNAL_FVG = JOURNAL_FVG_TAGS[0]
+
+function blueprintsFor(sectionId: string): ColumnBlueprint[] {
+  return sectionId === JOURNAL_SECTION_ID ? JOURNAL_BLUEPRINTS : COLUMN_BLUEPRINTS
+}
+
 // Emit a fresh set of per-section columns + tags for the built-in sections.
 export function buildDefaults(): Omit<DataSnapshot, 'entries'> {
   const columns: DataColumn[] = []
@@ -176,7 +259,7 @@ export function buildDefaults(): Omit<DataSnapshot, 'entries'> {
   for (const section of DEFAULT_SECTIONS) {
     // The Imported Data section starts empty; its columns come from imports.
     if (section.id === IMPORTED_SECTION_ID) continue
-    COLUMN_BLUEPRINTS.forEach((bp, ord) => {
+    blueprintsFor(section.id).forEach((bp, ord) => {
       const id = columnId(section.id, bp.baseId)
       columns.push({ id, sectionId: section.id, name: bp.name, type: bp.type, ord, createdAt: SEED_TIME })
       if (bp.tags) {
@@ -193,6 +276,23 @@ export function buildDefaults(): Omit<DataSnapshot, 'entries'> {
     })
   }
   return { sections: DEFAULT_SECTIONS, columns, tags }
+}
+
+// Additive schema bump (e.g. v8 -> v9): the default sections, columns and tags for
+// built-in sections that are NOT in the store yet. Sections that already exist
+// (and everything the user did to them) are never touched.
+export function missingBuiltinRows(existingSectionIds: Iterable<string>): {
+  sections: DataSection[]
+  columns: DataColumn[]
+  tags: DataTag[]
+} {
+  const existing = new Set(existingSectionIds)
+  const defaults = buildDefaults()
+  const sections = DEFAULT_SECTIONS.filter((s) => !existing.has(s.id))
+  const missing = new Set(sections.map((s) => s.id))
+  const columns = defaults.columns.filter((c) => missing.has(c.sectionId))
+  const colIds = new Set(columns.map((c) => c.id))
+  return { sections, columns, tags: defaults.tags.filter((t) => colIds.has(t.columnId)) }
 }
 
 export function defaultSnapshot(): Omit<DataSnapshot, 'entries'> {
@@ -248,8 +348,8 @@ export function buildExport(
   includeEntries = true
 ): DataExport {
   const sections = sectionId
-    ? snapshot.sections.filter((s) => s.id === sectionId)
-    : snapshot.sections
+    ? snapshot.sections.filter((s) => s.id === sectionId && !isHiddenSection(s.id))
+    : visibleSections(snapshot.sections)
   const sectionIds = new Set(sections.map((s) => s.id))
   const columns = snapshot.columns.filter((c) => sectionIds.has(c.sectionId))
   const columnIds = new Set(columns.map((c) => c.id))
@@ -292,6 +392,39 @@ function defaultsForSection(sectionId: string): { columns: DataColumn[]; tags: D
   return { columns: cols, tags: tags.filter((t) => colIds.has(t.columnId)) }
 }
 
+// The hidden journal section's rows (section, columns, tags) from a snapshot, or
+// the shipped defaults if the store has none. Used so destructive operations on
+// Data Collection (replace-import, reset) never wipe the journal template.
+export function journalTemplateRows(existing: Omit<DataSnapshot, 'entries'>): {
+  sections: DataSection[]
+  columns: DataColumn[]
+  tags: DataTag[]
+} {
+  const sections = existing.sections.filter((s) => isHiddenSection(s.id))
+  if (sections.length === 0) {
+    const d = buildDefaults()
+    return {
+      sections: d.sections.filter((s) => isHiddenSection(s.id)),
+      columns: d.columns.filter((c) => isHiddenSection(c.sectionId)),
+      tags: d.tags.filter((t) => t.columnId.startsWith(`${JOURNAL_SECTION_ID}::`))
+    }
+  }
+  const columns = existing.columns.filter((c) => isHiddenSection(c.sectionId))
+  const ids = new Set(columns.map((c) => c.id))
+  return { sections, columns, tags: existing.tags.filter((t) => ids.has(t.columnId)) }
+}
+
+// Defaults for every visible built-in section (what a Data Collection reset
+// restores); the journal template is carried over separately.
+export function buildVisibleDefaults(): Omit<DataSnapshot, 'entries'> {
+  const d = buildDefaults()
+  return {
+    sections: visibleSections(d.sections),
+    columns: d.columns.filter((c) => !isHiddenSection(c.sectionId)),
+    tags: d.tags.filter((t) => !t.columnId.startsWith(`${JOURNAL_SECTION_ID}::`))
+  }
+}
+
 // Remaps an entry onto a new section + column-id mapping, dropping values whose
 // column wasn't imported.
 function remapEntry(
@@ -324,12 +457,28 @@ function remapEntry(
   }
 }
 
+function stripHiddenSections(payload: DataExport): DataExport {
+  const hidden = new Set(payload.sections.filter((s) => isHiddenSection(s.id)).map((s) => s.id))
+  const hiddenCols = new Set(
+    payload.columns.filter((c) => hidden.has(c.sectionId) || isHiddenSection(c.sectionId)).map((c) => c.id)
+  )
+  return {
+    ...payload,
+    sections: payload.sections.filter((s) => !isHiddenSection(s.id)),
+    columns: payload.columns.filter((c) => !hiddenCols.has(c.id)),
+    tags: payload.tags.filter((t) => !hiddenCols.has(t.columnId)),
+    entries: payload.entries.filter((e) => !isHiddenSection(e.sectionId))
+  }
+}
+
 // Turns an imported file into concrete rows to apply, given the existing store.
 export function prepareImport(
-  payload: DataExport,
+  rawPayload: DataExport,
   mode: ImportMode,
   existing: DataSnapshot
 ): ImportPlan {
+  // The journal template is never imported: files can't overwrite or add to it.
+  const payload = stripHiddenSections(rawPayload)
   if (mode === 'replace') {
     const sections = [...payload.sections]
     const columns = [...payload.columns]
@@ -338,12 +487,18 @@ export function prepareImport(
     // any the file didn't include so the app stays consistent.
     const present = new Set(sections.map((s) => s.id))
     for (const def of DEFAULT_SECTIONS) {
+      if (isHiddenSection(def.id)) continue
       if (present.has(def.id)) continue
       sections.push(def)
       const d = defaultsForSection(def.id)
       columns.push(...d.columns)
       tags.push(...d.tags)
     }
+    // Replacing wipes the store first, so carry the journal template over.
+    const journal = journalTemplateRows(existing)
+    sections.push(...journal.sections)
+    columns.push(...journal.columns)
+    tags.push(...journal.tags)
     return { clearFirst: true, sections, columns, tags, entries: payload.entries }
   }
 

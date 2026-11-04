@@ -2,10 +2,13 @@ import { isTemporaryPlaybackFailure, type PlaybackDenied } from '../../../../sha
 
 export default function PlaybackNotice({
   error,
-  onDismiss
+  onDismiss,
+  title
 }: {
   error: PlaybackDenied
   onDismiss?: () => void
+  /** Heading for a blocked (not temporary) failure; defaults to the video wording. */
+  title?: string
 }): JSX.Element {
   const temporary = isTemporaryPlaybackFailure(error.reasonCode)
   return (
@@ -18,7 +21,7 @@ export default function PlaybackNotice({
       }
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="font-medium">{temporary ? 'Access check temporarily unavailable' : 'Playback blocked'}</div>
+        <div className="font-medium">{temporary ? 'Access check temporarily unavailable' : (title ?? 'Playback blocked')}</div>
         {onDismiss && (
           <button type="button" className="text-xs opacity-70 hover:opacity-100" onClick={onDismiss}>
             Dismiss

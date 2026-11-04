@@ -185,6 +185,9 @@ supabase functions deploy level-descriptions
 supabase functions deploy manage-tabs
 supabase functions deploy nda
 supabase functions deploy issue-playback-token
+supabase functions deploy create-document-upload
+supabase functions deploy manage-documents
+supabase functions deploy issue-document
 supabase functions delete list-videos   # replaced by list-content
 ```
 
@@ -206,6 +209,15 @@ their roles unlock (staff all of them), only owner/admin can write it, and chang
 `migrations/20261020_level_descriptions.sql` and `20261020_section_descriptions.sql`
 first (service-role-only `level_descriptions` and `section_descriptions` tables; they
 also widen the `content_audit` checks).
+
+### Watermarked PDF documents
+
+Run `migrations/20261102_documents.sql` first: it creates the service-role-only `documents` table,
+the **private** Storage bucket `mentorship-documents` (25 MB, PDF only), `playback_audit.document_id`,
+and widens the `content_audit` checks. Then deploy `create-document-upload`, `manage-documents` and
+`issue-document`, and redeploy `list-content`, `manage-tabs`, `issue-playback-token` (they share
+the code changed for documents). `issue-document` and `manage-documents` each have a `deno.json`
+that maps `pdf-lib`; deploy them from this folder so it is picked up. No new secrets are needed.
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep

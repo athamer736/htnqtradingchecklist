@@ -120,23 +120,23 @@ export default function VideoPlayer({
   const big = isFullscreen || expanded
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <button type="button" className="btn-ghost" onClick={onClose}>
-          ← Back to videos
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain sm:gap-3 lg:overflow-visible">
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" className="btn-ghost px-3 py-2 text-xs sm:text-sm" onClick={onClose}>
+          ← Back<span className="hidden sm:inline">&nbsp;to videos</span>
         </button>
         <div className="flex items-center gap-2">
           {details && (
             <button
               type="button"
-              className="btn-ghost"
+              className="btn-ghost px-3 py-2 text-xs sm:text-sm"
               aria-pressed={showDetails}
               onClick={() => setShowDetails((v) => !v)}
             >
               {showDetails ? 'Hide details' : 'Show details'}
             </button>
           )}
-          <button type="button" className="btn-ghost" onClick={() => void toggleFullscreen()}>
+          <button type="button" className="btn-ghost px-3 py-2 text-xs sm:text-sm" onClick={() => void toggleFullscreen()}>
             {big ? 'Exit fullscreen' : 'Fullscreen'}
           </button>
         </div>
@@ -148,13 +148,13 @@ export default function VideoPlayer({
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+      <div className="flex flex-col gap-2 sm:gap-3 lg:min-h-0 lg:flex-1 lg:flex-row">
         <div
           ref={shellRef}
           className={
             expanded
               ? 'fixed inset-0 z-50 overflow-hidden bg-black'
-              : 'relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-line bg-black'
+              : 'relative aspect-video max-h-[78dvh] w-full shrink-0 overflow-hidden rounded-lg border border-line bg-black sm:rounded-xl lg:aspect-auto lg:max-h-none lg:min-h-0 lg:min-w-0 lg:flex-1'
           }
           style={{ containerType: 'inline-size' }}
         >
@@ -185,7 +185,7 @@ export default function VideoPlayer({
         {details && showDetails && (
           <aside
             aria-label="Video details"
-            className="flex max-h-48 shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-bg-card lg:max-h-none lg:w-80 xl:w-96"
+            className="flex shrink-0 flex-col overflow-hidden rounded-lg border border-line bg-bg-card sm:rounded-xl lg:w-80 xl:w-96"
           >
             <div className="flex items-start justify-between gap-2 border-b border-line px-4 py-3">
               <div className="min-w-0">
@@ -213,7 +213,7 @@ export default function VideoPlayer({
         )}
       </div>
 
-      <p className="text-[11px] leading-relaxed text-muted">
+      <p className="pb-2 text-[11px] leading-relaxed text-muted">
         Watermark shows your legal name, Discord username and Discord ID.
       </p>
     </div>

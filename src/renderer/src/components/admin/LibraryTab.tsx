@@ -4,7 +4,8 @@ import EditDetailsDialog from '../video/EditDetailsDialog'
 import ThumbnailButton from '../video/ThumbnailButton'
 import { formatDuration } from '../video/ContentCard'
 import { useMentorship, type ManageAction } from '../../store/useMentorship'
-import type { ContentVideo, MentorshipTab } from '../../../../shared/video'
+import type { ContentDocument, ContentVideo, MentorshipTab } from '../../../../shared/video'
+import LibraryDocuments from './LibraryDocuments'
 
 // Every video in one place, grouped the way members see them, with reordering.
 // Upload happens on each section's page; this is the manager's overview for
@@ -15,15 +16,17 @@ interface Group {
   key: string
   label: string
   videos: ContentVideo[]
+  documents: ContentDocument[]
 }
 
-function buildGroups(tabs: MentorshipTab[], videos: ContentVideo[]): Group[] {
+function buildGroups(tabs: MentorshipTab[], videos: ContentVideo[], documents: ContentDocument[]): Group[] {
   // `tabs` and `videos` arrive in the server's display order (the admins' tab order,
   // then sort_ord and newest), so filtering preserves exactly what members see.
   return tabs.map((t) => ({
     key: t.id,
     label: t.title,
-    videos: videos.filter((v) => v.tabId === t.id)
+    videos: videos.filter((v) => v.tabId === t.id),
+    documents: documents.filter((d) => d.tabId === t.id)
   }))
 }
 const STATUS_CHIP: Record<string, { label: string; className: string }> = {
@@ -35,6 +38,7 @@ const STATUS_CHIP: Record<string, { label: string; className: string }> = {
 export default function LibraryTab(): JSX.Element {
   const tabs = useMentorship((s) => s.tabs)
   const videos = useMentorship((s) => s.videos)
+  const documents = useMentorship((s) => s.documents)
   const manage = useMentorship((s) => s.manage)
   const load = useMentorship((s) => s.load)
   const confirm = useConfirm()
@@ -43,7 +47,7 @@ export default function LibraryTab(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<ContentVideo | null>(null)
 
-  const groups = useMemo(() => buildGroups(tabs, videos), [tabs, videos])
+  const groups = useMemo(() => buildGroups(tabs, videos, documents), [tabs, videos, documents])
 
   const run = async (video: ContentVideo, action: ManageAction): Promise<string | null> => {
     setBusyId(video.id)
@@ -71,7 +75,7 @@ export default function LibraryTab(): JSX.Element {
   return (
     <div className="flex flex-col gap-6">
       <p className="text-[11px] leading-relaxed text-muted">
-        Order here is the order members see inside each tab. Upload new videos from the tab pages in the Mentorship
+        Order here is the order members see inside each tab. Upload new videos and PDFs from the tab pages in the Mentorship
         menu; add, rename or reorder the tabs themselves under Tabs.
       </p>
       {error && (
@@ -83,11 +87,11 @@ export default function LibraryTab(): JSX.Element {
       {groups.map((g) => (
         <section key={g.key}>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            {g.label} <span className="font-normal normal-case text-muted/70">({g.videos.length})</span>
+            {g.label} <span className="font-normal normal-case text-muted/70">({g.videos.length + g.documents.length})</span>
           </h2>
-          {g.videos.length === 0 ? (
+          {g.videos.length === 0 ? g.documents.length > 0 ? null : (
             <div className="rounded-xl border border-dashed border-line/60 px-4 py-4 text-xs text-muted">
-              No videos here yet.
+              Nothing here yet.
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -167,6 +171,7 @@ export default function LibraryTab(): JSX.Element {
               })}
             </div>
           )}
+          <LibraryDocuments documents={g.documents} />
         </section>
       ))}
 

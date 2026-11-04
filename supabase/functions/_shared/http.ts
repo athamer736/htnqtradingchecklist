@@ -2,6 +2,9 @@ export const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  // The browser can only read these on a cross-origin response when they are listed: the grant that
+  // travels beside a watermarked PDF, and the backoff hint on 429s.
+  'Access-Control-Expose-Headers': 'X-Htnq-Grant, Retry-After',
   'Cache-Control': 'no-store'
 }
 

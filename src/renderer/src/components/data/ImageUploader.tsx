@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { uid } from '../../util/id'
 import { logWarn } from '../../lib/logger'
+import { downscaleDataUrl } from '../../util/imageResize'
 import {
   MAX_IMAGE_BYTES,
   MAX_IMAGES_PER_FIELD,
@@ -30,7 +31,10 @@ function readFile(file: File): Promise<DataImage | null> {
         resolve(null)
         return
       }
-      resolve({ id: uid(), name: sanitizeFileName(file.name), dataUrl: validated.dataUrl })
+      // Large screenshots are downscaled (about 1600px) before being stored/synced.
+      void downscaleDataUrl(validated.dataUrl).then((dataUrl) =>
+        resolve({ id: uid(), name: sanitizeFileName(file.name), dataUrl })
+      )
     }
     reader.onerror = () => resolve(null)
     reader.readAsDataURL(file)

@@ -24,13 +24,12 @@ import { authorize } from '../_shared/authz.ts'
 import { loadContext, writeContentAudit } from '../_shared/context.ts'
 import { listGuildRoles } from '../_shared/discord.ts'
 import { handleOptions, json, readJsonBody } from '../_shared/http.ts'
+import { countItemsByTab, countItemsInTab } from '../_shared/documents.ts'
 import { deny } from '../_shared/messages.ts'
 import { planMove, sortOrdUpdates } from '../_shared/ordering.ts'
 import { canEditTabManagers, canManageTabs } from '../_shared/tabAccess.ts'
 import { isLegacySlug } from '../_shared/tabCompat.ts'
 import {
-  countVideosByTab,
-  countVideosInTab,
   getTab,
   listTabs,
   loadTabSettings,
@@ -109,7 +108,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   switch (request.action) {
     case 'list': {
-      const [tabs, counts] = await Promise.all([listTabs(admin), countVideosByTab(admin)])
+      const [tabs, counts] = await Promise.all([listTabs(admin), countItemsByTab(admin)])
       if (!tabs.ok || !counts.ok) return deny('upstream_failed')
       return json({
         ok: true,
@@ -184,7 +183,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         roleDiff[key] = { from: [...current], to: next }
       }
       if (changed.length === 0 && Object.keys(roleDiff).length === 0) {
-        const counts = await countVideosInTab(admin, tab.id)
+        const counts = await countItemsInTab(admin, tab.id)
         return json({ ok: true, tab: present(tab, counts.ok ? counts.value : 0), unchanged: true })
       }
 
@@ -198,7 +197,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (!updated) return deny('upstream_failed')
       if (changed.length > 0) await audit('tab_updated', tab.id, { changed })
       if (Object.keys(roleDiff).length > 0) await audit('tab_roles_changed', tab.id, roleDiff)
-      const counts = await countVideosInTab(admin, tab.id)
+      const counts = await countItemsInTab(admin, tab.id)
       return json({ ok: true, tab: present(updated, counts.ok ? counts.value : 0) })
     }
 
@@ -208,10 +207,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const tab = found.value
       if (!tab) return deny('tab_not_found')
 
-      const remaining = await countVideosInTab(admin, tab.id)
+      const remaining = await countItemsInTab(admin, tab.id)
       if (!remaining.ok) return deny('upstream_failed')
       if (remaining.value > 0) return deny('tab_not_empty')
 
+      // Deleted documents have no file left but still reference the tab (restrict); clear them first.
+      const clearDocs = await admin.from('documents').delete().eq('tab_id', tab.id).not('deleted_at', 'is', null)
+      if (clearDocs.error) return deny('upstream_failed')
       // Soft-deleted videos still point at the tab; detach them so the row can go.
       const detach = await admin.from('videos').update({ tab_id: null }).eq('tab_id', tab.id)
       if (detach.error) return deny('upstream_failed')

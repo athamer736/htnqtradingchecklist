@@ -13,6 +13,7 @@ import { authorize } from '../_shared/authz.ts'
 import { getBunnyVideo, mapBunnyStatus } from '../_shared/bunnyApi.ts'
 import { loadContext, thumbnailUrl } from '../_shared/context.ts'
 import { canUploadRecording, type EncodingStatus, type Visibility } from '../_shared/decisions.ts'
+import { documentEncoding, listDocuments } from '../_shared/documents.ts'
 import { handleOptions, json } from '../_shared/http.ts'
 import { deny } from '../_shared/messages.ts'
 import { isEnforced } from '../_shared/ndaGate.ts'
@@ -133,6 +134,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
       })
   )
 
+  // Documents (PDFs) sit beside the videos in the same tabs under the same rules. A failed read
+  // lists none rather than failing the page; opening one is gated again by issue-document.
+  const documentRows = await listDocuments(admin)
+  const documents = (documentRows.ok ? documentRows.value : [])
+    .map((d) => ({ d, tab: tabById.get(d.tabId) }))
+    .filter(({ d, tab }) => {
+      if (!tab) return false
+      return canListTabVideo(caps, roles, tab, { visibility: d.visibility, encodingStatus: documentEncoding(d.status) })
+    })
+    .map(({ d, tab }) => ({
+      id: d.id,
+      tabId: d.tabId,
+      title: d.title,
+      description: d.description,
+      sizeBytes: d.sizeBytes,
+      pageCount: d.pageCount,
+      visibility: d.visibility,
+      status: d.status,
+      createdAt: d.createdAt,
+      sortOrd: d.sortOrd,
+      canSetVisibility: canSetTabVideoVisibility(caps, roles, tab!),
+      canEdit: canEditTabVideo(caps, roles, tab!),
+      canDelete: canDeleteTabVideo(caps, roles, tab!),
+      canReorder: canReorderTabVideos(caps, roles, tab!)
+    }))
+
   // Legacy per-section upload flags for 2.0.2 clients.
   const legacyUpload = (slug: string) => {
     const tab = tabBySlug.get(slug)
@@ -175,6 +202,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       canManage: canManageTabContent(caps, roles, t)
     })),
     videos,
+    documents,
     // Whether the NDA applies and when it is enforced. No bot call here: the app asks the `nda`
     // function whether this member has signed, so listing stays fast and the bot is not hit on
     // every page load.

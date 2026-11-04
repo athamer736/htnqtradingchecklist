@@ -34,22 +34,25 @@ export default function WatermarkOverlay({
     return () => window.clearInterval(id)
   }, [identity.discordId, identity.legalName, identity.username])
 
+  // Legal name and Discord username share one line, split by a bar.
+  const nameLine = [identity.legalName, identity.username ? `@${identity.username}` : null]
+    .filter(Boolean)
+    .join(' | ')
   const line = `Discord ID ${identity.discordId}`
   const sub = identity.sessionRef ? `ref ${identity.sessionRef}` : null
 
   return (
     <div
-      className="pointer-events-none absolute z-20 max-w-[85%] select-none px-2 transition-[left,top] duration-1000 ease-in-out"
+      className="pointer-events-none absolute z-20 max-w-[85%] select-none transition-[left,top] duration-1000 ease-in-out"
       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
       aria-hidden
     >
       {/* Scales with the player (container query units), so it stays legible in fullscreen and small on phones. */}
       <div
-        className="rounded bg-black/35 px-2 py-1 leading-snug text-white/80 shadow-sm backdrop-blur-[1px]"
-        style={{ fontSize: 'clamp(11px, 1.6cqw, 22px)', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+        className="rounded bg-black/35 px-[0.6em] py-[0.3em] leading-snug text-white/80 shadow-sm backdrop-blur-[1px]"
+        style={{ fontSize: 'clamp(8px, 1.5cqw, 22px)', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
       >
-        {identity.legalName && <div className="break-words font-semibold tracking-wide">{identity.legalName}</div>}
-        {identity.username && <div className="break-words font-medium tracking-wide">@{identity.username}</div>}
+        {nameLine && <div className="break-words font-semibold tracking-wide">{nameLine}</div>}
         <div className="break-words font-medium tracking-wide">{line}</div>
         {sub && <div className="mt-0.5 text-[0.8em] text-white/55">{sub}</div>}
       </div>

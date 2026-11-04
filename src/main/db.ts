@@ -5,6 +5,9 @@ import {
   DC_SCHEMA_VERSION,
   DEFAULT_SECTIONS,
   buildDefaults,
+  buildVisibleDefaults,
+  journalTemplateRows,
+  missingBuiltinRows,
   prepareImport,
   type DataColumn,
   type DataExport,
@@ -12,7 +15,8 @@ import {
   type DataSection,
   type DataSnapshot,
   type DataTag,
-  type ImportMode
+  type ImportMode,
+  type TradeExtra
 } from '../shared/dataCollection'
 import type { SyncAck, SyncMeta, SyncRow } from '../shared/sync'
 
@@ -37,6 +41,7 @@ export interface TradeRecord {
   session: string
   mmxm?: string
   notes: string
+  extra?: TradeExtra
   updatedAt?: string
   deletedAt?: string | null
 }
@@ -78,6 +83,8 @@ export function initDb(): void {
   ensureColumn('highsPoints', 'REAL')
   ensureColumn('lowsPoints', 'REAL')
   ensureColumn('mmxm', 'TEXT')
+  // v9: JSON blob of journal-template values + screenshots (see TradeExtra).
+  ensureColumn('extra', 'TEXT')
   ensureColumn('updatedAt', 'TEXT')
   ensureColumn('deletedAt', 'TEXT')
   ensureColumn('dirty', 'INTEGER NOT NULL DEFAULT 0')
@@ -221,7 +228,7 @@ function ensureBuiltinSections(): void {
   const existing = new Set(
     (db.prepare('SELECT id FROM dc_sections').all() as { id: string }[]).map((r) => r.id)
   )
-  const missing = DEFAULT_SECTIONS.filter((s) => !existing.has(s.id))
+  const { sections: missing, columns, tags } = missingBuiltinRows(existing)
   if (missing.length === 0) return
 
   const insSection = db.prepare(
@@ -234,15 +241,10 @@ function ensureBuiltinSections(): void {
     'INSERT INTO dc_tags (id, columnId, label, color, ord, updatedAt, deletedAt, dirty) VALUES (@id, @columnId, @label, @color, @ord, @updatedAt, NULL, 0)'
   )
   const seedTime = '2024-01-01T00:00:00.000Z'
-  const { columns, tags } = buildDefaults()
-  const missingIds = new Set(missing.map((s) => s.id))
   const tx = db.transaction(() => {
     for (const s of missing) insSection.run({ ...s, builtin: s.builtin ? 1 : 0, updatedAt: seedTime })
-    for (const c of columns) if (missingIds.has(c.sectionId)) insColumn.run({ ...c, updatedAt: seedTime })
-    for (const t of tags) {
-      const col = columns.find((c) => c.id === t.columnId)
-      if (col && missingIds.has(col.sectionId)) insTag.run({ ...t, updatedAt: seedTime })
-    }
+    for (const c of columns) insColumn.run({ ...c, updatedAt: seedTime })
+    for (const t of tags) insTag.run({ ...t, updatedAt: seedTime })
   })
   tx()
 }
@@ -461,6 +463,9 @@ export function deleteEntry(id: string): DataSnapshot {
 // Wipes all data-collection data and restores the default sections/columns/tags.
 // Uses tombstones (not hard deletes) so the reset propagates to other devices.
 export function resetData(): DataSnapshot {
+  // The hidden journal template (FVG/SSMT/TPD lists, custom properties) is not
+  // part of Data Collection, so a reset carries it over untouched.
+  const journal = journalTemplateRows(listData())
   const tx = db.transaction(() => {
     const ts = nowIso()
     for (const table of ['dc_entries', 'dc_tags', 'dc_columns', 'dc_sections']) {
@@ -468,7 +473,10 @@ export function resetData(): DataSnapshot {
         `UPDATE ${table} SET deletedAt = ?, updatedAt = ?, dirty = 1 WHERE deletedAt IS NULL`
       ).run(ts, ts)
     }
-    const { sections, columns, tags } = buildDefaults()
+    const defaults = buildVisibleDefaults()
+    const sections = [...defaults.sections, ...journal.sections]
+    const columns = [...defaults.columns, ...journal.columns]
+    const tags = [...defaults.tags, ...journal.tags]
     const upSection = db.prepare(
       `INSERT INTO dc_sections (id, name, ord, builtin, createdAt, updatedAt, deletedAt, dirty)
        VALUES (@id, @name, @ord, @builtin, @createdAt, @updatedAt, NULL, 1)
@@ -565,12 +573,36 @@ function ensureColumn(name: string, type: string): void {
   }
 }
 
+// Parses the stored `extra` JSON; tolerates NULL/garbage from older rows.
+function parseExtra(raw: unknown): TradeExtra | undefined {
+  if (typeof raw !== 'string' || raw === '') return undefined
+  try {
+    const v = JSON.parse(raw) as Partial<TradeExtra> | null
+    if (!v || typeof v !== 'object') return undefined
+    return {
+      values: v.values && typeof v.values === 'object' ? v.values : {},
+      columnImages: v.columnImages && typeof v.columnImages === 'object' ? v.columnImages : {},
+      images: Array.isArray(v.images) ? v.images : []
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function rowToTrade(r: Record<string, unknown>): TradeRecord {
+  const { extra, dirty: _dirty, ...rest } = r
+  const parsed = parseExtra(extra)
+  return (parsed ? { ...rest, extra: parsed } : rest) as unknown as TradeRecord
+}
+
 export function listTrades(): TradeRecord[] {
-  return db
-    .prepare(
-      'SELECT * FROM trades WHERE deletedAt IS NULL ORDER BY tradedAt DESC, createdAt DESC'
-    )
-    .all() as TradeRecord[]
+  return (
+    db
+      .prepare(
+        'SELECT * FROM trades WHERE deletedAt IS NULL ORDER BY tradedAt DESC, createdAt DESC'
+      )
+      .all() as Record<string, unknown>[]
+  ).map(rowToTrade)
 }
 
 export function saveTrade(t: TradeRecord): TradeRecord[] {
@@ -578,11 +610,11 @@ export function saveTrade(t: TradeRecord): TradeRecord[] {
     `INSERT INTO trades (
       id, createdAt, startSetup, entryTimeframe, direction, contract, contracts,
       entryPrice, tpPoints, slPoints, dollarRisk, dollarTp, highsPoints, lowsPoints,
-      tradedAt, result, rMultiple, session, mmxm, notes, updatedAt, deletedAt, dirty
+      tradedAt, result, rMultiple, session, mmxm, notes, extra, updatedAt, deletedAt, dirty
     ) VALUES (
       @id, @createdAt, @startSetup, @entryTimeframe, @direction, @contract, @contracts,
       @entryPrice, @tpPoints, @slPoints, @dollarRisk, @dollarTp, @highsPoints, @lowsPoints,
-      @tradedAt, @result, @rMultiple, @session, @mmxm, @notes, @updatedAt, NULL, 1
+      @tradedAt, @result, @rMultiple, @session, @mmxm, @notes, @extra, @updatedAt, NULL, 1
     )
     ON CONFLICT(id) DO UPDATE SET
       startSetup=excluded.startSetup,
@@ -603,10 +635,16 @@ export function saveTrade(t: TradeRecord): TradeRecord[] {
       session=excluded.session,
       mmxm=excluded.mmxm,
       notes=excluded.notes,
+      extra=excluded.extra,
       updatedAt=excluded.updatedAt,
       deletedAt=NULL,
       dirty=1`
-  ).run({ ...t, mmxm: t.mmxm ?? null, updatedAt: t.updatedAt ?? nowIso() })
+  ).run({
+    ...t,
+    mmxm: t.mmxm ?? null,
+    extra: t.extra ? JSON.stringify(t.extra) : null,
+    updatedAt: t.updatedAt ?? nowIso()
+  })
   return listTrades()
 }
 
@@ -689,8 +727,11 @@ export function wipeAllForNewOwner(): void {
 }
 
 function tradeRowToData(r: Record<string, unknown>): Record<string, unknown> {
-  const { dirty: _dirty, ...rest } = r
-  return rest
+  // Sync the parsed extras object (not the raw JSON string) so screenshots inside
+  // it can be found and uploaded by the sync engine.
+  const { dirty: _dirty, extra, ...rest } = r
+  const parsed = parseExtra(extra)
+  return parsed ? { ...rest, extra: parsed } : rest
 }
 
 // Collects all locally-changed rows awaiting push.
@@ -803,11 +844,11 @@ function applyRemoteRow(r: SyncRow): void {
         `INSERT INTO trades (
           id, createdAt, startSetup, entryTimeframe, direction, contract, contracts,
           entryPrice, tpPoints, slPoints, dollarRisk, dollarTp, highsPoints, lowsPoints,
-          tradedAt, result, rMultiple, session, mmxm, notes, updatedAt, deletedAt, dirty
+          tradedAt, result, rMultiple, session, mmxm, notes, extra, updatedAt, deletedAt, dirty
         ) VALUES (
           @id, @createdAt, @startSetup, @entryTimeframe, @direction, @contract, @contracts,
           @entryPrice, @tpPoints, @slPoints, @dollarRisk, @dollarTp, @highsPoints, @lowsPoints,
-          @tradedAt, @result, @rMultiple, @session, @mmxm, @notes, @updatedAt, @deletedAt, 0
+          @tradedAt, @result, @rMultiple, @session, @mmxm, @notes, @extra, @updatedAt, @deletedAt, 0
         )
         ON CONFLICT(id) DO UPDATE SET
           startSetup=excluded.startSetup, entryTimeframe=excluded.entryTimeframe,
@@ -816,7 +857,7 @@ function applyRemoteRow(r: SyncRow): void {
           dollarRisk=excluded.dollarRisk, dollarTp=excluded.dollarTp, highsPoints=excluded.highsPoints,
           lowsPoints=excluded.lowsPoints, tradedAt=excluded.tradedAt, result=excluded.result,
           rMultiple=excluded.rMultiple, session=excluded.session, mmxm=excluded.mmxm, notes=excluded.notes,
-          updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt, dirty=0`
+          extra=excluded.extra, updatedAt=excluded.updatedAt, deletedAt=excluded.deletedAt, dirty=0`
       ).run({
         id: r.id,
         createdAt: (d.createdAt as string) ?? nowIso(),
@@ -838,6 +879,7 @@ function applyRemoteRow(r: SyncRow): void {
         session: d.session ?? null,
         mmxm: d.mmxm ?? null,
         notes: d.notes ?? null,
+        extra: d.extra && typeof d.extra === 'object' ? JSON.stringify(d.extra) : null,
         updatedAt: r.updatedAt,
         deletedAt
       })

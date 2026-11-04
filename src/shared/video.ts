@@ -166,12 +166,35 @@ export interface MentorshipCapabilities {
   }
 }
 
+export type DocumentStatus = 'uploading' | 'ready' | 'failed'
+
+/** A watermarked PDF in a tab. It is viewed in the app only; the original file is never sent. */
+export interface ContentDocument extends ItemPermissions {
+  id: string
+  tabId: string
+  title: string
+  description: string | null
+  sizeBytes: number | null
+  pageCount: number | null
+  visibility: Visibility
+  /** Still uploading, checked and ready to open, or failed (the upload was unusable). */
+  status: DocumentStatus
+  createdAt: string
+  sortOrd: number
+  canReorder: boolean
+}
+
+/** Largest PDF accepted (the server enforces the same limit). */
+export const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024
+
 export interface ListContentResponse {
   ok: true
   capabilities: MentorshipCapabilities
   /** The tabs the caller may open, in display order. */
   tabs: MentorshipTab[]
   videos: ContentVideo[]
+  /** PDFs in the same tabs. Absent from an older server. */
+  documents?: ContentDocument[]
 }
 
 export interface StudentSummary {
@@ -270,6 +293,11 @@ export type PlaybackDenyReason =
   | 'upstream_failed'
   | 'tab_not_found'
   | 'tab_not_empty'
+  | 'document_not_found'
+  | 'document_not_ready'
+  | 'document_unavailable'
+  | 'document_too_large'
+  | 'rate_limited'
   /** The member has not signed the NDA and the owner's deadline has passed. */
   | 'nda_required'
   /** Client-side: the open player couldn't re-confirm access before it lapsed. */
@@ -341,7 +369,7 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   roles_unavailable:
     'We could not confirm your Discord roles right now. Try again shortly, or contact staff if this persists.',
   level_insufficient:
-    'Your Discord roles do not include access to this video. Contact staff if you believe this is wrong.',
+    'Your Discord roles do not include access to this content. Contact staff if you believe this is wrong.',
   onboarding_incomplete:
     'Your mentorship onboarding is incomplete. Finish joining in Discord (documents and payment) before watching videos.',
   membership_inactive:
@@ -360,7 +388,13 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   forbidden: 'Your Discord roles do not allow this action.',
   upstream_failed: 'The video service could not complete that request. Try again shortly.',
   tab_not_found: 'That tab no longer exists.',
-  tab_not_empty: 'Delete every video in this tab before deleting it.',
+  tab_not_empty: 'Delete or move every video, and delete every document, in this tab before deleting it.',
+  document_not_found: 'That document is not available.',
+  document_not_ready: 'This document is still being uploaded. Try again in a minute.',
+  document_unavailable:
+    'This document could not be prepared for viewing. Contact staff so they can upload it again.',
+  document_too_large: 'PDFs can be up to 25 MB.',
+  rate_limited: 'Too many requests. Wait a moment and try again.',
   nda_required: 'Sign the mentorship NDA to keep watching. Open any Mentorship page and choose Read and sign the NDA.',
   access_expired:
     'We could not re-confirm your access in time, so playback stopped. This is usually temporary: press play to try again.'

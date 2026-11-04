@@ -11,6 +11,7 @@ import { supabase, SYNC_TABLE, SCREENSHOTS_BUCKET, isDesktop } from '../lib/supa
 import type { SyncAck, SyncRow } from '../../../shared/sync'
 import type { DataImage } from '../../../shared/dataCollection'
 import { sanitizeStorageSegment, validateImageDataUrl } from '../../../shared/security'
+import { kindHasImages, rowImages } from '../../../shared/syncImages'
 import { useSync } from '../store/useSync'
 import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
@@ -28,6 +29,10 @@ const CLOUD_PREF_KEY = 'htnq-cloud-sync'
 const POINTS_KEY = 'htnq-points'
 const POINTS_SYNC_KEY = 'htnq-points-sync'
 const POINTS_STATE_ID = 'points-board'
+// Landscape/Vertical choice + table column layout, also one app_state row.
+const VIEW_PREFS_KEY = 'htnq-view-prefs'
+const VIEW_PREFS_SYNC_KEY = 'htnq-view-prefs-sync'
+const VIEW_PREFS_STATE_ID = 'view-prefs'
 // Sync on a slow, fixed cadence to keep server load minimal. Local edits are
 // captured as "dirty" rows immediately and pushed on the next cycle.
 const POLL_MS = 5 * 60 * 1000
@@ -104,14 +109,10 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   })
 }
 
-// Returns every image (general + per-column) referenced by an entry's data.
-function entryImages(data: Record<string, unknown>): DataImage[] {
-  const out: DataImage[] = []
-  const general = data.images as DataImage[] | undefined
-  if (Array.isArray(general)) out.push(...general)
-  const perCol = data.columnImages as Record<string, DataImage[]> | undefined
-  if (perCol) for (const arr of Object.values(perCol)) if (Array.isArray(arr)) out.push(...arr)
-  return out
+// Returns every image (general + per-column) referenced by a row's data. Works
+// for Data Collection entries and for trades (whose screenshots live in `extra`).
+function entryImages(data: Record<string, unknown>, kind: string = 'entry'): DataImage[] {
+  return rowImages(kind, data)
 }
 
 // --- app_state (Points board) ------------------------------------------------
@@ -140,8 +141,54 @@ export function markPointsDirty(): void {
   writePointsMeta({ updatedAt: new Date().toISOString(), dirty: true })
 }
 
+// View preferences share the PointsMeta shape (updatedAt + dirty).
+function readViewPrefsMeta(): PointsMeta {
+  try {
+    const r = JSON.parse(localStorage.getItem(VIEW_PREFS_SYNC_KEY) ?? '') as PointsMeta
+    if (r && typeof r.updatedAt === 'string') return { updatedAt: r.updatedAt, dirty: !!r.dirty }
+  } catch {
+    /* none yet */
+  }
+  return { updatedAt: '', dirty: false }
+}
+
+function writeViewPrefsMeta(m: PointsMeta): void {
+  localStorage.setItem(VIEW_PREFS_SYNC_KEY, JSON.stringify(m))
+}
+
+// Called by the view-preferences store when a layout changes.
+export function markViewPrefsDirty(): void {
+  writeViewPrefsMeta({ updatedAt: new Date().toISOString(), dirty: true })
+}
+
+async function pushViewPrefs(uid: string): Promise<void> {
+  if (!supabase) return
+  const meta = readViewPrefsMeta()
+  if (!meta.dirty) return
+  const prefs = localStorage.getItem(VIEW_PREFS_KEY) ?? '{}'
+  const { error } = await supabase.from(SYNC_TABLE).upsert(
+    [
+      {
+        user_id: uid,
+        kind: 'app_state',
+        id: VIEW_PREFS_STATE_ID,
+        data: { prefs },
+        updated_at: meta.updatedAt || SYNC_EPOCH,
+        deleted_at: null
+      }
+    ],
+    { onConflict: 'user_id,kind,id' }
+  )
+  if (error) {
+    logError('push view prefs failed:', error)
+    throw error
+  }
+  writeViewPrefsMeta({ updatedAt: meta.updatedAt, dirty: false })
+}
+
 async function pushAppState(uid: string): Promise<void> {
   if (!supabase) return
+  await pushViewPrefs(uid)
   const meta = readPointsMeta()
   if (!meta.dirty) return
   const board = localStorage.getItem(POINTS_KEY) ?? ''
@@ -167,6 +214,17 @@ async function pushAppState(uid: string): Promise<void> {
 
 // Applies an incoming Points board (last-write-wins) and notifies a mounted view.
 function applyAppState(id: string, data: unknown, updatedAt: string): void {
+  if (id === VIEW_PREFS_STATE_ID) {
+    const local = readViewPrefsMeta()
+    if (local.updatedAt && local.updatedAt >= updatedAt) return
+    const prefs = (data as { prefs?: string } | null)?.prefs
+    if (typeof prefs === 'string' && prefs) {
+      localStorage.setItem(VIEW_PREFS_KEY, prefs)
+      writeViewPrefsMeta({ updatedAt, dirty: false })
+      window.dispatchEvent(new Event('htnq-viewprefs-remote'))
+    }
+    return
+  }
   if (id !== POINTS_STATE_ID) return
   const local = readPointsMeta()
   if (local.updatedAt && local.updatedAt >= updatedAt) return
@@ -184,9 +242,9 @@ function applyAppState(id: string, data: unknown, updatedAt: string): void {
 // the payload, replacing it with a deterministic storage path.
 async function prepareEntryForPush(row: SyncRow): Promise<SyncRow> {
   const uid = userId
-  if (row.kind !== 'entry' || !uid || !supabase) return row
+  if (!kindHasImages(row.kind) || !uid || !supabase) return row
   const data = JSON.parse(JSON.stringify(row.data)) as Record<string, unknown>
-  const images = entryImages(data)
+  const images = entryImages(data, row.kind)
   // Dedupe repeated ids within this single push only. We deliberately do NOT
   // gate uploads on the persisted `uploaded` set: it's an optimization, not a
   // correctness record. The bytes live locally, so we upsert them (idempotent)
@@ -241,11 +299,16 @@ async function backfillImages(uid: string): Promise<void> {
   if (localStorage.getItem(IMAGES_BACKFILLED_KEY) === '1') return
   try {
     const snap = await window.htnq.data.list()
+    const trades = await window.htnq.trades.list()
     let uploaded = 0
     let failed = 0
     const done: string[] = []
-    for (const e of snap.entries) {
-      for (const img of entryImages(e as unknown as Record<string, unknown>)) {
+    const sources: { kind: string; data: Record<string, unknown> }[] = [
+      ...snap.entries.map((e) => ({ kind: 'entry', data: e as unknown as Record<string, unknown> })),
+      ...trades.map((t) => ({ kind: 'trade', data: t as unknown as Record<string, unknown> }))
+    ]
+    for (const src of sources) {
+      for (const img of entryImages(src.data, src.kind)) {
         if (!img.dataUrl) continue
         const path = storagePathFor(uid, img.id)
         if (!path) continue
@@ -322,6 +385,11 @@ async function localImageCache(): Promise<Map<string, string>> {
       if (img.dataUrl) cache.set(img.id, img.dataUrl)
     }
   }
+  for (const t of await window.htnq.trades.list()) {
+    for (const img of entryImages(t as unknown as Record<string, unknown>, 'trade')) {
+      if (img.dataUrl) cache.set(img.id, img.dataUrl)
+    }
+  }
   return cache
 }
 
@@ -346,7 +414,7 @@ async function downloadImage(path: string): Promise<string> {
 // Fills in base64 for an incoming entry's images from the local cache or Storage.
 async function hydrateEntry(row: ServerRow, cache: Map<string, string>): Promise<SyncRow> {
   const data = (row.data ?? {}) as Record<string, unknown>
-  const images = entryImages(data)
+  const images = entryImages(data, row.kind)
   const uid = userId
   for (const img of images) {
     if (img.dataUrl) continue
@@ -393,7 +461,7 @@ async function pull(): Promise<void> {
     const rows: SyncRow[] = []
     for (const r of serverRows) {
       if (r.kind === 'app_state') applyAppState(r.id, r.data, r.updated_at)
-      else if (r.kind === 'entry') rows.push(await hydrateEntry(r, cache))
+      else if (kindHasImages(r.kind)) rows.push(await hydrateEntry(r, cache))
       else rows.push({ kind: r.kind, id: r.id, data: r.data, updatedAt: r.updated_at, deletedAt: r.deleted_at })
     }
     await window.htnq.sync.applyRemote(rows)
