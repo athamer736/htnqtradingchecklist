@@ -124,12 +124,15 @@ ipcMain.handle('data:exportFile', async (e, bytes: Uint8Array, defaultName: stri
   return { saved: true }
 })
 
-ipcMain.handle('data:importFile', async (e) => {
+ipcMain.handle('data:importFile', async (e, kind?: string) => {
   const win = BrowserWindow.fromWebContents(e.sender)
   const opts = {
-    title: 'Import Data Collection',
+    title: kind === 'journal' ? 'Import trade journal' : 'Import Data Collection',
     properties: ['openFile' as const],
-    filters: [{ name: 'HTNQ export', extensions: ['zip', 'json'] }]
+    filters:
+      kind === 'journal'
+        ? [{ name: 'Trade journal (zip, json or csv)', extensions: ['zip', 'json', 'csv'] }]
+        : [{ name: 'HTNQ export', extensions: ['zip', 'json'] }]
   }
   const { canceled, filePaths } = win
     ? await dialog.showOpenDialog(win, opts)

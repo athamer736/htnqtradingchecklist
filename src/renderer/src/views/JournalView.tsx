@@ -22,6 +22,7 @@ import ImageUploader from '../components/data/ImageUploader'
 import FvgPicker from '../journal/FvgPicker'
 import SetupBlock, { ShotThumbs } from '../journal/SetupBlock'
 import JournalExportDialog from '../journal/JournalExportDialog'
+import JournalImportDialog from '../journal/JournalImportDialog'
 import { useJournalTemplate } from '../journal/useJournalTemplate'
 import { buildJournalColumns } from '../journal/journalColumns'
 import {
@@ -222,6 +223,7 @@ export default function JournalView(): JSX.Element {
   const confirm = useConfirm()
   const [showTemplate, setShowTemplate] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   // The customisable template (FVG / SSMT / TPD lists, setup screenshots and any
   // properties the user added) and the Landscape / Vertical layout choice.
@@ -345,6 +347,13 @@ export default function JournalView(): JSX.Element {
             <ViewToggle mode={viewConfig.mode} onChange={(mode) => setViewConfig({ ...viewConfig, mode })} />
             <button className="btn-ghost text-xs" onClick={() => setShowTemplate(true)} title="Customise FVG, SSMT, TPD and your own properties">
               Customise template
+            </button>
+            <button
+              className="btn-ghost text-xs"
+              onClick={() => setImportOpen(true)}
+              title="Bring in trades from an export, JSON or CSV file"
+            >
+              Import
             </button>
             <button className="btn-ghost text-xs" onClick={() => setExportOpen(true)} disabled={trades.length === 0}>
               Export
@@ -898,6 +907,17 @@ export default function JournalView(): JSX.Element {
           tags={template.tags}
           templateColumns={template.columns}
           onClose={() => setExportOpen(false)}
+        />
+      )}
+
+      {importOpen && (
+        <JournalImportDialog
+          trades={trades}
+          tags={template.tags}
+          templateColumns={template.columns}
+          saveTag={template.saveTag}
+          saveTrade={save}
+          onClose={() => setImportOpen(false)}
         />
       )}
     </div>

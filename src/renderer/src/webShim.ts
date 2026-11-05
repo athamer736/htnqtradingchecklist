@@ -317,11 +317,12 @@ type ImportFileResult =
 
 // Opens a file picker and resolves with the chosen file's raw bytes. Parsing and
 // validation happen in the renderer (dcZip.unpackImport).
-function pickImportFile(): Promise<ImportFileResult> {
+function pickImportFile(kind?: string): Promise<ImportFileResult> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.zip,.json,application/zip,application/json'
+    input.accept =
+      kind === 'journal' ? '.zip,.json,.csv,application/zip,application/json,text/csv' : '.zip,.json,application/zip,application/json'
     let settled = false
     const done = (value: ImportFileResult): void => {
       if (settled) return
@@ -456,7 +457,7 @@ if (!window.htnq) {
         downloadBytes(bytes, defaultName)
         return { saved: true }
       },
-      importFile: async () => pickImportFile(),
+      importFile: async (kind?: 'journal') => pickImportFile(kind),
       importData: async (payload: DataExport, mode: ImportMode) => {
         const db = await getDb()
         const existing = await snapshot(db)

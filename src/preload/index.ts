@@ -27,7 +27,7 @@ const api = {
       ipcRenderer.invoke('data:importData', payload, mode),
     exportFile: (bytes: Uint8Array, defaultName: string) =>
       ipcRenderer.invoke('data:exportFile', bytes, defaultName),
-    importFile: () => ipcRenderer.invoke('data:importFile')
+    importFile: (kind?: string) => ipcRenderer.invoke('data:importFile', kind)
   },
   sync: {
     getMeta: () => ipcRenderer.invoke('sync:getMeta'),

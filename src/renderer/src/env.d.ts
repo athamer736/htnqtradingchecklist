@@ -45,7 +45,7 @@ interface HtnqApi {
     reset: () => Promise<DataSnapshot>
     importData: (payload: DataExport, mode: ImportMode) => Promise<DataSnapshot>
     exportFile: (bytes: Uint8Array, defaultName: string) => Promise<{ saved: boolean }>
-    importFile: () => Promise<ImportFileResult>
+    importFile: (kind?: 'journal') => Promise<ImportFileResult>
   }
   sync: {
     getMeta: () => Promise<SyncMeta>
