@@ -582,7 +582,8 @@ function parseExtra(raw: unknown): TradeExtra | undefined {
     return {
       values: v.values && typeof v.values === 'object' ? v.values : {},
       columnImages: v.columnImages && typeof v.columnImages === 'object' ? v.columnImages : {},
-      images: Array.isArray(v.images) ? v.images : []
+      images: Array.isArray(v.images) ? v.images : [],
+      ...(Array.isArray(v.chain) && v.chain.length > 0 ? { chain: v.chain } : {})
     }
   } catch {
     return undefined

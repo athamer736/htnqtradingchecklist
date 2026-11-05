@@ -100,10 +100,26 @@ export interface DataEntry extends SyncFields {
 // journal's custom columns (SSMT, TPD, setup screenshots, user-added properties).
 // Same shape as the matching DataEntry fields so the shared field editors,
 // image uploader and screenshot sync work on both.
+// One arrow-linked step of a trade's setup chain. SSMT / TPD / secondary FVG steps
+// point at a tag (`id`); the primary FVG, MMXM and entry RL steps follow the
+// trade's own fields (`label`).
+export type SetupStepKind = 'ssmt' | 'tpd' | 'fvg' | 'mmxm' | 'rl'
+
+export interface SetupStep {
+  kind: SetupStepKind
+  id?: string
+  label?: string
+  // The trade's starting FVG (its `startSetup`); there is at most one.
+  primary?: boolean
+}
+
 export interface TradeExtra {
   values: Record<string, DataValue>
   columnImages: Record<string, DataImage[]>
   images: DataImage[]
+  // The order the user arranged the setup chain in. Absent when it is the
+  // default order (SSMT, MMXM, FVG, TPD, entry RL).
+  chain?: SetupStep[]
 }
 
 export function emptyTradeExtra(): TradeExtra {

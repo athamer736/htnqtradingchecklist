@@ -9,6 +9,8 @@ interface TagPickerProps {
   multiple: boolean
   onChange: (value: string | string[] | null) => void
   onCreateTag: (columnId: string, label: string, color: string) => Promise<string>
+  /** Tag ids that stay out of the list (for example the starting FVG). */
+  exclude?: string[]
 }
 
 export default function TagPicker({
@@ -17,17 +19,18 @@ export default function TagPicker({
   value,
   multiple,
   onChange,
-  onCreateTag
+  onCreateTag,
+  exclude
 }: TagPickerProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [newColor, setNewColor] = useState(TAG_COLORS[0])
   const ref = useRef<HTMLDivElement>(null)
 
-  const columnTags = useMemo(
-    () => tags.filter((t) => t.columnId === columnId).sort((a, b) => a.ord - b.ord),
-    [tags, columnId]
-  )
+  const columnTags = useMemo(() => {
+    const skip = new Set(exclude ?? [])
+    return tags.filter((t) => t.columnId === columnId && !skip.has(t.id)).sort((a, b) => a.ord - b.ord)
+  }, [tags, columnId, exclude])
   const tagById = useMemo(() => new Map(columnTags.map((t) => [t.id, t])), [columnTags])
 
   const selectedIds = multiple

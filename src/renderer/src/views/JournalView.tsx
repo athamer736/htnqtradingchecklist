@@ -6,6 +6,7 @@ import { verdict } from '../strategy/points'
 import { uid } from '../util/id'
 import type { TradeRecord } from '../types'
 import {
+  JOURNAL_COL_FVG,
   JOURNAL_COL_SHOTS,
   JOURNAL_COL_SSMT,
   JOURNAL_COL_TPD,
@@ -15,11 +16,13 @@ import {
 import { viewKeyForJournal } from '../../../shared/viewConfig'
 import { useViewConfig } from '../store/useViewPrefs'
 import EntryTable from '../components/data/EntryTable'
+import TagPicker from '../components/data/TagPicker'
 import ColumnField from '../components/data/ColumnField'
 import ColumnManager from '../components/data/ColumnManager'
 import ViewToggle from '../components/data/ViewToggle'
 import ImageUploader from '../components/data/ImageUploader'
 import FvgPicker from '../journal/FvgPicker'
+import SetupChainBuilder from '../journal/SetupChainBuilder'
 import SetupBlock, { ShotThumbs } from '../journal/SetupBlock'
 import JournalExportDialog from '../journal/JournalExportDialog'
 import JournalImportDialog from '../journal/JournalImportDialog'
@@ -31,8 +34,12 @@ import {
   customValueText,
   extraOf,
   fvgOptions,
+  secondaryFvgIds,
+  withChain,
   withExtraImages,
-  withExtraValue
+  withExtraValue,
+  withSecondaryFvgs,
+  withStoredChain
 } from '../journal/journalModel'
 
 const RESULTS: TradeRecord['result'][] = ['win', 'loss', 'be']
@@ -331,7 +338,7 @@ export default function JournalView(): JSX.Element {
 
   const submit = async (): Promise<void> => {
     if (!draft || errors.length > 0) return
-    await save(draft)
+    await save(withStoredChain(draft))
     closeDraft()
   }
 
@@ -583,6 +590,20 @@ export default function JournalView(): JSX.Element {
               />
             </div>
 
+            <div>
+              <label className="label">Secondary FVGs (optional)</label>
+              <TagPicker
+                columnId={JOURNAL_COL_FVG}
+                tags={template.tags}
+                multiple
+                exclude={template.tags.filter((t) => t.columnId === JOURNAL_COL_FVG && t.label === draft.startSetup).map((t) => t.id)}
+                value={secondaryFvgIds(draft)}
+                onChange={(v) => setDraft((d) => (d ? withSecondaryFvgs(d, Array.isArray(v) ? v : []) : d))}
+                onCreateTag={template.createTag}
+              />
+              <p className="mt-1 text-[11px] text-muted">Extra FVGs the setup passed through. Drag them in the setup chain below to point the arrows where you want.</p>
+            </div>
+
             {[ssmtColumn, tpdColumn].map(
               (col) =>
                 col && (
@@ -641,6 +662,12 @@ export default function JournalView(): JSX.Element {
                 </select>
               </div>
             </div>
+
+            <SetupChainBuilder
+              trade={draft}
+              tags={template.tags}
+              onChange={(steps) => setDraft((d) => (d ? withChain(d, steps) : d))}
+            />
 
             <div>
               <label className="label">Entry price</label>

@@ -15,6 +15,8 @@ import {
   type DataSection,
   type DataTag,
   type DataValue,
+  type SetupStep,
+  type SetupStepKind,
   type TradeExtra,
   TAG_COLORS
 } from './dataCollection'
@@ -421,7 +423,36 @@ export function sanitizeTradeExtra(value: unknown): TradeExtra | undefined {
       if (imgs.length) columnImages[id] = imgs
     }
   }
-  return { values: sanitizeValues(v.values), columnImages, images: keep(v.images) }
+  const chain = sanitizeSetupChain(v.chain)
+  return {
+    values: sanitizeValues(v.values),
+    columnImages,
+    images: keep(v.images),
+    ...(chain ? { chain } : {})
+  }
+}
+
+export const MAX_CHAIN_STEPS = 30
+const CHAIN_KINDS: readonly SetupStepKind[] = ['ssmt', 'tpd', 'fvg', 'mmxm', 'rl']
+
+// Keeps only well-formed setup steps (known kind, short text, bounded count).
+export function sanitizeSetupChain(value: unknown): SetupStep[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const out: SetupStep[] = []
+  for (const item of value) {
+    if (out.length >= MAX_CHAIN_STEPS) break
+    if (!item || typeof item !== 'object') continue
+    const s = item as Partial<SetupStep>
+    if (!s.kind || !CHAIN_KINDS.includes(s.kind)) continue
+    const step: SetupStep = { kind: s.kind }
+    const id = sanitizeId(s.id)
+    if (id) step.id = id
+    const label = sanitizeName(s.label)
+    if (label) step.label = label
+    if (s.primary === true && s.kind === 'fvg') step.primary = true
+    out.push(step)
+  }
+  return out.length > 0 ? out : undefined
 }
 
 function mapCapped<T>(arr: unknown, cap: number, fn: (item: unknown) => T | null): T[] {
