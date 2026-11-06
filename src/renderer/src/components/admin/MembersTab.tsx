@@ -191,20 +191,24 @@ export default function MembersTab(): JSX.Element {
     void loadMembers()
   }, [loadMembers])
 
+  // A member who signed the NDA has their name from it, so they are not missing one.
+  const lacksName = (m: (typeof members)[number]): boolean =>
+    m.hasStoredName === false && !(!m.isStaff && ndaStates[m.discordId] === 'signed')
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     return members.filter((m) => {
       if (filter === 'staff' && !m.isStaff) return false
       if (filter === 'students' && !(m.isStudent && !m.isStaff)) return false
       if (filter === 'attention' && !m.levelWithoutStudent) return false
-      if (filter === 'unnamed' && m.hasStoredName !== false) return false
+      if (filter === 'unnamed' && !lacksName(m)) return false
       if (!q) return true
       return [m.displayName, m.username, m.discordId].some((v) => v.toLowerCase().includes(q))
     })
-  }, [members, query, filter])
+  }, [members, query, filter, ndaStates])
 
   const attention = members.filter((m) => m.levelWithoutStudent).length
-  const unnamed = members.filter((m) => m.hasStoredName === false).length
+  const unnamed = members.filter(lacksName).length
   const filters: { id: Filter; label: string }[] = [
     { id: 'all', label: `All (${members.length})` },
     { id: 'staff', label: 'Staff' },
@@ -285,7 +289,10 @@ export default function MembersTab(): JSX.Element {
                     {m.hasStoredName === true && (
                       <span className="chip bg-emerald-400/10 text-emerald-200">Name on file</span>
                     )}
-                    {m.hasStoredName === false && <span className="chip bg-bg-soft text-muted">No name added</span>}
+                    {m.hasStoredName !== true && !m.isStaff && ndaStates[m.discordId] === 'signed' && (
+                      <span className="chip bg-emerald-400/10 text-emerald-200">Name from NDA</span>
+                    )}
+                    {lacksName(m) && <span className="chip bg-bg-soft text-muted">No name added</span>}
                     {!m.isStaff && ndaStates[m.discordId] === 'signed' && (
                       <span className="chip bg-emerald-400/10 text-emerald-200">NDA signed</span>
                     )}
