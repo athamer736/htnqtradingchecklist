@@ -435,8 +435,9 @@ export function sanitizeTradeExtra(value: unknown): TradeExtra | undefined {
   }
 }
 
-export const MAX_CHAIN_STEPS = 30
-const CHAIN_KINDS: readonly SetupStepKind[] = ['ssmt', 'tpd', 'fvg', 'mmxm', 'rl']
+// Effectively unlimited for a person; the cap only guards against abuse.
+export const MAX_CHAIN_STEPS = 500
+const CHAIN_KINDS: readonly SetupStepKind[] = ['ssmt', 'tpd', 'fvg', 'mmxm', 'rl', 'custom']
 
 // Keeps only well-formed setup steps (known kind, short text, bounded count).
 export function sanitizeSetupChain(value: unknown): SetupStep[] | undefined {
@@ -453,6 +454,10 @@ export function sanitizeSetupChain(value: unknown): SetupStep[] | undefined {
     const label = sanitizeName(s.label)
     if (label) step.label = label
     if (s.primary === true && s.kind === 'fvg') step.primary = true
+    if (s.custom === true || s.kind === 'custom') {
+      if (!step.label) continue
+      step.custom = true
+    }
     out.push(step)
   }
   return out.length > 0 ? out : undefined

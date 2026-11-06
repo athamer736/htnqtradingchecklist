@@ -155,10 +155,30 @@ describe('chain data is validated', () => {
   })
 
   it('caps the length and omits an empty or invalid chain', () => {
-    const many = Array.from({ length: 200 }, (_, i) => ({ kind: 'fvg', id: `t${i}` }))
-    assert.equal(sanitizeTradeExtra({ ...baseExtra, chain: many })!.chain!.length, 30)
+    const many = Array.from({ length: 600 }, (_, i) => ({ kind: 'fvg', id: `t${i}` }))
+    assert.equal(sanitizeTradeExtra({ ...baseExtra, chain: many })!.chain!.length, 500)
     assert.equal(sanitizeTradeExtra({ ...baseExtra, chain: [] })!.chain, undefined)
     assert.equal(sanitizeTradeExtra({ ...baseExtra, chain: 'x' })!.chain, undefined)
     assert.equal('chain' in sanitizeTradeExtra({ ...baseExtra })!, false)
+  })
+})
+
+describe('hand-added chain steps', () => {
+  it('keeps free-text steps of any kind, in any order, with no limit', () => {
+    const many: SetupStep[] = Array.from({ length: 80 }, (_, i) => ({ kind: 'custom', label: `Step ${i}`, custom: true }))
+    const t = withChain(trade(), [{ kind: 'rl', label: 'M1' }, ...many, { kind: 'ssmt', label: 'H4 SSMT', custom: true }])
+    const eff = effectiveChain(t)
+    assert.equal(eff[0].kind, 'rl')
+    assert.equal(eff.filter((s) => s.custom).length, 81)
+    assert.equal(eff.find((s) => s.kind === 'ssmt' && s.custom)?.label, 'H4 SSMT')
+    assert.ok(setupChain(t, tags).includes('Step 79'))
+  })
+
+  it('survives saving and sanitising', () => {
+    const t = withChain(trade(), [{ kind: 'custom', label: 'H4 OB', custom: true }])
+    const clean = sanitizeTradeExtra(t.extra)
+    assert.deepEqual(clean?.chain?.find((s) => s.custom), { kind: 'custom', label: 'H4 OB', custom: true })
+    const big = Array.from({ length: 300 }, (_, i) => ({ kind: 'custom', label: `S${i}`, custom: true }))
+    assert.equal(sanitizeTradeExtra({ ...t.extra, chain: big })?.chain?.length, 300)
   })
 })

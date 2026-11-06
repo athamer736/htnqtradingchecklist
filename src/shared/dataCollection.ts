@@ -134,7 +134,7 @@ export interface DataEntry extends SyncFields {
 // One arrow-linked step of a trade's setup chain. SSMT / TPD / secondary FVG steps
 // point at a tag (`id`); the primary FVG, MMXM and entry RL steps follow the
 // trade's own fields (`label`).
-export type SetupStepKind = 'ssmt' | 'tpd' | 'fvg' | 'mmxm' | 'rl'
+export type SetupStepKind = 'ssmt' | 'tpd' | 'fvg' | 'mmxm' | 'rl' | 'custom'
 
 export interface SetupStep {
   kind: SetupStepKind
@@ -142,6 +142,8 @@ export interface SetupStep {
   label?: string
   // The trade's starting FVG (its `startSetup`); there is at most one.
   primary?: boolean
+  // Added by hand in the chain builder: free text, kept as is, not tied to the trade's fields.
+  custom?: boolean
 }
 
 export interface TradeExtra {

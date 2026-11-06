@@ -113,7 +113,7 @@ function idsOf(trade: Pick<TradeRecord, 'extra'>, columnId: string): string[] {
 }
 
 // Position of each kind in the default order: SSMT, MMXM, FVG, TPD, entry RL.
-const KIND_RANK: Record<SetupStepKind, number> = { ssmt: 0, mmxm: 1, fvg: 2, tpd: 3, rl: 4 }
+const KIND_RANK: Record<SetupStepKind, number> = { ssmt: 0, mmxm: 1, fvg: 2, tpd: 3, rl: 4, custom: 5 }
 
 // The built-in order, derived from the trade's own fields.
 export function defaultChain(trade: ChainTrade): SetupStep[] {
@@ -150,7 +150,9 @@ export function effectiveChain(trade: ChainTrade): SetupStep[] {
   const out: SetupStep[] = []
 
   for (const s of stored) {
-    if (s.kind === 'ssmt') {
+    if (s.custom) {
+      if (s.label) out.push({ kind: s.kind, label: s.label, custom: true })
+    } else if (s.kind === 'ssmt') {
       if (s.id && ssmt.includes(s.id) && !seen.ssmt.has(s.id)) {
         seen.ssmt.add(s.id)
         out.push({ kind: 'ssmt', id: s.id })
@@ -191,7 +193,7 @@ export function effectiveChain(trade: ChainTrade): SetupStep[] {
 function sameSteps(a: SetupStep[], b: SetupStep[]): boolean {
   return (
     a.length === b.length &&
-    a.every((s, i) => s.kind === b[i].kind && (s.id ?? '') === (b[i].id ?? '') && (s.label ?? '') === (b[i].label ?? '') && !!s.primary === !!b[i].primary)
+    a.every((s, i) => s.kind === b[i].kind && (s.id ?? '') === (b[i].id ?? '') && (s.label ?? '') === (b[i].label ?? '') && !!s.primary === !!b[i].primary && !!s.custom === !!b[i].custom)
   )
 }
 
@@ -258,6 +260,7 @@ export function withSecondaryFvgs<T extends ChainTrade>(trade: T, ids: string[])
 
 // Words for one step. Steps pointing at a tag that was since deleted give null.
 export function stepLabel(step: SetupStep, tags: DataTag[]): string | null {
+  if (step.custom) return step.label ?? null
   if (step.kind === 'rl') return step.label ? `${step.label} RL` : null
   if (step.id) return tags.find((t) => t.id === step.id)?.label ?? step.label ?? null
   return step.label ?? null
