@@ -4,6 +4,7 @@
 
 import {
   JOURNAL_COL_FVG,
+  JOURNAL_DEFAULT_SECTION_ID,
   JOURNAL_COL_SHOTS,
   JOURNAL_COL_SSMT,
   JOURNAL_COL_TPD,
@@ -41,8 +42,20 @@ export function extraOf(trade: Pick<TradeRecord, 'extra'>): TradeExtra {
     values: trade.extra?.values ?? {},
     columnImages: trade.extra?.columnImages ?? {},
     images: trade.extra?.images ?? [],
-    ...(trade.extra?.chain ? { chain: trade.extra.chain } : {})
+    ...(trade.extra?.chain ? { chain: trade.extra.chain } : {}),
+    ...(trade.extra?.sectionId ? { sectionId: trade.extra.sectionId } : {})
   }
+}
+
+// Moves a trade into a journal tab. The built-in tab stores nothing, so older
+// trades stay unchanged until they are filed somewhere else.
+export function withSection<T extends Pick<TradeRecord, 'extra'>>(trade: T, sectionId: string): T {
+  const extra = extraOf(trade)
+  if (!sectionId || sectionId === JOURNAL_DEFAULT_SECTION_ID) {
+    const { sectionId: _drop, ...rest } = extra
+    return { ...trade, extra: rest }
+  }
+  return { ...trade, extra: { ...extra, sectionId } }
 }
 
 export function withExtraValue<T extends Pick<TradeRecord, 'extra'>>(

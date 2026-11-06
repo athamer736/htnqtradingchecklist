@@ -11,7 +11,11 @@ import {
   buildDefaults,
   buildExport,
   buildVisibleDefaults,
+  JOURNAL_DEFAULT_SECTION_ID,
   isHiddenSection,
+  isJournalGroup,
+  journalGroups,
+  tradeSectionId,
   journalTemplateRows,
   missingBuiltinRows,
   prepareImport,
@@ -79,7 +83,13 @@ describe('journal template seed (schema v9)', () => {
     const section = DEFAULT_SECTIONS.find((s) => s.id === JOURNAL_SECTION_ID)
     assert.ok(section?.builtin)
     assert.ok(isHiddenSection(JOURNAL_SECTION_ID))
+    assert.ok(isJournalGroup(JOURNAL_DEFAULT_SECTION_ID))
+    assert.ok(isHiddenSection(JOURNAL_DEFAULT_SECTION_ID))
     assert.ok(!visibleSections(DEFAULT_SECTIONS).some((s) => s.id === JOURNAL_SECTION_ID))
+    assert.ok(!visibleSections(DEFAULT_SECTIONS).some((s) => isJournalGroup(s.id)))
+    assert.equal(journalGroups([]).map((s) => s.id).join(','), JOURNAL_DEFAULT_SECTION_ID)
+    assert.equal(tradeSectionId({}), JOURNAL_DEFAULT_SECTION_ID)
+    assert.equal(tradeSectionId({ extra: { sectionId: 'jsec-abc' } }), 'jsec-abc')
   })
 
   it('seeds FVG (with 90M and H6), SSMT and TPD as tag columns plus setup screenshots', () => {
@@ -103,10 +113,13 @@ describe('journal template seed (schema v9)', () => {
   })
 
   it('v8 -> v9 only adds the journal section and leaves every existing section alone', () => {
-    const v8Ids = DEFAULT_SECTIONS.filter((s) => s.id !== JOURNAL_SECTION_ID).map((s) => s.id)
+    const v8Ids = DEFAULT_SECTIONS.filter((s) => s.id !== JOURNAL_SECTION_ID && s.id !== 'jsec-main').map((s) => s.id)
     // A user-created section on top of the built-ins.
     const rows = missingBuiltinRows([...v8Ids, 'my-custom-section'])
-    assert.deepEqual(rows.sections.map((s) => s.id), [JOURNAL_SECTION_ID])
+    assert.deepEqual(
+      rows.sections.map((s) => s.id),
+      [JOURNAL_SECTION_ID, 'jsec-main']
+    )
     assert.ok(rows.columns.every((c) => c.sectionId === JOURNAL_SECTION_ID))
     assert.ok(rows.tags.length > 0)
     // Nothing missing -> nothing to insert (idempotent).
@@ -128,7 +141,8 @@ describe('journal template seed (schema v9)', () => {
       tags: [...defaults.tags, edited]
     })
     assert.ok(kept.tags.some((t) => t.id === 'custom-fvg-tag'))
-    assert.deepEqual(kept.sections.map((s) => s.id), [JOURNAL_SECTION_ID])
+    assert.deepEqual(kept.sections.map((s) => s.id), [JOURNAL_SECTION_ID, JOURNAL_DEFAULT_SECTION_ID])
+    assert.ok(!kept.columns.some((c) => c.sectionId === JOURNAL_DEFAULT_SECTION_ID))
   })
 })
 

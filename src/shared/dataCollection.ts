@@ -26,8 +26,39 @@ export const IMPORTED_SECTION_ID = 'sec-imported'
 // exports and imports, since its values are stored on the trades themselves.
 export const JOURNAL_SECTION_ID = 'sec-journal'
 
+// Journal groups are the tabs in the Trade Journal (like Data Collection sections).
+// They live in the same section store so they sync, but never appear in Data Collection.
+export const JOURNAL_GROUP_PREFIX = 'jsec-'
+export const JOURNAL_DEFAULT_SECTION_ID = 'jsec-main'
+
+export function isJournalGroup(id: string): boolean {
+  return id.startsWith(JOURNAL_GROUP_PREFIX)
+}
+
 export function isHiddenSection(id: string): boolean {
-  return id === JOURNAL_SECTION_ID
+  return id === JOURNAL_SECTION_ID || isJournalGroup(id)
+}
+
+// The Trade Journal's tabs, with the built-in one first even before it has been seeded.
+export function journalGroups(sections: DataSection[]): DataSection[] {
+  const groups = sections.filter((s) => isJournalGroup(s.id)).sort((a, b) => a.ord - b.ord)
+  if (!groups.some((s) => s.id === JOURNAL_DEFAULT_SECTION_ID)) {
+    groups.unshift({
+      id: JOURNAL_DEFAULT_SECTION_ID,
+      name: 'Main',
+      ord: 0,
+      builtin: true,
+      createdAt: SEED_TIME
+    })
+  }
+  return groups
+}
+
+// Which journal tab a trade belongs to. Trades logged before sections existed
+// have none, and they stay in the built-in Journal tab.
+export function tradeSectionId(trade: { extra?: { sectionId?: string } }): string {
+  const id = trade.extra?.sectionId
+  return id && isJournalGroup(id) ? id : JOURNAL_DEFAULT_SECTION_ID
 }
 
 // Built-in journal columns (stable ids so trades can reference them).
@@ -120,6 +151,8 @@ export interface TradeExtra {
   // The order the user arranged the setup chain in. Absent when it is the
   // default order (SSMT, MMXM, FVG, TPD, entry RL).
   chain?: SetupStep[]
+  // Journal tab this trade belongs to. Absent means the built-in Journal tab.
+  sectionId?: string
 }
 
 export function emptyTradeExtra(): TradeExtra {
@@ -158,7 +191,8 @@ export const DEFAULT_SECTIONS: DataSection[] = [
   { id: 'sec-nfp', name: 'NFP Week', ord: 4, builtin: true, createdAt: SEED_TIME },
   { id: 'sec-halving', name: 'Weekly Halving', ord: 5, builtin: true, createdAt: SEED_TIME },
   { id: IMPORTED_SECTION_ID, name: 'Imported Data', ord: 6, builtin: true, createdAt: SEED_TIME },
-  { id: JOURNAL_SECTION_ID, name: 'Trade journal', ord: 7, builtin: true, createdAt: SEED_TIME }
+  { id: JOURNAL_SECTION_ID, name: 'Trade journal', ord: 7, builtin: true, createdAt: SEED_TIME },
+  { id: JOURNAL_DEFAULT_SECTION_ID, name: 'Main', ord: 8, builtin: true, createdAt: SEED_TIME }
 ]
 
 // Sections the Data Collection UI lists (everything except the hidden journal).
@@ -265,7 +299,10 @@ const JOURNAL_BLUEPRINTS: ColumnBlueprint[] = [
 export const DEFAULT_JOURNAL_FVG = JOURNAL_FVG_TAGS[0]
 
 function blueprintsFor(sectionId: string): ColumnBlueprint[] {
-  return sectionId === JOURNAL_SECTION_ID ? JOURNAL_BLUEPRINTS : COLUMN_BLUEPRINTS
+  if (sectionId === JOURNAL_SECTION_ID) return JOURNAL_BLUEPRINTS
+  // Journal tabs hold trades, not Data Collection columns.
+  if (isJournalGroup(sectionId)) return []
+  return COLUMN_BLUEPRINTS
 }
 
 // Emit a fresh set of per-section columns + tags for the built-in sections.

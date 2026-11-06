@@ -18,6 +18,7 @@ import {
   type SetupStep,
   type SetupStepKind,
   type TradeExtra,
+  isJournalGroup,
   TAG_COLORS
 } from './dataCollection'
 
@@ -424,11 +425,13 @@ export function sanitizeTradeExtra(value: unknown): TradeExtra | undefined {
     }
   }
   const chain = sanitizeSetupChain(v.chain)
+  const sectionId = sanitizeId(v.sectionId)
   return {
     values: sanitizeValues(v.values),
     columnImages,
     images: keep(v.images),
-    ...(chain ? { chain } : {})
+    ...(chain ? { chain } : {}),
+    ...(sectionId && isJournalGroup(sectionId) ? { sectionId } : {})
   }
 }
 

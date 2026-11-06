@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { DataColumn, DataTag } from '../../../shared/dataCollection'
+import { JOURNAL_DEFAULT_SECTION_ID, type DataColumn, type DataTag } from '../../../shared/dataCollection'
 import type { TradeRecord } from '../types'
 import { uid } from '../util/id'
 import { parseJournalFile, planJournalImport, type ParsedJournal } from './journalImport'
@@ -10,6 +10,8 @@ interface JournalImportDialogProps {
   templateColumns: DataColumn[]
   saveTag: (tag: DataTag) => Promise<void>
   saveTrade: (trade: TradeRecord) => Promise<void>
+  /** Tab the imported trades are filed under. The built-in tab needs nothing stored. */
+  sectionId?: string
   onClose: () => void
 }
 
@@ -23,6 +25,7 @@ export default function JournalImportDialog({
   templateColumns,
   saveTag,
   saveTrade,
+  sectionId,
   onClose
 }: JournalImportDialogProps): JSX.Element {
   const [stage, setStage] = useState<Stage>('pick')
@@ -73,7 +76,11 @@ export default function JournalImportDialog({
     }
     for (const t of plan.trades) {
       try {
-        await saveTrade(t)
+        await saveTrade(
+          sectionId && sectionId !== JOURNAL_DEFAULT_SECTION_ID
+            ? { ...t, extra: { values: {}, columnImages: {}, images: [], ...t.extra, sectionId } }
+            : t
+        )
         ok++
       } catch {
         bad++

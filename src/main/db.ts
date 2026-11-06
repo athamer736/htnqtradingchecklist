@@ -6,6 +6,7 @@ import {
   DEFAULT_SECTIONS,
   buildDefaults,
   buildVisibleDefaults,
+  isJournalGroup,
   journalTemplateRows,
   missingBuiltinRows,
   prepareImport,
@@ -583,7 +584,8 @@ function parseExtra(raw: unknown): TradeExtra | undefined {
       values: v.values && typeof v.values === 'object' ? v.values : {},
       columnImages: v.columnImages && typeof v.columnImages === 'object' ? v.columnImages : {},
       images: Array.isArray(v.images) ? v.images : [],
-      ...(Array.isArray(v.chain) && v.chain.length > 0 ? { chain: v.chain } : {})
+      ...(Array.isArray(v.chain) && v.chain.length > 0 ? { chain: v.chain } : {}),
+      ...(typeof v.sectionId === 'string' && isJournalGroup(v.sectionId) ? { sectionId: v.sectionId } : {})
     }
   } catch {
     return undefined

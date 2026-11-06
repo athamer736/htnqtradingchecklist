@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTrades } from '../store/useTrades'
 import { useConfirm } from '../components/ConfirmProvider'
 import { TIMEFRAME_ORDER } from '../strategy/strategy'
@@ -10,9 +10,13 @@ import {
   JOURNAL_COL_SHOTS,
   JOURNAL_COL_SSMT,
   JOURNAL_COL_TPD,
+  JOURNAL_DEFAULT_SECTION_ID,
+  journalGroups,
+  tradeSectionId,
   type DataColumn,
   type DataTag
 } from '../../../shared/dataCollection'
+import { useDataCollection } from '../store/useDataCollection'
 import { viewKeyForJournal } from '../../../shared/viewConfig'
 import { useViewConfig } from '../store/useViewPrefs'
 import EntryTable from '../components/data/EntryTable'
@@ -39,6 +43,7 @@ import {
   withExtraImages,
   withExtraValue,
   withSecondaryFvgs,
+  withSection,
   withStoredChain
 } from '../journal/journalModel'
 
@@ -83,8 +88,8 @@ const CME_CONTRACTS = [
   'ETH'
 ]
 
-function emptyTrade(): TradeRecord {
-  return {
+function emptyTrade(sectionId: string): TradeRecord {
+  const base: TradeRecord = {
     id: uid(),
     createdAt: new Date().toISOString(),
     startSetup: 'Weekly FVG',
@@ -106,6 +111,7 @@ function emptyTrade(): TradeRecord {
     mmxm: '',
     notes: ''
   }
+  return withSection(base, sectionId)
 }
 
 // Returns blocking validation errors for a trade draft.
@@ -221,6 +227,10 @@ export default function JournalView(): JSX.Element {
   const trades = useTrades((s) => s.trades)
   const save = useTrades((s) => s.save)
   const remove = useTrades((s) => s.remove)
+  const allSections = useDataCollection((s) => s.sections)
+  const saveSection = useDataCollection((s) => s.saveSection)
+  const deleteDataSection = useDataCollection((s) => s.deleteSection)
+  const groups = useMemo(() => journalGroups(allSections), [allSections])
 
   const [draft, setDraft] = useState<TradeRecord | null>(null)
   const [closing, setClosing] = useState(false)
@@ -231,16 +241,24 @@ export default function JournalView(): JSX.Element {
   const [showTemplate, setShowTemplate] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [activeId, setActiveId] = useState(JOURNAL_DEFAULT_SECTION_ID)
+  const [addingSection, setAddingSection] = useState(false)
+  const [sectionName, setSectionName] = useState('')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  // The id of a section that was just created, so the tab stays selected while it saves.
+  const pendingSection = useRef<string | null>(null)
+  const sectionLock = useRef(false)
 
   // The customisable template (FVG / SSMT / TPD lists, setup screenshots and any
   // properties the user added) and the Landscape / Vertical layout choice.
   const template = useJournalTemplate()
-  const [viewConfig, setViewConfig] = useViewConfig(viewKeyForJournal())
+  const viewKey = activeId === JOURNAL_DEFAULT_SECTION_ID ? viewKeyForJournal() : `journal:${activeId}`
+  const [viewConfig, setViewConfig] = useViewConfig(viewKey)
   const tableColumns = useMemo(
     () => buildJournalColumns(template.tags, trades, template.columns),
     [template.tags, template.columns, trades]
   )
-  const setupChoices = useMemo(() => fvgOptions(template.tags, trades), [template.tags, trades])
   const customColumns = useMemo(() => customJournalColumns(template.columns), [template.columns])
   const ssmtColumn = template.columns.find((c) => c.id === JOURNAL_COL_SSMT)
   const tpdColumn = template.columns.find((c) => c.id === JOURNAL_COL_TPD)
@@ -283,8 +301,24 @@ export default function JournalView(): JSX.Element {
     await remove(t.id)
   }
 
-  const filtered = useMemo(    () => (filter === 'all' ? trades : trades.filter((t) => t.startSetup === filter)),
-    [trades, filter]
+  useEffect(() => {
+    if (groups.some((s) => s.id === activeId)) {
+      pendingSection.current = null
+      return
+    }
+    if (pendingSection.current === activeId) return
+    setActiveId(groups[0]?.id ?? JOURNAL_DEFAULT_SECTION_ID)
+  }, [groups, activeId])
+
+  const sectionTrades = useMemo(
+    () => trades.filter((t) => tradeSectionId(t) === activeId),
+    [trades, activeId]
+  )
+  const setupChoices = useMemo(() => fvgOptions(template.tags, sectionTrades), [template.tags, sectionTrades])
+
+  const filtered = useMemo(
+    () => (filter === 'all' ? sectionTrades : sectionTrades.filter((t) => t.startSetup === filter)),
+    [sectionTrades, filter]
   )
 
   const errors = useMemo(() => (draft ? validateTrade(draft) : []), [draft])
@@ -309,31 +343,74 @@ export default function JournalView(): JSX.Element {
   }, [draft])
 
   const stats = useMemo(() => {
-    const decisive = trades.filter((t) => t.result !== 'be')
-    const wins = trades.filter((t) => t.result === 'win').length
+    const decisive = sectionTrades.filter((t) => t.result !== 'be')
+    const wins = sectionTrades.filter((t) => t.result === 'win').length
     const winRate = decisive.length ? Math.round((wins / decisive.length) * 100) : 0
-    const rValues = trades.map((t) => t.rMultiple).filter((r): r is number => r !== null)
+    const rValues = sectionTrades.map((t) => t.rMultiple).filter((r): r is number => r !== null)
     const totalR = rValues.reduce((a, b) => a + b, 0)
     const avgR = rValues.length ? totalR / rValues.length : 0
-    const net = trades.reduce((sum, t) => {
+    const net = sectionTrades.reduce((sum, t) => {
       if (t.result === 'win' && t.dollarTp !== null) return sum + t.dollarTp
       if (t.result === 'loss' && t.dollarRisk !== null) return sum - t.dollarRisk
       return sum
     }, 0)
 
     const bySetup = new Map<string, { count: number; wins: number }>()
-    trades.forEach((t) => {
+    sectionTrades.forEach((t) => {
       const e = bySetup.get(t.startSetup) ?? { count: 0, wins: 0 }
       e.count += 1
       if (t.result === 'win') e.wins += 1
       bySetup.set(t.startSetup, e)
     })
 
-    return { winRate, avgR, totalR, net, count: trades.length, bySetup }
-  }, [trades])
+    return { winRate, avgR, totalR, net, count: sectionTrades.length, bySetup }
+  }, [sectionTrades])
 
   const update = <K extends keyof TradeRecord>(key: K, value: TradeRecord[K]): void => {
     setDraft((d) => (d ? { ...d, [key]: value } : d))
+  }
+
+  const addSection = (): void => {
+    if (sectionLock.current) return
+    const name = sectionName.trim()
+    if (!name) {
+      setAddingSection(false)
+      return
+    }
+    sectionLock.current = true
+    const ord = groups.reduce((m, s) => Math.max(m, s.ord), -1) + 1
+    const id = `jsec-${uid()}`
+    pendingSection.current = id
+    void saveSection({ id, name, ord, builtin: false, createdAt: new Date().toISOString() })
+    setActiveId(id)
+    setFilter('all')
+    setSectionName('')
+    setAddingSection(false)
+  }
+
+  const commitRename = (): void => {
+    if (!renamingId) return
+    const section = groups.find((s) => s.id === renamingId)
+    const name = renameValue.trim()
+    if (section && name) void saveSection({ ...section, name })
+    setRenamingId(null)
+  }
+
+  const removeSection = async (id: string, name: string): Promise<void> => {
+    const inSection = trades.filter((t) => tradeSectionId(t) === id)
+    const ok = await confirm({
+      title: `Delete section "${name}"?`,
+      message:
+        inSection.length > 0
+          ? `This removes the section and its ${inSection.length} trade${inSection.length === 1 ? '' : 's'}. This cannot be undone.`
+          : 'This removes the section. This cannot be undone.',
+      confirmLabel: 'Delete section',
+      danger: true
+    })
+    if (!ok) return
+    setViewingId((current) => (current && inSection.some((t) => t.id === current) ? null : current))
+    for (const t of inSection) await remove(t.id)
+    await deleteDataSection(id)
   }
 
   const submit = async (): Promise<void> => {
@@ -362,14 +439,101 @@ export default function JournalView(): JSX.Element {
             >
               Import
             </button>
-            <button className="btn-ghost text-xs" onClick={() => setExportOpen(true)} disabled={trades.length === 0}>
+            <button className="btn-ghost text-xs" onClick={() => setExportOpen(true)} disabled={sectionTrades.length === 0}>
               Export
             </button>
-            <button className="btn-primary" onClick={() => openDraft(emptyTrade())}>
+            <button className="btn-primary" onClick={() => openDraft(emptyTrade(activeId))}>
               + Log trade
             </button>
           </div>
         </header>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {groups.map((s) => {
+            const isActive = s.id === activeId
+            if (renamingId === s.id) {
+              return (
+                <input
+                  key={s.id}
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename()
+                    if (e.key === 'Escape') setRenamingId(null)
+                  }}
+                  className="field w-36 py-1"
+                />
+              )
+            }
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setActiveId(s.id)
+                  setFilter('all')
+                }}
+                onDoubleClick={() => {
+                  setRenamingId(s.id)
+                  setRenameValue(s.name)
+                }}
+                className={`group flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-all active:scale-[0.97] ${
+                  isActive
+                    ? 'border-accent/50 bg-accent/15 text-white'
+                    : 'border-line bg-bg-soft text-muted hover:bg-bg-hover hover:text-slate-200'
+                }`}
+              >
+                {s.name}
+                {!s.builtin && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Delete ${s.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void removeSection(s.id, s.name)
+                    }}
+                    className="text-muted opacity-0 transition group-hover:opacity-100 hover:text-rose-400"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                )}
+              </button>
+            )
+          })}
+          {addingSection ? (
+            <input
+              autoFocus
+              value={sectionName}
+              onChange={(e) => setSectionName(e.target.value)}
+              onBlur={addSection}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addSection()
+                if (e.key === 'Escape') {
+                  setSectionName('')
+                  setAddingSection(false)
+                }
+              }}
+              placeholder="Section name"
+              className="field w-36 py-1"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                sectionLock.current = false
+                setAddingSection(true)
+              }}
+              className="rounded-lg border border-dashed border-line px-3 py-1.5 text-sm text-muted transition hover:border-accent/50 hover:text-slate-200"
+            >
+              + New section
+            </button>
+          )}
+        </div>
 
         <div className="mb-5 flex flex-wrap gap-3">
           <Stat label="Trades" value={String(stats.count)} />
@@ -425,14 +589,14 @@ export default function JournalView(): JSX.Element {
               config={viewConfig}
               onConfig={setViewConfig}
               onOpen={(t) => setViewingId(t.id)}
-              onAdd={() => openDraft(emptyTrade())}
+              onAdd={() => openDraft(emptyTrade(activeId))}
               addLabel="New trade"
-              emptyText="No trades logged yet."
+              emptyText={`No trades in ${groups.find((s) => s.id === activeId)?.name ?? 'this section'} yet.`}
             />
           </div>
         ) : filtered.length === 0 ? (
           <div className="card flex flex-col items-center justify-center gap-2 py-16 text-center">
-            <p className="text-sm text-slate-300">No trades logged yet.</p>
+            <p className="text-sm text-slate-300">No trades in this section yet.</p>
             <p className="text-xs text-muted">Click &ldquo;Log trade&rdquo; to record your first setup.</p>
           </div>
         ) : (
@@ -526,6 +690,20 @@ export default function JournalView(): JSX.Element {
           </div>
 
           <div className="flex flex-col gap-3">
+            <div>
+              <label className="label">Section</label>
+              <select
+                className="field"
+                value={tradeSectionId(draft)}
+                onChange={(e) => setDraft((d) => (d ? withSection(d, e.target.value) : d))}
+              >
+                {groups.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Date</label>
@@ -929,7 +1107,7 @@ export default function JournalView(): JSX.Element {
 
       {exportOpen && (
         <JournalExportDialog
-          trades={trades}
+          trades={sectionTrades}
           setups={setupChoices}
           tags={template.tags}
           templateColumns={template.columns}
@@ -939,11 +1117,12 @@ export default function JournalView(): JSX.Element {
 
       {importOpen && (
         <JournalImportDialog
-          trades={trades}
+          trades={sectionTrades}
           tags={template.tags}
           templateColumns={template.columns}
           saveTag={template.saveTag}
           saveTrade={save}
+          sectionId={activeId}
           onClose={() => setImportOpen(false)}
         />
       )}
