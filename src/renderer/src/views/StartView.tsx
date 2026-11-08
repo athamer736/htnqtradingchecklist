@@ -9,6 +9,7 @@ import {
   type TreeNode
 } from '../strategy/engine'
 import TreeGraph from '../components/TreeGraph'
+import ChainBuilderPanel from '../components/ChainBuilderPanel'
 
 const kindText: Record<NodeKind, string> = {
   FVG: 'text-accent',
@@ -20,11 +21,13 @@ const kindText: Record<NodeKind, string> = {
 function GuidedPanel({
   root,
   focused,
-  onFocus
+  onFocus,
+  oncopyToChain
 }: {
   root: TreeNode
   focused: TreeNode
   onFocus: (id: string) => void
+  oncopyToChain: (name: string, labels: string[]) => void
 }): JSX.Element {
   const steps = nextSteps(focused)
   const entries = collectEntries(root)
@@ -53,8 +56,8 @@ function GuidedPanel({
           </div>
           <div className="flex flex-col gap-2.5">
             {steps.map((s, i) => (
+              <div key={s.headNodeId}>
               <button
-                key={s.headNodeId}
                 onClick={() => onFocus(s.headNodeId)}
                 style={{ animationDelay: `${i * 70}ms` }}
                 className="card group animate-fadeInUp p-3 text-left transition-all duration-150 hover:-translate-y-0.5 hover:bg-bg-hover"
@@ -78,6 +81,14 @@ function GuidedPanel({
                   ))}
                 </div>
               </button>
+              <button
+                type="button"
+                className="mt-1 px-1 text-[11px] text-accent hover:underline"
+                onClick={() => oncopyToChain(`${focused.label} setup`, [focused.label, ...s.steps])}
+              >
+                Use as chain
+              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -118,6 +129,13 @@ function GuidedPanel({
 export default function StartView(): JSX.Element {
   const [startTf, setStartTf] = useState<Timeframe>('Weekly')
   const [focusedId, setFocusedId] = useState<string>('root')
+  const [mode, setMode] = useState<'tree' | 'chains'>('tree')
+  const [seed, setSeed] = useState<{ name: string; labels: string[]; nonce: number } | null>(null)
+
+  const copyToChain = (name: string, labels: string[]): void => {
+    setSeed({ name, labels, nonce: Date.now() })
+    setMode('chains')
+  }
 
   const tree = useMemo(() => buildTree(startTf), [startTf])
   const focused = useMemo(() => findNode(tree, focusedId) ?? tree, [tree, focusedId])
@@ -134,11 +152,35 @@ export default function StartView(): JSX.Element {
           <div>
             <h1 className="text-base font-semibold text-slate-100">What did you spot?</h1>
             <p className="text-xs text-muted">
-              Pick a starting FVG / RL. The ideal setup tree and confluences are generated below.
+              {mode === 'tree'
+                ? 'Pick a starting FVG / RL. The ideal setup tree and confluences are generated below.'
+                : 'Build your own setup chains: any steps, in any order, as many as you like.'}
             </p>
           </div>
+          <div className="flex shrink-0 gap-1 rounded-lg border border-line bg-bg-soft p-1">
+            {(
+              [
+                ['tree', 'Ideal tree'],
+                ['chains', 'My chains']
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setSeed(null)
+                  setMode(id)
+                }}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+                  mode === id ? 'bg-bg-hover text-white' : 'text-muted hover:text-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className={`mt-3 flex flex-wrap gap-2 ${mode === 'tree' ? '' : 'hidden'}`}>
           {STARTING_TIMEFRAMES.map((tf) => (
             <button
               key={tf}
@@ -155,12 +197,18 @@ export default function StartView(): JSX.Element {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-        <div key={startTf} className="min-h-[320px] min-w-0 flex-1 animate-fadeIn md:min-h-0">
-          <TreeGraph root={tree} focusedId={focused.id} onNodeClick={setFocusedId} />
+      {mode === 'chains' ? (
+        <div className="min-h-0 flex-1">
+          <ChainBuilderPanel seed={seed} />
         </div>
-        <GuidedPanel root={tree} focused={focused} onFocus={setFocusedId} />
-      </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+          <div key={startTf} className="min-h-[320px] min-w-0 flex-1 animate-fadeIn md:min-h-0">
+            <TreeGraph root={tree} focusedId={focused.id} onNodeClick={setFocusedId} />
+          </div>
+          <GuidedPanel root={tree} focused={focused} onFocus={setFocusedId} oncopyToChain={copyToChain} />
+        </div>
+      )}
     </div>
   )
 }
