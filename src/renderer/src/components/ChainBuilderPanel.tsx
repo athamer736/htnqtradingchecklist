@@ -124,8 +124,7 @@ export default function ChainBuilderPanel({ seed }: ChainBuilderPanelProps): JSX
         </button>
         {chains.length === 0 && (
           <p className="text-xs leading-relaxed text-muted">
-            No chains yet. Start a blank one, or press <span className="text-slate-300">Use as chain</span> on the
-            ideal tree to copy a path and change it.
+            No chains yet. Start a blank one, or press <span className="text-slate-300">Use as chain</span> on the Setup page to copy a path and change it.
           </p>
         )}
         {chains.map((c) => (

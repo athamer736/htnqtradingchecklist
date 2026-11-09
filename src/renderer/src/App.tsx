@@ -10,6 +10,7 @@ import PointsView from './views/PointsView'
 import ReferenceView from './views/ReferenceView'
 import JournalView from './views/JournalView'
 import DataView from './views/DataView'
+import ChainBuilderView, { type ChainSeed } from './views/ChainBuilderView'
 import AdminView from './views/AdminView'
 import ContentSectionView from './views/ContentSectionView'
 import StudentRecordingsView from './views/StudentRecordingsView'
@@ -68,7 +69,16 @@ export default function App(): JSX.Element {
     if (view === 'admin' && !canOpenAdmin(capabilities)) setView('start')
   }, [capabilities, tabs, view])
 
+  // "Use as chain" on the Setup page copies a path into the Setup Chain Builder.
+  const [chainSeed, setChainSeed] = useState<ChainSeed | null>(null)
+  const copyPathToChain = (name: string, labels: string[]): void => {
+    setChainSeed({ name, labels, nonce: Date.now() })
+    setView('chains')
+  }
+
   const handleChange = (v: ViewId): void => {
+    // Opening the tab yourself never re-adds a chain that was already copied.
+    setChainSeed(null)
     setView(v)
     // On phones the sidebar is an overlay - dismiss it after choosing a view.
     if (typeof window !== 'undefined' && window.innerWidth < 768) setSidebarOpen(false)
@@ -99,7 +109,8 @@ export default function App(): JSX.Element {
           </button>
         )}
         <div key={view} className={`h-full animate-fadeInUp ${sidebarOpen ? '' : 'pt-12 md:pl-12 md:pt-0'}`}>
-          {view === 'start' && <StartView />}
+          {view === 'start' && <StartView onUseAsChain={copyPathToChain} />}
+          {view === 'chains' && <ChainBuilderView seed={chainSeed} />}
           {tabIdFromView(view) && <ContentSectionView tabId={tabIdFromView(view) as string} />}
           {view === 'recordings' && <StudentRecordingsView />}
           {view === 'points' && <PointsView />}
