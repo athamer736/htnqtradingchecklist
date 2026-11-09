@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { markChainsDirty } from '../sync/syncEngine'
 import {
   CHAIN_KINDS,
   MAX_CHAINS,
@@ -43,7 +44,19 @@ export default function ChainBuilderPanel({ seed }: ChainBuilderPanelProps): JSX
   const update = (next: CustomChain[]): void => {
     setChains(next)
     saveChains(next)
+    markChainsDirty()
   }
+
+  // Chains pulled from the account while this page is open.
+  useEffect(() => {
+    const onRemote = (): void => {
+      const next = loadChains()
+      setChains(next)
+      setActiveId((cur) => (cur && next.some((c) => c.id === cur) ? cur : (next[0]?.id ?? null)))
+    }
+    window.addEventListener('htnq-chains-remote', onRemote)
+    return () => window.removeEventListener('htnq-chains-remote', onRemote)
+  }, [])
 
   const active = chains.find((c) => c.id === activeId) ?? null
 
@@ -158,7 +171,7 @@ export default function ChainBuilderPanel({ seed }: ChainBuilderPanelProps): JSX
             </div>
             <p className="mb-3 mt-1 text-[11px] text-muted">
               Drag a step, or use the small arrows, to change what each arrow points to. Add as many steps as you like, in
-              any order. Saved on this device.
+              any order. Saved on this device and synced to your account while cloud sync is on.
             </p>
 
             {active.steps.length === 0 && (

@@ -23,7 +23,17 @@ export const MAX_CHAINS = 200
 export const MAX_STEPS = 500
 export const MAX_TEXT = 60
 
-const STORAGE_KEY = 'htnq.setupChains.v1'
+export const CHAINS_STORAGE_KEY = 'htnq.setupChains.v1'
+const STORAGE_KEY = CHAINS_STORAGE_KEY
+
+/**
+ * Chains arriving from the account. When this device had chains that never synced, keep them
+ * too (the account's copy wins for any id both have), so nothing made offline is lost.
+ */
+export function mergeUnsyncedChains(remote: CustomChain[], local: CustomChain[]): CustomChain[] {
+  const ids = new Set(remote.map((c) => c.id))
+  return [...remote, ...local.filter((c) => !ids.has(c.id))].slice(0, MAX_CHAINS)
+}
 
 export function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`

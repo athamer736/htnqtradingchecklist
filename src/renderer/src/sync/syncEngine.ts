@@ -16,6 +16,7 @@ import { useSync } from '../store/useSync'
 import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { logError, logInfo, logWarn } from '../lib/logger'
+import { CHAINS_STORAGE_KEY, loadChains, mergeUnsyncedChains, sanitizeChains } from '../strategy/customChains'
 
 const PAGE = 500
 const PUSH_CHUNK = 100
@@ -33,6 +34,9 @@ const POINTS_STATE_ID = 'points-board'
 const VIEW_PREFS_KEY = 'htnq-view-prefs'
 const VIEW_PREFS_SYNC_KEY = 'htnq-view-prefs-sync'
 const VIEW_PREFS_STATE_ID = 'view-prefs'
+// The Setup page's own chains (My chains), also one app_state row.
+const CHAINS_SYNC_KEY = 'htnq-setup-chains-sync'
+const CHAINS_STATE_ID = 'setup-chains'
 // Sync on a slow, fixed cadence to keep server load minimal. Local edits are
 // captured as "dirty" rows immediately and pushed on the next cycle.
 const POLL_MS = 5 * 60 * 1000
@@ -161,6 +165,56 @@ export function markViewPrefsDirty(): void {
   writeViewPrefsMeta({ updatedAt: new Date().toISOString(), dirty: true })
 }
 
+// My chains share the PointsMeta shape (updatedAt + dirty).
+function readChainsMeta(): PointsMeta {
+  try {
+    const r = JSON.parse(localStorage.getItem(CHAINS_SYNC_KEY) ?? '') as PointsMeta
+    if (r && typeof r.updatedAt === 'string') return { updatedAt: r.updatedAt, dirty: !!r.dirty }
+  } catch {
+    /* none yet */
+  }
+  return { updatedAt: '', dirty: false }
+}
+
+function writeChainsMeta(m: PointsMeta): void {
+  localStorage.setItem(CHAINS_SYNC_KEY, JSON.stringify(m))
+}
+
+// Called by the chain builder when a chain changes.
+export function markChainsDirty(): void {
+  writeChainsMeta({ updatedAt: new Date().toISOString(), dirty: true })
+}
+
+async function pushChains(uid: string): Promise<void> {
+  if (!supabase) return
+  let meta = readChainsMeta()
+  // Chains made before sync existed have never been uploaded: send them once.
+  if (!meta.updatedAt && loadChains().length > 0) {
+    meta = { updatedAt: new Date().toISOString(), dirty: true }
+    writeChainsMeta(meta)
+  }
+  if (!meta.dirty) return
+  const chains = JSON.stringify(sanitizeChains(loadChains()))
+  const { error } = await supabase.from(SYNC_TABLE).upsert(
+    [
+      {
+        user_id: uid,
+        kind: 'app_state',
+        id: CHAINS_STATE_ID,
+        data: { chains },
+        updated_at: meta.updatedAt || SYNC_EPOCH,
+        deleted_at: null
+      }
+    ],
+    { onConflict: 'user_id,kind,id' }
+  )
+  if (error) {
+    logError('push setup chains failed:', error)
+    throw error
+  }
+  writeChainsMeta({ updatedAt: meta.updatedAt, dirty: false })
+}
+
 async function pushViewPrefs(uid: string): Promise<void> {
   if (!supabase) return
   const meta = readViewPrefsMeta()
@@ -189,6 +243,7 @@ async function pushViewPrefs(uid: string): Promise<void> {
 async function pushAppState(uid: string): Promise<void> {
   if (!supabase) return
   await pushViewPrefs(uid)
+  await pushChains(uid)
   const meta = readPointsMeta()
   if (!meta.dirty) return
   const board = localStorage.getItem(POINTS_KEY) ?? ''
@@ -223,6 +278,26 @@ function applyAppState(id: string, data: unknown, updatedAt: string): void {
       writeViewPrefsMeta({ updatedAt, dirty: false })
       window.dispatchEvent(new Event('htnq-viewprefs-remote'))
     }
+    return
+  }
+  if (id === CHAINS_STATE_ID) {
+    const local = readChainsMeta()
+    if (local.updatedAt && local.updatedAt >= updatedAt) return
+    const raw = (data as { chains?: string } | null)?.chains
+    if (typeof raw !== 'string') return
+    let incoming: ReturnType<typeof sanitizeChains>
+    try {
+      incoming = sanitizeChains(JSON.parse(raw))
+    } catch {
+      return
+    }
+    // A device whose chains never synced keeps them alongside the account's.
+    const neverSynced = !local.updatedAt || local.dirty
+    const mine = neverSynced ? loadChains() : []
+    const merged = neverSynced ? mergeUnsyncedChains(incoming, mine) : incoming
+    localStorage.setItem(CHAINS_STORAGE_KEY, JSON.stringify(merged))
+    writeChainsMeta({ updatedAt, dirty: neverSynced && merged.length > incoming.length })
+    window.dispatchEvent(new Event('htnq-chains-remote'))
     return
   }
   if (id !== POINTS_STATE_ID) return

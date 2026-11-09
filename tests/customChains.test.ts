@@ -5,6 +5,7 @@ import {
   chainText,
   kindOfLabel,
   makeStep,
+  mergeUnsyncedChains,
   moveItem,
   sanitizeChains,
   stepsFromLabels
@@ -48,5 +49,14 @@ describe('custom setup chains', () => {
     const huge = Array.from({ length: MAX_STEPS + 50 }, (_, i) => ({ id: `h${i}`, kind: 'FVG', label: `S${i}` }))
     assert.equal(sanitizeChains([{ id: 'x', name: 'n', steps: huge }])[0].steps.length, MAX_STEPS)
     assert.deepEqual(sanitizeChains('nope'), [])
+  })
+})
+
+describe('chains syncing with the account', () => {
+  it('keeps chains that never synced, with the account winning on the same id', () => {
+    const remote = sanitizeChains([{ id: 'a', name: 'Remote A', steps: [] }, { id: 'b', name: 'B', steps: [] }])
+    const local = sanitizeChains([{ id: 'a', name: 'Local A', steps: [] }, { id: 'c', name: 'Only here', steps: [] }])
+    const merged = mergeUnsyncedChains(remote, local)
+    assert.deepEqual(merged.map((c) => [c.id, c.name]), [['a', 'Remote A'], ['b', 'B'], ['c', 'Only here']])
   })
 })
