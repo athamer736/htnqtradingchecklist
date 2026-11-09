@@ -11,6 +11,7 @@ import {
   type ThemeDefinition,
   type ThemeState
 } from '../../../shared/themes'
+import { parseSharedThemes, themeSignature } from '../../../shared/themeShare'
 import { markThemeDirty, requestSync } from '../sync/syncEngine'
 
 // The chosen theme and the user's own themes. Kept in localStorage and synced across
@@ -36,6 +37,17 @@ export function applyTheme(theme: Theme): void {
   root.dataset.themeReady = '1'
 }
 
+export interface ImportResult {
+  added: number
+  /** Already in the list with the same colours. */
+  duplicates: number
+  /** Left out because the list is full. */
+  overLimit: number
+  /** Parts of the input that were not usable themes. */
+  invalid: number
+  error: string | null
+}
+
 interface ThemeStore {
   state: ThemeState
   /** The theme in use (a preview, while one is open in the editor). */
@@ -44,6 +56,8 @@ interface ThemeStore {
   /** Adds or replaces a custom theme. Resolves to an error message, or null. */
   saveCustom: (def: ThemeDefinition) => string | null
   removeCustom: (id: string) => void
+  /** Adds themes from a share code or the text of a theme file. */
+  importThemes: (text: string) => ImportResult
   /** Shows a theme without saving it. Pass null to go back to the saved one. */
   preview: (theme: Theme | null) => void
   reload: () => void
@@ -100,6 +114,48 @@ export const useTheme = create<ThemeStore>((set, get) => ({
     applyTheme(theme)
     set({ state, theme })
     persist(state)
+  },
+
+  importThemes: (text) => {
+    const parsed = parseSharedThemes(text)
+    const result: ImportResult = { added: 0, duplicates: 0, overLimit: 0, invalid: parsed.invalid, error: parsed.error }
+    if (parsed.error) return result
+    const current = get().state
+    const known = new Set(current.custom.map(themeSignature))
+    const ids = new Set(current.custom.map((c) => c.id))
+    const custom = [...current.custom]
+    const stamp = Date.now().toString(36)
+    for (const shared of parsed.themes) {
+      if (known.has(themeSignature(shared))) {
+        result.duplicates += 1
+        continue
+      }
+      if (custom.length >= MAX_CUSTOM_THEMES) {
+        result.overLimit += 1
+        continue
+      }
+      let n = custom.length
+      let id = `custom-${stamp}${n.toString(36)}`
+      while (ids.has(id)) id = `custom-${stamp}${(n += 1).toString(36)}`
+      const clean = sanitizeDefinition({ ...shared, id })
+      if (!clean) {
+        result.invalid += 1
+        continue
+      }
+      ids.add(id)
+      known.add(themeSignature(clean))
+      custom.push(clean)
+      result.added += 1
+    }
+    if (result.added === 0) return result
+    // One theme arrives ready to use; several are only added to the list.
+    const activeId = result.added === 1 ? custom[custom.length - 1].id : current.activeId
+    const state = { activeId, custom }
+    const theme = resolveTheme(state)
+    applyTheme(theme)
+    set({ state, theme })
+    persist(state)
+    return result
   },
 
   preview: (theme) => {
