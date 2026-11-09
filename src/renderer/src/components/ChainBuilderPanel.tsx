@@ -119,7 +119,7 @@ export default function ChainBuilderPanel({ seed }: ChainBuilderPanelProps): JSX
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
       <aside className="flex w-full shrink-0 flex-col gap-2 border-b border-line bg-bg-soft p-4 md:w-[260px] md:overflow-y-auto md:border-b-0 md:border-r">
-        <button type="button" className="btn bg-accent text-white" onClick={() => createChain('New chain', [])}>
+        <button type="button" className="btn bg-accent text-on-accent" onClick={() => createChain('New chain', [])}>
           + New chain
         </button>
         {chains.length === 0 && (

@@ -97,7 +97,7 @@ export default function LoginGate({ children }: { children: ReactNode }): JSX.El
           type="button"
           onClick={() => void signInWithDiscord()}
           disabled={signingIn}
-          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-4 py-2.5 text-sm font-semibold text-solid-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
             <path d="M20.317 4.369A19.79 19.79 0 0 0 15.885 3c-.196.35-.423.82-.58 1.194a18.27 18.27 0 0 0-5.61 0A12.5 12.5 0 0 0 9.108 3a19.74 19.74 0 0 0-4.432 1.37C1.86 8.578 1.096 12.68 1.478 16.724a19.9 19.9 0 0 0 6.073 3.058c.49-.669.927-1.38 1.302-2.128a12.9 12.9 0 0 1-2.05-.978c.172-.126.34-.257.502-.392a14.2 14.2 0 0 0 12.19 0c.164.14.332.271.502.392-.654.386-1.343.714-2.052.98.375.746.81 1.457 1.3 2.126a19.86 19.86 0 0 0 6.076-3.058c.448-4.686-.766-8.75-3.006-12.355ZM8.02 14.333c-1.183 0-2.157-1.085-2.157-2.42 0-1.334.955-2.42 2.157-2.42 1.21 0 2.176 1.095 2.157 2.42 0 1.335-.955 2.42-2.157 2.42Zm7.96 0c-1.183 0-2.157-1.085-2.157-2.42 0-1.334.955-2.42 2.157-2.42 1.21 0 2.176 1.095 2.157 2.42 0 1.335-.946 2.42-2.157 2.42Z" />
@@ -146,7 +146,7 @@ export default function LoginGate({ children }: { children: ReactNode }): JSX.El
           <button
             type="submit"
             disabled={signingIn || !email || !password}
-            className="mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {signingIn && (
               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />

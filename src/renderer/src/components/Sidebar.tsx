@@ -16,6 +16,7 @@ export type ViewId =
   | 'journal'
   | 'chains'
   | 'data'
+  | 'appearance'
   | 'admin'
 
 interface NavItem {
@@ -91,6 +92,19 @@ const items: NavItem[] = [
         <ellipse cx="12" cy="6" rx="7" ry="3" />
         <path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6" strokeLinecap="round" />
         <path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6" strokeLinecap="round" />
+      </svg>
+    )
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    hint: 'Themes and colours',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.6">
+        <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.3-.9-.5-1.3-.3-.4-.5-.8-.5-1.3 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-3.9-4-7.2-9-7.2Z" strokeLinejoin="round" />
+        <circle cx="7.5" cy="11" r="1" fill="currentColor" />
+        <circle cx="10" cy="7.5" r="1" fill="currentColor" />
+        <circle cx="14.5" cy="7.5" r="1" fill="currentColor" />
       </svg>
     )
   }
@@ -279,7 +293,7 @@ export default function Sidebar({
           <img
             src={logo}
             alt="HTNQ"
-            className="h-9 w-9 rounded-lg bg-white object-contain p-0.5"
+            className="h-9 w-9 rounded-lg bg-solid-white object-contain p-0.5"
           />
           <div className="leading-tight">
             <div className="text-sm font-semibold text-slate-100">HTNQ</div>

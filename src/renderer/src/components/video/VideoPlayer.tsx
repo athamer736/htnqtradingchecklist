@@ -174,7 +174,7 @@ export default function VideoPlayer({
             <button
               type="button"
               onClick={() => void exitFullscreen()}
-              className="absolute right-3 top-3 z-30 rounded-md bg-black/60 px-3 py-1.5 text-xs font-medium text-white/90 hover:bg-black/80"
+              className="absolute right-3 top-3 z-30 rounded-md bg-black/60 px-3 py-1.5 text-xs font-medium text-solid-white/90 hover:bg-black/80"
               style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: 'max(0.75rem, env(safe-area-inset-right))' }}
             >
               Exit fullscreen

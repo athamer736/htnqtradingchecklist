@@ -129,7 +129,7 @@ export default function ImageUploader({ images, onChange }: ImageUploaderProps):
               <button
                 type="button"
                 onClick={() => remove(img.id)}
-                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition group-hover:opacity-100 hover:bg-rose-600"
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-solid-white opacity-0 transition group-hover:opacity-100 hover:bg-rose-600"
                 aria-label="Remove image"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">

@@ -159,7 +159,7 @@ export default function StartView({
               onClick={() => handlePick(tf)}
               className={`btn ${
                 startTf === tf
-                  ? 'bg-accent text-white'
+                  ? 'bg-accent text-on-accent'
                   : 'border border-line bg-bg-soft text-slate-300 hover:bg-bg-hover'
               }`}
             >

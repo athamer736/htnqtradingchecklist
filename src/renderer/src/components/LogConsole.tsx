@@ -55,7 +55,7 @@ export default function LogConsole(): JSX.Element {
       </button>
 
       {open && (
-        <div className="fixed bottom-14 right-3 z-[90] flex h-[45vh] w-[min(560px,92vw)] flex-col overflow-hidden rounded-xl border border-line bg-[#0c0f16]/95 shadow-card backdrop-blur">
+        <div className="fixed bottom-14 right-3 z-[90] flex h-[45vh] w-[min(560px,92vw)] flex-col overflow-hidden rounded-xl border border-line bg-bg/95 shadow-card backdrop-blur">
           <div className="flex items-center justify-between border-b border-line px-3 py-2">
             <span className="text-xs font-semibold text-slate-200">Log console</span>
             <div className="flex items-center gap-2">

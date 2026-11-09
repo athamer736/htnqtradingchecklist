@@ -12,6 +12,7 @@ import JournalView from './views/JournalView'
 import DataView from './views/DataView'
 import ChainBuilderView, { type ChainSeed } from './views/ChainBuilderView'
 import AdminView from './views/AdminView'
+import AppearanceView from './views/AppearanceView'
 import ContentSectionView from './views/ContentSectionView'
 import StudentRecordingsView from './views/StudentRecordingsView'
 import { useTrades } from './store/useTrades'
@@ -117,6 +118,7 @@ export default function App(): JSX.Element {
           {view === 'reference' && <ReferenceView />}
           {view === 'journal' && <JournalView />}
           {view === 'data' && <DataView />}
+          {view === 'appearance' && <AppearanceView />}
           {view === 'admin' && <AdminView />}
         </div>
       </main>

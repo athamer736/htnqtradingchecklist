@@ -293,7 +293,7 @@ export default function PdfViewer({
             <button
               type="button"
               onClick={() => void exitFullscreen()}
-              className="absolute right-5 top-3 z-30 rounded-md bg-black/60 px-3 py-1.5 text-xs font-medium text-white/90 hover:bg-black/80"
+              className="absolute right-5 top-3 z-30 rounded-md bg-black/60 px-3 py-1.5 text-xs font-medium text-solid-white/90 hover:bg-black/80"
             >
               Exit fullscreen
             </button>

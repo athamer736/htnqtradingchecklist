@@ -510,7 +510,7 @@ export default function DataView(): JSX.Element {
                   <button
                     key={entry.id}
                     onClick={() => setViewing(entry)}
-                    className="animate-fadeInUp group flex flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-[#1c2333] via-[#171d29] to-[#141824] p-5 text-left shadow-[0_10px_30px_-18px_rgba(0,0,0,0.8)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-accent/60 hover:shadow-[0_16px_40px_-14px_rgba(56,130,246,0.45)] active:scale-[0.99]"
+                    className="animate-fadeInUp group flex flex-col rounded-2xl border border-white/10 bg-gradient-to-br from-surface-1 to-surface-2 p-5 text-left shadow-[0_10px_30px_-18px_rgba(0,0,0,0.8)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-accent/60 hover:shadow-[0_16px_40px_-14px_rgb(var(--c-accent)/0.45)] active:scale-[0.99]"
                   >
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-sky-300 ring-1 ring-inset ring-accent/25">

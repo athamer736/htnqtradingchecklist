@@ -17,6 +17,7 @@ import { useTrades } from '../store/useTrades'
 import { useDataCollection } from '../store/useDataCollection'
 import { logError, logInfo, logWarn } from '../lib/logger'
 import { CHAINS_STORAGE_KEY, loadChains, mergeUnsyncedChains, sanitizeChains } from '../strategy/customChains'
+import { MAX_CUSTOM_THEMES, parseThemeState, sanitizeThemeState } from '../../../shared/themes'
 
 const PAGE = 500
 const PUSH_CHUNK = 100
@@ -37,6 +38,10 @@ const VIEW_PREFS_STATE_ID = 'view-prefs'
 // The Setup page's own chains (My chains), also one app_state row.
 const CHAINS_SYNC_KEY = 'htnq-setup-chains-sync'
 const CHAINS_STATE_ID = 'setup-chains'
+// The chosen colour theme and the user's own themes, also one app_state row.
+const THEME_KEY = 'htnq-theme'
+const THEME_SYNC_KEY = 'htnq-theme-sync'
+const THEME_STATE_ID = 'theme'
 // Sync on a slow, fixed cadence to keep server load minimal. Local edits are
 // captured as "dirty" rows immediately and pushed on the next cycle.
 const POLL_MS = 5 * 60 * 1000
@@ -215,6 +220,55 @@ async function pushChains(uid: string): Promise<void> {
   writeChainsMeta({ updatedAt: meta.updatedAt, dirty: false })
 }
 
+// The theme shares the PointsMeta shape (updatedAt + dirty).
+function readThemeMeta(): PointsMeta {
+  try {
+    const r = JSON.parse(localStorage.getItem(THEME_SYNC_KEY) ?? '') as PointsMeta
+    if (r && typeof r.updatedAt === 'string') return { updatedAt: r.updatedAt, dirty: !!r.dirty }
+  } catch {
+    /* none yet */
+  }
+  return { updatedAt: '', dirty: false }
+}
+
+function writeThemeMeta(m: PointsMeta): void {
+  localStorage.setItem(THEME_SYNC_KEY, JSON.stringify(m))
+}
+
+// Called by the theme store when the choice or a custom theme changes.
+export function markThemeDirty(): void {
+  writeThemeMeta({ updatedAt: new Date().toISOString(), dirty: true })
+}
+
+async function pushTheme(uid: string): Promise<void> {
+  if (!supabase) return
+  let meta = readThemeMeta()
+  // A theme chosen before sync existed has never been uploaded: send it once.
+  if (!meta.updatedAt && localStorage.getItem(THEME_KEY)) {
+    meta = { updatedAt: new Date().toISOString(), dirty: true }
+    writeThemeMeta(meta)
+  }
+  if (!meta.dirty) return
+  const theme = JSON.stringify(parseThemeState(localStorage.getItem(THEME_KEY)))
+  const { error } = await supabase.from(SYNC_TABLE).upsert(
+    [
+      {
+        user_id: uid,
+        kind: 'app_state',
+        id: THEME_STATE_ID,
+        data: { theme },
+        updated_at: meta.updatedAt || SYNC_EPOCH,
+        deleted_at: null
+      }
+    ],
+    { onConflict: 'user_id,kind,id' }
+  )
+  if (error) {
+    logError('push theme failed:', error)
+    throw error
+  }
+  writeThemeMeta({ updatedAt: meta.updatedAt, dirty: false })
+}
 async function pushViewPrefs(uid: string): Promise<void> {
   if (!supabase) return
   const meta = readViewPrefsMeta()
@@ -244,6 +298,7 @@ async function pushAppState(uid: string): Promise<void> {
   if (!supabase) return
   await pushViewPrefs(uid)
   await pushChains(uid)
+  await pushTheme(uid)
   const meta = readPointsMeta()
   if (!meta.dirty) return
   const board = localStorage.getItem(POINTS_KEY) ?? ''
@@ -298,6 +353,33 @@ function applyAppState(id: string, data: unknown, updatedAt: string): void {
     localStorage.setItem(CHAINS_STORAGE_KEY, JSON.stringify(merged))
     writeChainsMeta({ updatedAt, dirty: neverSynced && merged.length > incoming.length })
     window.dispatchEvent(new Event('htnq-chains-remote'))
+    return
+  }
+  if (id === THEME_STATE_ID) {
+    const local = readThemeMeta()
+    if (local.updatedAt && local.updatedAt >= updatedAt) return
+    const raw = (data as { theme?: string } | null)?.theme
+    if (typeof raw !== 'string') return
+    let incoming
+    try {
+      incoming = sanitizeThemeState(JSON.parse(raw))
+    } catch {
+      return
+    }
+    // A device whose themes never synced keeps its own custom themes alongside the account's.
+    const neverSynced = !local.updatedAt || local.dirty
+    let merged = incoming
+    if (neverSynced) {
+      const mine = parseThemeState(localStorage.getItem(THEME_KEY)).custom
+      const ids = new Set(incoming.custom.map((c) => c.id))
+      merged = sanitizeThemeState({
+        activeId: incoming.activeId,
+        custom: [...incoming.custom, ...mine.filter((c) => !ids.has(c.id))].slice(0, MAX_CUSTOM_THEMES)
+      })
+    }
+    localStorage.setItem(THEME_KEY, JSON.stringify(merged))
+    writeThemeMeta({ updatedAt, dirty: neverSynced && merged.custom.length > incoming.custom.length })
+    window.dispatchEvent(new Event('htnq-theme-remote'))
     return
   }
   if (id !== POINTS_STATE_ID) return

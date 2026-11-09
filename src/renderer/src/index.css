@@ -3,8 +3,58 @@
 @tailwind utilities;
 
 @layer base {
+  /* Midnight, the default theme. useTheme rewrites these when another theme is chosen. */
   :root {
     color-scheme: dark;
+    --c-bg: 11 13 18;
+    --c-soft: 17 20 27;
+    --c-card: 22 26 35;
+    --c-hover: 28 33 44;
+    --c-line: 37 42 54;
+    --c-accent: 59 130 246;
+    --c-accent-soft: 29 78 216;
+    --c-teal: 20 184 166;
+    --c-muted: 139 148 167;
+    --c-fg: 241 245 249;
+    --c-on-accent: 255 255 255;
+    --c-surface-1: 28 35 51;
+    --c-surface-2: 20 24 36;
+    --c-white: 255 255 255;
+    --c-slate-50: 241 245 249;
+    --c-slate-100: 241 245 249;
+    --c-slate-200: 213 217 221;
+    --c-slate-300: 186 189 194;
+    --c-slate-400: 158 161 166;
+    --c-slate-500: 131 134 138;
+    --c-slate-600: 103 106 110;
+    --c-slate-700: 75 78 83;
+    --c-slate-800: 48 50 55;
+    --c-slate-900: 20 22 27;
+    --c-rose-100: 255 228 230;
+    --c-rose-200: 254 205 211;
+    --c-rose-300: 253 164 175;
+    --c-rose-400: 251 113 133;
+    --c-amber-100: 254 243 199;
+    --c-amber-200: 253 230 138;
+    --c-amber-300: 252 211 77;
+    --c-amber-400: 251 191 36;
+    --c-emerald-100: 209 250 229;
+    --c-emerald-200: 167 243 208;
+    --c-emerald-300: 110 231 183;
+    --c-emerald-400: 52 211 153;
+    --c-sky-100: 224 242 254;
+    --c-sky-200: 186 230 253;
+    --c-sky-300: 125 211 252;
+    --c-sky-400: 56 189 248;
+    --c-violet-100: 237 233 254;
+    --c-violet-200: 221 214 254;
+    --c-violet-300: 196 181 253;
+    --c-violet-400: 167 139 250;
+  }
+
+  /* Hidden until the saved theme has been applied, so there is no flash of the wrong colours. */
+  html:not([data-theme-ready]) body {
+    opacity: 0;
   }
 
   html,
@@ -15,6 +65,7 @@
 
   body {
     @apply bg-bg text-slate-200 font-sans antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
     margin: 0;
     overflow: hidden;
   }
@@ -40,7 +91,7 @@
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
   }
   .btn-primary {
-    @apply btn bg-accent hover:bg-accent-soft text-white;
+    @apply btn bg-accent hover:bg-accent-soft text-on-accent;
   }
   .btn-ghost {
     @apply btn border border-line bg-bg-soft hover:bg-bg-hover text-slate-200;

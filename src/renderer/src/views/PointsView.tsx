@@ -54,7 +54,7 @@ function AddConfluence({ onAdd }: { onAdd: (type: ConfluenceType, tf: string) =>
             key={t}
             onClick={() => handleType(t)}
             className={`px-3 py-2 text-xs font-semibold transition-colors ${
-              type === t ? 'bg-accent text-white' : 'bg-bg-soft text-muted hover:bg-bg-hover'
+              type === t ? 'bg-accent text-on-accent' : 'bg-bg-soft text-muted hover:bg-bg-hover'
             }`}
           >
             {t}

@@ -116,7 +116,7 @@ export default function EntryViewer({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-6">
       <div className="absolute inset-0 animate-fadeIn bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-5xl animate-scaleIn flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#1a2130] to-[#12151d] shadow-[0_30px_80px_-30px_rgba(0,0,0,0.85)]">
+      <div className="relative z-10 flex max-h-[92vh] w-full max-w-5xl animate-scaleIn flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-surface-1 to-surface-2 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.85)]">
         <header className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-6 py-4">
           <div>
             <h2 className="text-base font-semibold text-slate-50">Entry details</h2>

@@ -74,7 +74,7 @@ export default function SetupBlock({
   const bias = pointsBiasOf(trade)
   const shots = setupShots(trade)
   return (
-    <div className="mb-4 rounded-xl border border-white/10 bg-gradient-to-br from-[#1c2333] via-[#171d29] to-[#141824] p-4">
+    <div className="mb-4 rounded-xl border border-white/10 bg-gradient-to-br from-surface-1 to-surface-2 p-4">
       <div className="flex flex-wrap items-center gap-1.5">
         {chain.map((step, i) => (
           <span key={`${step}-${i}`} className="flex items-center gap-1.5">

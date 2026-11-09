@@ -1,6 +1,6 @@
 import { smtPathReference, tpdPathReference, type ReferenceRow } from '../strategy/engine'
 
-function Table({ rows, accent }: { rows: ReferenceRow[]; accent: string }): JSX.Element {
+function Table({ rows, accent }: { rows: ReferenceRow[]; accent: '--c-teal' | '--c-accent' }): JSX.Element {
   return (
     <div className="card overflow-hidden">
       <table className="w-full text-sm">
@@ -17,7 +17,7 @@ function Table({ rows, accent }: { rows: ReferenceRow[]; accent: string }): JSX.
             <tr key={r.fvg} className="border-b border-line/60 last:border-0">
               <td className="px-4 py-3 font-medium text-slate-100">{r.fvg}</td>
               <td className="px-4 py-3">
-                <span className="chip" style={{ color: accent, backgroundColor: `${accent}1a` }}>
+                <span className="chip" style={{ color: `rgb(var(${accent}))`, backgroundColor: `rgb(var(${accent}) / 0.1)` }}>
                   {r.confirmation}
                 </span>
               </td>
@@ -49,7 +49,7 @@ export default function ReferenceView(): JSX.Element {
           <span className="h-2 w-2 rounded-full bg-teal" />
           <h2 className="text-sm font-semibold text-slate-200">Confirmed by SMT (FVG -&gt; SMT)</h2>
         </div>
-        <Table rows={smtPathReference()} accent="#14b8a6" />
+        <Table rows={smtPathReference()} accent="--c-teal" />
       </section>
 
       <section className="mb-7">
@@ -57,7 +57,7 @@ export default function ReferenceView(): JSX.Element {
           <span className="h-2 w-2 rounded-full bg-accent" />
           <h2 className="text-sm font-semibold text-slate-200">Confirmed by TPD (FVG -&gt; TPD)</h2>
         </div>
-        <Table rows={tpdPathReference()} accent="#3b82f6" />
+        <Table rows={tpdPathReference()} accent="--c-accent" />
       </section>
 
       <p className="text-xs leading-relaxed text-muted/80">

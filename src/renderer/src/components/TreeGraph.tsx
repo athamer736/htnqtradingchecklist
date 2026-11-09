@@ -16,14 +16,13 @@ import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
 import { walk, type TreeNode } from '../strategy/engine'
 import TreeNodeCard, { type TreeCardData } from './TreeNodeCard'
+import { useTheme } from '../store/useTheme'
 
 const NODE_W = 134
 const NODE_H = 56
 
 const nodeTypes: NodeTypes = { card: TreeNodeCard }
 
-// Single unified edge color (no reversal/continuation distinction).
-const EDGE_COLOR = '#3b82f6'
 
 function ZoomControls(): JSX.Element {
   const { zoomIn, zoomOut, fitView } = useReactFlow()
@@ -58,7 +57,8 @@ function ZoomControls(): JSX.Element {
   )
 }
 
-function layout(root: TreeNode, focusedId: string | null): { nodes: Node[]; edges: Edge[] } {
+// Single unified edge colour (no reversal/continuation distinction): the theme's accent.
+function layout(root: TreeNode, focusedId: string | null, edgeColor: string): { nodes: Node[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: 'TB', nodesep: 36, ranksep: 64, marginx: 24, marginy: 24 })
@@ -76,8 +76,8 @@ function layout(root: TreeNode, focusedId: string | null): { nodes: Node[]; edge
         target: n.id,
         type: 'smoothstep',
         animated: false,
-        style: { stroke: EDGE_COLOR, strokeWidth: 1.6 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: EDGE_COLOR, width: 16, height: 16 }
+        style: { stroke: edgeColor, strokeWidth: 1.6 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor, width: 16, height: 16 }
       })
     }
   })
@@ -115,7 +115,9 @@ export default function TreeGraph({
   focusedId: string | null
   onNodeClick: (id: string) => void
 }): JSX.Element {
-  const computed = useMemo(() => layout(root, focusedId), [root, focusedId])
+  const colors = useTheme((s) => s.theme.colors)
+  const mode = useTheme((s) => s.theme.mode)
+  const computed = useMemo(() => layout(root, focusedId, colors.accent), [root, focusedId, colors.accent])
   const [nodes, setNodes, onNodesChange] = useNodesState(computed.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(computed.edges)
 
@@ -140,9 +142,10 @@ export default function TreeGraph({
       nodesDraggable={false}
       nodesConnectable={false}
       panOnScroll
+      colorMode={mode}
       className="bg-bg"
     >
-      <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1c212c" />
+      <Background variant={BackgroundVariant.Dots} gap={22} size={1} color={colors.hover} />
       <ZoomControls />
     </ReactFlow>
   )

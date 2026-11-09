@@ -385,7 +385,7 @@ export default function EntryTable<R>({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-white/10 bg-gradient-to-b from-[#161c27] to-[#11151e] shadow-card">
+      <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-white/10 bg-gradient-to-b from-surface-1 to-surface-2 shadow-card">
         <table className="border-collapse text-sm" style={{ tableLayout: 'fixed', width: Math.max(totalWidth, 1) }}>
           <colgroup>
             {visible.map((c) => (
@@ -406,9 +406,9 @@ export default function EntryTable<R>({
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => dropOn(c.id)}
                     onClick={() => col.sort && onConfig({ ...config, sort: nextSort(config.sort, c.id) })}
-                    className={`sticky top-0 border-b-2 border-r border-b-accent/30 border-r-white/5 bg-[#1a2130] px-3.5 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-300 transition-colors ${
+                    className={`sticky top-0 border-b-2 border-r border-b-accent/30 border-r-white/5 bg-surface-1 px-3.5 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-300 transition-colors ${
                       idx === 0 ? 'left-0 z-20' : 'z-10'
-                    } ${col.sort ? 'cursor-pointer hover:bg-[#202a3d] hover:text-white' : ''} ${dragId === c.id ? 'opacity-50' : ''}`}
+                    } ${col.sort ? 'cursor-pointer hover:bg-bg-hover hover:text-white' : ''} ${dragId === c.id ? 'opacity-50' : ''}`}
                   >
                     <span className="flex items-center gap-1.5">
                       <TypeIcon type={col.type} />
@@ -442,7 +442,7 @@ export default function EntryTable<R>({
                       key={c.id}
                       className={`overflow-hidden border-b border-r border-white/5 px-3.5 py-3 align-middle transition-colors duration-200 ${
                         idx === 0
-                          ? 'sticky left-0 z-[5] bg-[#141923] font-semibold text-white shadow-[inset_0_0_0_0_#3b82f6] group-hover:bg-[#18233a] group-hover:shadow-[inset_3px_0_0_0_#3b82f6]'
+                          ? 'sticky left-0 z-[5] bg-surface-2 font-semibold text-white shadow-[inset_0_0_0_0_rgb(var(--c-accent))] group-hover:bg-bg-hover group-hover:shadow-[inset_3px_0_0_0_rgb(var(--c-accent))]'
                           : ''
                       }`}
                     >

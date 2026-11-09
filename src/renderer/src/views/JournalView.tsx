@@ -1040,7 +1040,7 @@ export default function JournalView(): JSX.Element {
             aria-label="Trade details"
             className="relative z-10 flex max-h-full w-full max-w-3xl animate-scaleIn flex-col overflow-hidden rounded-2xl border border-white/10 bg-bg-soft shadow-card"
           >
-            <div className="flex flex-wrap items-center gap-3 border-b border-line bg-gradient-to-r from-[#1a2130] to-bg-soft px-5 py-4">
+            <div className="flex flex-wrap items-center gap-3 border-b border-line bg-gradient-to-r from-surface-1 to-bg-soft px-5 py-4">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-bold text-white">

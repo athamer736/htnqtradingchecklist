@@ -1,24 +1,48 @@
 /** @type {import('tailwindcss').Config} */
+// Colours come from CSS variables (set by the active theme, see src/shared/themes.ts) so a
+// theme can restyle the whole app. Written as "r g b" channels so opacity classes like
+// bg-accent/30 keep working.
+const v = (name) => `rgb(var(${name}) / <alpha-value>)`
+
+const slate = {}
+for (const step of [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]) slate[step] = v(`--c-slate-${step}`)
+
+const hues = {}
+for (const hue of ['rose', 'amber', 'emerald', 'sky', 'violet']) {
+  hues[hue] = {}
+  for (const shade of [100, 200, 300, 400]) hues[hue][shade] = v(`--c-${hue}-${shade}`)
+}
+
 export default {
   content: ['./src/renderer/index.html', './src/renderer/src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
         bg: {
-          DEFAULT: '#0b0d12',
-          soft: '#11141b',
-          card: '#161a23',
-          hover: '#1c212c'
+          DEFAULT: v('--c-bg'),
+          soft: v('--c-soft'),
+          card: v('--c-card'),
+          hover: v('--c-hover')
         },
-        line: '#252a36',
+        line: v('--c-line'),
         accent: {
-          DEFAULT: '#3b82f6',
-          soft: '#1d4ed8'
+          DEFAULT: v('--c-accent'),
+          soft: v('--c-accent-soft')
         },
-        teal: '#14b8a6',
-        muted: '#8b94a7'
-      },
-      fontFamily: {
+        teal: v('--c-teal'),
+        muted: v('--c-muted'),
+        fg: v('--c-fg'),
+        'on-accent': v('--c-on-accent'),
+        surface: {
+          1: v('--c-surface-1'),
+          2: v('--c-surface-2')
+        },
+        white: v('--c-white'),
+        // Always white, for text on photos, video and dark overlays that stay dark in every theme.
+        'solid-white': '#ffffff',
+        slate,
+        ...hues
+      },      fontFamily: {
         sans: ['Inter', 'Segoe UI', 'system-ui', 'sans-serif']
       },
       boxShadow: {

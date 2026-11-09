@@ -49,12 +49,12 @@ export default function WatermarkOverlay({
     >
       {/* Scales with the player (container query units). Phones (under 640px wide) use 50% of the original size, desktop and web use 85%. */}
       <div
-        className="rounded bg-black/35 px-[0.6em] py-[0.3em] text-[length:clamp(4px,0.75cqw,11px)] leading-snug text-white/80 shadow-sm backdrop-blur-[1px] sm:text-[length:clamp(6.8px,1.275cqw,18.7px)]"
+        className="rounded bg-black/35 px-[0.6em] py-[0.3em] text-[length:clamp(4px,0.75cqw,11px)] leading-snug text-solid-white/80 shadow-sm backdrop-blur-[1px] sm:text-[length:clamp(6.8px,1.275cqw,18.7px)]"
         style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
       >
         {nameLine && <div className="break-words font-semibold tracking-wide">{nameLine}</div>}
         <div className="break-words font-medium tracking-wide">{line}</div>
-        {sub && <div className="mt-0.5 text-[0.8em] text-white/55">{sub}</div>}
+        {sub && <div className="mt-0.5 text-[0.8em] text-solid-white/55">{sub}</div>}
       </div>
     </div>
   )
