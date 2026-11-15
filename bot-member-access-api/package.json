@@ -1,0 +1,20 @@
+{
+  "name": "h4sth2-member-access-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Drop-in POST /api/v1/member-access endpoint for the H4STH2 Mentorship Discord bot",
+  "type": "module",
+  "main": "./src/index.ts",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
