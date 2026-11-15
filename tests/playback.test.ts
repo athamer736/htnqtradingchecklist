@@ -94,6 +94,8 @@ function deps(over: Partial<PlaybackDeps> = {}): TestDeps {
     },
     readStoredName: async () => null,
     checkHold: async () => false,
+    readAppOnly: async () => false,
+    recentOpens: async () => [],
     checkNda: async () => ({ allow: true, reason: 'not_enforced', signed: false }),
     claimStream: async () => 'ok',
     signEmbed: async (id, exp) => `https://player.mediadelivery.net/embed/1/${id}?token=t&expires=${exp}`,
@@ -601,5 +603,52 @@ describe('viewing pause and one video at a time', () => {
     })
     assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), d)).status, 200)
     assert.equal(claims, 0)
+  })
+})
+
+describe('desktop app only, and the hourly limit', () => {
+  const opened = (n: number) => [...Array(n)].map((_, i) => ({ video_id: `v${i}`, recording_id: null, document_id: null }))
+
+  it('with app-only on, the website is refused for members (audited, nothing signed); the app is not', async () => {
+    let signed = 0
+    const d = deps({
+      readAppOnly: async () => true,
+      signEmbed: async () => {
+        signed++
+        return 'https://iframe.mediadelivery.net/embed/1/x?token=t&expires=1'
+      }
+    })
+    const web = await runPlayback({ kind: 'video', id: VIDEO_ID, client: 'web' }, student(R.level3), d)
+    assert.equal(web.status, 403)
+    assert.equal(web.body.reasonCode, 'app_only')
+    assert.equal(signed, 0)
+    assert.equal(d.audits.at(-1)?.reason_code, 'app_only')
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID, client: 'desktop' }, student(R.level3), d)).status, 200)
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID, client: 'web' }, mentor(), d)).status, 403, 'mentors too')
+  })
+
+  it('owners and admins keep the website, and a setting that cannot be read leaves it open', async () => {
+    const d = deps({ readAppOnly: async () => true })
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID, client: 'web' }, auth([R.owner], OTHER_ID), d)).status, 200)
+    const broken = deps({ readAppOnly: async () => Promise.reject(new Error('column does not exist')) })
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID, client: 'web' }, student(R.level3), broken)).status, 200)
+  })
+
+  it('a member past 40 different items this hour is refused a new one, but renewals and re-opens carry on', async () => {
+    const d = deps({ recentOpens: async () => opened(40) })
+    const fresh = await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), d)
+    assert.equal(fresh.status, 429)
+    assert.equal(fresh.body.reasonCode, 'open_limit')
+    assert.equal(d.audits.at(-1)?.reason_code, 'open_limit')
+    const renewal = await runPlayback({ kind: 'video', id: VIDEO_ID, streamId: 'ab'.repeat(8), renew: true }, student(R.level3), d)
+    assert.equal(renewal.status, 200)
+    const again = deps({ recentOpens: async () => [...opened(40), { video_id: VIDEO_ID, recording_id: null, document_id: null }] })
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), again)).status, 200)
+  })
+
+  it('staff have no hourly limit, and an unreadable history never blocks', async () => {
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, mentor(), deps({ recentOpens: async () => opened(80) }))).status, 200)
+    const broken = deps({ recentOpens: async () => null })
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), broken)).status, 200)
   })
 })

@@ -28,7 +28,14 @@ import {
   playbackTick,
   type PlaybackGrant
 } from '../../../shared/playbackSession'
-import { HEARTBEAT_SECONDS, newStreamId, parseHeartbeat } from '../../../shared/viewerSecurity'
+import {
+  HEARTBEAT_SECONDS,
+  HEARTBEAT_TIMEOUT_MS,
+  newStreamId,
+  parseHeartbeat,
+  type Heartbeat
+} from '../../../shared/viewerSecurity'
+import { settleTamper, tamperForHeartbeat } from '../lib/tamperQueue'
 
 // Everything here is in memory only. Watermark legal names in particular must
 // never be written to localStorage.
@@ -252,6 +259,27 @@ function playerStreamId(): string {
 /** Frees the account's one video slot when this window's player closes (best effort). */
 function releaseStream(): void {
   if (windowStreamId) void invoke('playback-heartbeat', { kind: 'video', streamId: windowStreamId, end: true })
+}
+
+/**
+ * One check-in (playback-heartbeat) from an open video or document. Gives up after 10 s so a stuck
+ * call never holds up the next renewal, and carries the oldest tamper report that hasn't reached
+ * the server yet.
+ */
+export async function checkIn(body: Record<string, unknown>): Promise<Heartbeat | null> {
+  const queued = tamperForHeartbeat()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), HEARTBEAT_TIMEOUT_MS)
+  })
+  const answer = await Promise.race([
+    invoke('playback-heartbeat', queued ? { ...body, tamper: queued.body } : body),
+    timeout
+  ])
+  clearTimeout(timer)
+  const beat = parseHeartbeat(answer)
+  if (queued && beat?.tamper === 'done') settleTamper(queued.report)
+  return beat
 }
 
 function closedBy(reasonCode: 'stream_elsewhere' | 'viewing_held'): PlaybackDenied {
@@ -519,7 +547,7 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
     const { playing, playTarget } = get()
     if (!playing || !playTarget) return
     set({ beating: true })
-    const beat = parseHeartbeat(await invoke('playback-heartbeat', { kind: 'video', streamId: playerStreamId() }))
+    const beat = await checkIn({ kind: 'video', streamId: playerStreamId() })
     if (get().playTarget !== playTarget || !get().playing) return
     if (beat?.state === 'elsewhere' || beat?.state === 'held') {
       set({ ...CLOSED, playError: closedBy(beat.state === 'held' ? 'viewing_held' : 'stream_elsewhere') })
@@ -539,8 +567,15 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
       set({ ...CLOSED, playError: ACCESS_EXPIRED })
       return
     }
+    // The check-in always goes first (the server flags a renewal from a player whose check-ins
+    // stopped). Throttled background tabs may tick only once a minute, so a due renewal follows
+    // straight after the check-in rather than waiting for the next tick.
+    if (beating) return
+    if (now >= nextBeatAt) {
+      void get().heartbeat().then(() => get().tick())
+      return
+    }
     if (action === 'renew') void get().renew()
-    if (!beating && now >= nextBeatAt) void get().heartbeat()
   },
 
   stop: () => {

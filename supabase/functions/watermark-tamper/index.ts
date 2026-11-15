@@ -8,6 +8,9 @@
 // When the owner set an automatic-hold threshold (Admin -> Security), reaching it pauses all of
 // the member's viewing until an owner or admin reauthorises them. Owners and admins are never held.
 //
+// If this call doesn't get through, the app keeps the report and sends it with its next
+// check-in (playback-heartbeat), which records it the same way (recordTamper).
+//
 // Reports come from code running on the viewer's device, so they are evidence to look into,
 // not proof on their own. The Admin panel reads them through viewer-security.
 
@@ -17,9 +20,7 @@ import { handleOptions, json, readJsonBody } from '../_shared/http.ts'
 import { deny } from '../_shared/messages.ts'
 import { createWindowLimiter } from '../_shared/rateLimit.ts'
 import { parseTamperRequest } from '../_shared/tamper.ts'
-import { alertDedupKey } from '../_shared/viewerAlerts.ts'
-import { shouldAutoHold } from '../_shared/viewerSecurity.ts'
-import { insertAlert, placeHold, readAutoHoldAfter } from '../_shared/viewerSecurityStore.ts'
+import { recordTamper } from '../_shared/viewerSecurityStore.ts'
 
 const reports = createWindowLimiter(20, 10 * 60_000)
 
@@ -36,55 +37,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!body.ok) return deny('invalid_request')
   const parsed = parseTamperRequest(body.value)
   if (!parsed.ok) return deny('invalid_request')
-  const report = parsed.value
 
   const auth = await authorize(req, ctx.authzDeps)
   if (!auth.ok) return deny(auth.reasonCode)
   if (!reports.allow(auth.userId)) return json({ ok: true, recorded: false })
 
-  const { data: grant, error: grantError } = await admin
-    .from('playback_audit')
-    .select('video_id, recording_id, document_id')
-    .eq('session_ref', report.sessionRef)
-    .eq('user_id', auth.userId)
-    .eq('outcome', 'issued')
-    .limit(1)
-    .maybeSingle()
-  if (grantError) return deny('upstream_failed')
-  if (!grant) return deny('invalid_request')
-
-  const recorded = await insertAlert(admin, {
-    userId: auth.userId,
-    discordId: auth.discordId,
-    kind: 'tamper',
-    dedupKey: alertDedupKey({ kind: 'tamper', sessionRef: report.sessionRef, reason: report.reason }),
-    sessionRef: report.sessionRef,
-    reason: report.reason,
-    platform: report.platform,
-    videoId: grant.video_id ?? null,
-    recordingId: grant.recording_id ?? null,
-    documentId: grant.document_id ?? null
-  })
-
-  let held = false
-  if (recorded && !auth.caps.isManager) {
-    const threshold = await readAutoHoldAfter(admin)
-    if (threshold !== null) {
-      const { count } = await admin
-        .from('viewer_alerts')
-        .select('id', { count: 'exact', head: true })
-        .eq('discord_id', auth.discordId)
-        .eq('kind', 'tamper')
-      if (shouldAutoHold(threshold, count ?? 0, auth.caps.isManager)) {
-        held = await placeHold(admin, {
-          discordId: auth.discordId,
-          userId: auth.userId,
-          reason: 'auto_tamper',
-          note: `Paused automatically after ${count} watermark tamper flags`,
-          heldBy: null
-        })
-      }
-    }
-  }
-  return json({ ok: true, recorded, held })
+  const result = await recordTamper(
+    admin,
+    { userId: auth.userId, discordId: auth.discordId, isManager: auth.caps.isManager },
+    parsed.value
+  )
+  if (result.outcome === 'failed') return deny('upstream_failed')
+  if (result.outcome === 'no_grant') return deny('invalid_request')
+  return json({ ok: true, recorded: result.outcome === 'recorded', held: result.held })
 })

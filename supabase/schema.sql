@@ -938,14 +938,15 @@ alter table public.content_audit
 
 -- === Viewer security (also supabase/migrations/20261115_viewer_security.sql) =============
 -- Flags (viewer_alerts), paused viewing (viewing_holds), one video at a time (active_streams)
--- and the auto-pause threshold. Service-role only.
+-- and the owner's auto-pause and app-only settings. Service-role only.
 
 create table if not exists public.viewer_alerts (
   id            uuid        primary key default gen_random_uuid(),
   user_id       uuid        not null,
   discord_id    text        not null check (discord_id ~ '^[0-9]{5,32}$'),
   kind          text        not null
-                  check (kind in ('tamper', 'second_stream', 'many_opens', 'leak_traced')),
+                  check (kind in ('tamper', 'second_stream', 'many_opens', 'leak_traced',
+                                  'quiet_page')),
   dedup_key     text        not null unique check (char_length(dedup_key) <= 200),
   session_ref   text        check (session_ref ~ '^[A-Za-z0-9]{8,64}$'),
   reason        text
@@ -959,6 +960,11 @@ create table if not exists public.viewer_alerts (
   created_at    timestamptz not null default now(),
   check ((kind = 'tamper') = (reason is not null))
 );
+
+alter table public.viewer_alerts drop constraint if exists viewer_alerts_kind_check;
+alter table public.viewer_alerts
+  add constraint viewer_alerts_kind_check
+  check (kind in ('tamper', 'second_stream', 'many_opens', 'leak_traced', 'quiet_page'));
 
 create index if not exists viewer_alerts_member_idx
   on public.viewer_alerts (discord_id, created_at desc);
@@ -997,7 +1003,8 @@ revoke all on public.active_streams from anon, authenticated;
 alter table public.mentorship_settings
   add column if not exists auto_hold_after_flags smallint
     check (auto_hold_after_flags between 1 and 20),
-  add column if not exists auto_hold_set_by text;
+  add column if not exists auto_hold_set_by text,
+  add column if not exists app_only_viewing boolean not null default false;
 
 -- Audit: pausing and reauthorising members, the auto-pause setting and leak traces (ids only).
 alter table public.content_audit drop constraint if exists content_audit_action_check;

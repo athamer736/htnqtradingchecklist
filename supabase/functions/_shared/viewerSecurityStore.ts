@@ -5,7 +5,7 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import type { StreamClaim } from './playback.ts'
 import { decideStream, type ActiveStream, type StreamDecision } from './streams.ts'
-import type { TamperReason, ViewerPlatform } from './tamper.ts'
+import type { TamperReason, TamperReport, ViewerPlatform } from './tamper.ts'
 import {
   alertDedupKey,
   alertItemIds,
@@ -16,7 +16,7 @@ import {
   type AlertRow,
   type AlertTitles
 } from './viewerAlerts.ts'
-import type { HoldReason, ViewingHold } from './viewerSecurity.ts'
+import { shouldAutoHold, type HoldReason, type ViewingHold } from './viewerSecurity.ts'
 
 // --- Alerts ---------------------------------------------------------------------------------
 
@@ -36,6 +36,10 @@ export interface NewAlert {
 
 /** Records a flag once (by its dedup key). Resolves true only when a new row was written. */
 export async function insertAlert(admin: SupabaseClient, a: NewAlert): Promise<boolean> {
+  return (await writeAlert(admin, a)) === 'new'
+}
+
+async function writeAlert(admin: SupabaseClient, a: NewAlert): Promise<'new' | 'duplicate' | 'failed'> {
   try {
     const { data, error } = await admin
       .from('viewer_alerts')
@@ -56,10 +60,76 @@ export async function insertAlert(admin: SupabaseClient, a: NewAlert): Promise<b
         { onConflict: 'dedup_key', ignoreDuplicates: true }
       )
       .select('id')
-    return !error && Array.isArray(data) && data.length > 0
+    if (error || !Array.isArray(data)) return 'failed'
+    return data.length > 0 ? 'new' : 'duplicate'
   } catch {
-    return false
+    return 'failed'
   }
+}
+
+/**
+ * A watermark tamper report from the signed-in member's own player (sent straight to
+ * watermark-tamper, or carried by a later heartbeat when that call didn't get through). The item
+ * comes from the member's own grant for that session, so a report can only be about their own
+ * viewing. One flag per session and reason; reaching the owner's threshold pauses their viewing
+ * (owners and admins are never paused).
+ *
+ *   recorded / duplicate  done (the client can forget the report)
+ *   no_grant              the session isn't one of this member's grants: nothing to record
+ *   failed                couldn't be written: the client keeps it and tries again later
+ */
+export async function recordTamper(
+  admin: SupabaseClient,
+  viewer: { userId: string; discordId: string; isManager: boolean },
+  report: TamperReport
+): Promise<{ outcome: 'recorded' | 'duplicate' | 'no_grant' | 'failed'; held: boolean }> {
+  const { data: grant, error } = await admin
+    .from('playback_audit')
+    .select('video_id, recording_id, document_id')
+    .eq('session_ref', report.sessionRef)
+    .eq('user_id', viewer.userId)
+    .eq('outcome', 'issued')
+    .limit(1)
+    .maybeSingle()
+  if (error) return { outcome: 'failed', held: false }
+  if (!grant) return { outcome: 'no_grant', held: false }
+
+  const written = await writeAlert(admin, {
+    userId: viewer.userId,
+    discordId: viewer.discordId,
+    kind: 'tamper',
+    dedupKey: alertDedupKey({ kind: 'tamper', sessionRef: report.sessionRef, reason: report.reason }),
+    sessionRef: report.sessionRef,
+    reason: report.reason,
+    platform: report.platform,
+    videoId: grant.video_id ?? null,
+    recordingId: grant.recording_id ?? null,
+    documentId: grant.document_id ?? null
+  })
+  if (written === 'failed') return { outcome: 'failed', held: false }
+  if (written === 'duplicate' || viewer.isManager) {
+    return { outcome: written === 'new' ? 'recorded' : 'duplicate', held: false }
+  }
+
+  let held = false
+  const threshold = await readAutoHoldAfter(admin)
+  if (threshold !== null) {
+    const { count } = await admin
+      .from('viewer_alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('discord_id', viewer.discordId)
+      .eq('kind', 'tamper')
+    if (shouldAutoHold(threshold, count ?? 0, viewer.isManager)) {
+      held = await placeHold(admin, {
+        discordId: viewer.discordId,
+        userId: viewer.userId,
+        reason: 'auto_tamper',
+        note: `Paused automatically after ${count} watermark tamper flags`,
+        heldBy: null
+      })
+    }
+  }
+  return { outcome: 'recorded', held }
 }
 
 async function titlesFor(
@@ -90,6 +160,20 @@ export async function loadAlertTitles(
   return { videos, recordings, documents }
 }
 
+type GrantItems = Pick<AlertRow, 'video_id' | 'recording_id' | 'document_id'>
+
+/** The items of this member's grants within the last hour, or null when they can't be read. */
+export async function readRecentOpens(admin: SupabaseClient, userId: string, now = Date.now()): Promise<GrantItems[] | null> {
+  const { data, error } = await admin
+    .from('playback_audit')
+    .select('video_id, recording_id, document_id')
+    .eq('user_id', userId)
+    .eq('outcome', 'issued')
+    .gte('created_at', new Date(now - OPEN_BURST_WINDOW_MS).toISOString())
+    .limit(2000)
+  return error || !Array.isArray(data) ? null : (data as GrantItems[])
+}
+
 /**
  * After a fresh open: flags the member when they opened unusually many different items within
  * the last hour (at most one flag per hour). Never blocks the open.
@@ -100,14 +184,8 @@ export async function checkOpenBurst(
   now = Date.now()
 ): Promise<void> {
   try {
-    const { data, error } = await admin
-      .from('playback_audit')
-      .select('video_id, recording_id, document_id')
-      .eq('user_id', viewer.userId)
-      .eq('outcome', 'issued')
-      .gte('created_at', new Date(now - OPEN_BURST_WINDOW_MS).toISOString())
-      .limit(2000)
-    if (error || !Array.isArray(data)) return
+    const data = await readRecentOpens(admin, viewer.userId, now)
+    if (!data) return
     const count = distinctItems(data)
     if (count < OPEN_BURST_LIMIT) return
     await insertAlert(admin, {
@@ -179,11 +257,23 @@ export async function readAutoHoldAfter(admin: SupabaseClient): Promise<number |
   return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? n : null
 }
 
-export async function saveAutoHoldAfter(admin: SupabaseClient, n: number | null, actorDiscordId: string): Promise<boolean> {
-  const { error } = await admin.from('mentorship_settings').upsert(
-    { id: 1, auto_hold_after_flags: n, auto_hold_set_by: actorDiscordId, updated_at: new Date().toISOString() },
-    { onConflict: 'id' }
-  )
+/** Whether the owner limited viewing to the desktop app. Throws on a failed read (the gate counts it as off). */
+export async function readAppOnly(admin: SupabaseClient): Promise<boolean> {
+  const { data, error } = await admin.from('mentorship_settings').select('app_only_viewing').eq('id', 1).maybeSingle()
+  if (error) throw new Error('settings-read-failed')
+  return (data as { app_only_viewing?: unknown } | null)?.app_only_viewing === true
+}
+
+/** Saves whichever of the two settings the request named. */
+export async function saveViewerSettings(
+  admin: SupabaseClient,
+  change: { autoHoldAfter?: number | null; appOnly?: boolean },
+  actorDiscordId: string
+): Promise<boolean> {
+  const row: Record<string, unknown> = { id: 1, auto_hold_set_by: actorDiscordId, updated_at: new Date().toISOString() }
+  if (change.autoHoldAfter !== undefined) row.auto_hold_after_flags = change.autoHoldAfter
+  if (change.appOnly !== undefined) row.app_only_viewing = change.appOnly
+  const { error } = await admin.from('mentorship_settings').upsert(row, { onConflict: 'id' })
   return !error
 }
 
@@ -264,6 +354,16 @@ export function streamClaimer(admin: SupabaseClient): (claim: StreamClaim) => Pr
         discordId: c.discordId,
         kind: 'second_stream',
         dedupKey: alertDedupKey({ kind: 'second_stream', sessionRef: c.sessionRef }),
+        sessionRef: c.sessionRef,
+        ...item
+      })
+    }
+    if (decision.action === 'refresh' && decision.quiet && !c.isNewPlay) {
+      await insertAlert(admin, {
+        userId: c.userId,
+        discordId: c.discordId,
+        kind: 'quiet_page',
+        dedupKey: alertDedupKey({ kind: 'quiet_page', streamId: c.streamId, at: now }),
         sessionRef: c.sessionRef,
         ...item
       })

@@ -15,7 +15,8 @@
 // (service role) reads it. If the stamp cannot be applied the request fails; the unstamped file is
 // never returned.
 //
-// Body: { documentId, mode? }
+// Body: { documentId, mode? }. Website or desktop app is read from the Origin header (the owner
+// can limit viewing to the app), never from the body.
 //
 // Required secrets: DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, MENTORSHIP_API_BASE_URL, MENTORSHIP_API_TOKEN
 
@@ -29,6 +30,7 @@ import { deny } from '../_shared/messages.ts'
 import { stampPdf } from '../_shared/pdfStamp.ts'
 import { createWindowLimiter } from '../_shared/rateLimit.ts'
 import { getTab } from '../_shared/tabStore.ts'
+import { viewerClient } from '../_shared/viewerGate.ts'
 import { checkOpenBurst } from '../_shared/viewerSecurityStore.ts'
 import { playbackAuditWriter, viewerGateDeps } from '../_shared/viewerWiring.ts'
 
@@ -60,7 +62,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     RENEW_LEAD_SECONDS
   )
 
-  const outcome = await runDocument(parsed.value, auth, {
+  const request = { ...parsed.value, client: viewerClient(req.headers.get('origin')) }
+  const outcome = await runDocument(request, auth, {
     ...gate,
     loadDocument: async (id): Promise<LoadedDocument | null> => {
       const loaded = await loadDocument(admin, id)

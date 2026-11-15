@@ -48,7 +48,7 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
    `20261024_mentorship_tabs.sql` (2.0.3 editable tabs; then deploy `manage-tabs` and redeploy `list-content`, `create-upload`, `manage-content`, `set-thumbnail`, `issue-playback-token`, `level-descriptions`),
    `20261025_nda_required.sql` (NDA required to keep access; then deploy `nda` and redeploy `issue-playback-token` and `list-content`),
    `20261102_documents.sql` (watermarked PDFs: `documents` table, private `mentorship-documents` bucket, `playback_audit.document_id`; then deploy `create-document-upload`, `manage-documents`, `issue-document` and redeploy `list-content`, `manage-tabs`, `issue-playback-token`),
-   `20261115_viewer_security.sql` (flags, paused viewing, one video at a time; then deploy `watermark-tamper`, `playback-heartbeat`, `viewer-security` and redeploy `issue-playback-token`, `issue-document`, `admin-members`)
+   `20261115_viewer_security.sql` (flags, paused viewing, one video at a time, desktop-app-only setting; then deploy `watermark-tamper`, `playback-heartbeat`, `viewer-security` and redeploy `issue-playback-token`, `issue-document`, `admin-members`)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -223,3 +223,17 @@ Do these in order; each step is safe on its own because nothing is enforced unti
    footer off, then Admin -> Security -> Trace a leak with that file: it names the student, the document
    and the time. Typing the `ref` from a video frame does the same.
 10. [ ] Copy a fresh embed link from DevTools and open it after 2 minutes: Bunny refuses it.
+11. [ ] A faint pattern of `@username`, `ID ...` and `ref ...` covers the whole video, on dark and light
+    frames. Deleting it in DevTools stops the video ("watermark removed").
+12. [ ] On the web, block `watermark-tamper` in DevTools (Network -> Block request URL), then hide the
+    watermark: the video stops, and the flag still appears in Admin -> Security within about 20 seconds
+    (carried by the next check-in). Block `playback-heartbeat` instead and keep the video open for about
+    4 minutes: a "Blocked check-ins" flag appears at the next renewal.
+13. [ ] As a test student, open 41 different items within an hour (or set `OPEN_HOURLY_LIMIT` low on a
+    test project): the 41st is refused with the hourly-limit message; ones already opened still open.
+14. [ ] Admin -> Security -> Desktop app only: turn it on. The student is refused on the website with the
+    "desktop app only" message and can still watch in the app; an admin can still use the website. Only
+    turn it on for real once members have the release that has these changes.
+15. [ ] Installed app (new release): Ctrl+Shift+I and F12 do nothing; starting it with
+    `--remote-debugging-port=9222` closes at once; `npx @electron/fuses read --app "<path to exe>"` shows
+    RunAsNode, EnableNodeOptionsEnvironmentVariable and EnableNodeCliInspectArguments Disabled.

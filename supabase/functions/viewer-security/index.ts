@@ -5,7 +5,8 @@
 //   member    every flag recorded against one member, and whether their viewing is paused
 //   hold      pause all of one member's viewing (videos, recordings, documents) until reauthorised
 //   release   reauthorise a paused member
-//   settings  pause automatically after N watermark tamper flags (null = off)
+//   settings  pause automatically after N watermark tamper flags (null = off), and/or open videos
+//             and documents in the desktop app only (owners and admins excepted)
 //   trace     turn codes found in a leaked file (or a "ref" read off a screen) into the member,
 //             item and time of the viewing they came from; each match is flagged "leak_traced"
 //
@@ -35,9 +36,10 @@ import {
   listHolds,
   loadAlertTitles,
   placeHold,
+  readAppOnly,
   readAutoHoldAfter,
   releaseHold,
-  saveAutoHoldAfter
+  saveViewerSettings
 } from '../_shared/viewerSecurityStore.ts'
 
 const COUNT_ROWS = 10_000
@@ -66,7 +68,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   switch (request.action) {
     case 'overview': {
-      const [counts, recent, holds, autoHoldAfter] = await Promise.all([
+      const [counts, recent, holds, autoHoldAfter, appOnly] = await Promise.all([
         admin
           .from('viewer_alerts')
           .select('discord_id, kind, created_at')
@@ -74,7 +76,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .limit(COUNT_ROWS),
         admin.from('viewer_alerts').select(ALERT_SELECT).order('created_at', { ascending: false }).limit(RECENT),
         listHolds(admin),
-        readAutoHoldAfter(admin)
+        readAutoHoldAfter(admin),
+        readAppOnly(admin).catch(() => false)
       ])
       if (counts.error || recent.error || holds === null) return deny('upstream_failed')
       const rows = (recent.data ?? []) as AlertRow[]
@@ -88,7 +91,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         flagged,
         holds,
         recent: shapeAlertEvents(rows, titles),
-        settings: { autoHoldAfter }
+        settings: { autoHoldAfter, appOnly }
       })
     }
 
@@ -163,16 +166,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     case 'settings': {
-      if (!(await saveAutoHoldAfter(admin, request.autoHoldAfter, auth.discordId))) return deny('upstream_failed')
+      const change = {
+        ...(request.autoHoldAfter !== undefined ? { autoHoldAfter: request.autoHoldAfter } : {}),
+        ...(request.appOnly !== undefined ? { appOnly: request.appOnly } : {})
+      }
+      if (!(await saveViewerSettings(admin, change, auth.discordId))) return deny('upstream_failed')
       await writeContentAudit(admin, {
         ...actor,
         action: 'viewer_security_set',
         target_kind: 'section',
         target_id: null,
         target_section: 'viewer_security',
-        detail: { autoHoldAfter: request.autoHoldAfter }
+        detail: change
       })
-      return json({ ok: true, settings: { autoHoldAfter: request.autoHoldAfter } })
+      const [autoHoldAfter, appOnly] = await Promise.all([readAutoHoldAfter(admin), readAppOnly(admin).catch(() => false)])
+      return json({ ok: true, settings: { autoHoldAfter, appOnly } })
     }
 
     case 'trace': {

@@ -11,7 +11,7 @@ import { evaluateNda } from './ndaGate.ts'
 import { readEnforceFrom, readNdaCache, writeNdaCache } from './ndaStore.ts'
 import type { AuditRow } from './playback.ts'
 import type { ViewerGateDeps } from './viewerGate.ts'
-import { readHold } from './viewerSecurityStore.ts'
+import { readAppOnly, readHold, readRecentOpens } from './viewerSecurityStore.ts'
 
 export function viewerGateDeps(
   admin: SupabaseClient,
@@ -48,6 +48,8 @@ export function viewerGateDeps(
       return stored.ok ? stored.value : null
     },
     checkHold: (discordId) => readHold(admin, discordId),
+    readAppOnly: () => readAppOnly(admin),
+    recentOpens: (userId) => readRecentOpens(admin, userId),
     ttlSeconds: env.playbackTtlSeconds,
     renewLeadSeconds
   }

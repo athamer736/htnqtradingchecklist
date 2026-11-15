@@ -22,7 +22,18 @@ export const KIND_CHIP: Record<AlertKind, string> = {
   tamper: 'bg-rose-400/15 text-rose-200',
   second_stream: 'bg-sky-400/15 text-sky-200',
   many_opens: 'bg-amber-400/15 text-amber-200',
-  leak_traced: 'bg-fuchsia-400/15 text-fuchsia-200'
+  leak_traced: 'bg-fuchsia-400/15 text-fuchsia-200',
+  quiet_page: 'bg-orange-400/15 text-orange-200'
+}
+
+/**
+ * Marks a flagged member who is staff: staff can open everything without the limits members have,
+ * so a flag on a staff account deserves a closer look, not less of one.
+ */
+export function StaffChip({ member }: { member: AdminMember | undefined }): JSX.Element | null {
+  if (!member?.isStaff) return null
+  const role = member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Admin' : 'Staff'
+  return <span className="chip bg-violet-400/15 text-violet-200">{role}</span>
 }
 
 export function formatWhen(iso: string): string {

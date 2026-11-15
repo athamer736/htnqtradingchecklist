@@ -36,6 +36,8 @@ export type DenyCode =
   | 'rate_limited'
   | 'viewing_held'
   | 'stream_elsewhere'
+  | 'app_only'
+  | 'open_limit'
 
 export const DENY_MESSAGES: Record<DenyCode, string> = {
   unauthenticated: 'Sign in with Discord to watch mentorship videos.',
@@ -83,7 +85,11 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
   viewing_held:
     'Your access to mentorship videos and documents is paused while staff review your account. Contact staff to have it restored.',
   stream_elsewhere:
-    'This video was closed because your account started playing a video somewhere else. Only one video can play at a time on each account.'
+    'This video was closed because your account started playing a video somewhere else. Only one video can play at a time on each account.',
+  app_only:
+    'Mentorship videos and documents open in the HTNQ Trading Mentorship desktop app only. Open them there, or ask staff for the download link.',
+  open_limit:
+    'You have opened the most different videos and documents allowed in one hour. Anything you opened in the last hour still opens; new ones open again later.'
 }
 
 export const DENY_STATUS: Record<DenyCode, number> = {
@@ -118,7 +124,9 @@ export const DENY_STATUS: Record<DenyCode, number> = {
   document_too_large: 413,
   rate_limited: 429,
   viewing_held: 403,
-  stream_elsewhere: 409
+  stream_elsewhere: 409,
+  app_only: 403,
+  open_limit: 429
 }
 
 export function denyBody(reasonCode: DenyCode): { ok: false; reasonCode: DenyCode; message: string } {

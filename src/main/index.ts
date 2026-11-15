@@ -49,6 +49,20 @@ import type { SyncAck, SyncRow } from '../shared/sync'
 if (app.isPackaged) {
   app.setPath('userData', join(app.getPath('appData'), 'HTNQ Trading Checklist'))
 }
+
+// The installed app won't start with a debugger attached from outside: these switches would let
+// another program drive the app and read the lesson pages or switch off the watermark checks.
+// (ELECTRON_RUN_AS_NODE, NODE_OPTIONS and --inspect are switched off by fuses: build/afterPack.cjs.)
+const DEBUG_SWITCHES = ['remote-debugging-port', 'remote-debugging-pipe', 'inspect', 'inspect-brk', 'inspect-port']
+if (
+  app.isPackaged &&
+  (DEBUG_SWITCHES.some((s) => app.commandLine.hasSwitch(s)) ||
+    process.argv.some((a) => /^--(inspect|remote-debugging)/i.test(a)))
+) {
+  console.error('HTNQ Trading Mentorship does not start with debugging switches.')
+  process.exit(1)
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -63,7 +77,10 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      contextIsolation: true
+      contextIsolation: true,
+      // No DevTools in the installed app: they are the easy way to read the lesson pages and
+      // switch off the watermark checks. Development builds keep them.
+      devTools: !app.isPackaged
     }
   })
 

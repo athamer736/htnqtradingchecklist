@@ -14,11 +14,15 @@ import {
   alertItemIds,
   countAlertsByMember,
   distinctItems,
+  OPEN_BURST_LIMIT,
+  OPEN_HOURLY_LIMIT,
+  overOpenLimit,
   shapeAlertEvents,
   shapeTraceMatches,
   summariseAlerts,
   type AlertRow
 } from '../supabase/functions/_shared/viewerAlerts.ts'
+import { viewerClient } from '../supabase/functions/_shared/viewerGate.ts'
 import {
   isHeldViewer,
   parseHeartbeatRequest,
@@ -30,13 +34,16 @@ import {
   ALERT_KINDS as CLIENT_KINDS,
   HEARTBEAT_SECONDS as CLIENT_HEARTBEAT,
   TRACE_CODE_PATTERN as CLIENT_TRACE_PATTERN,
+  addPendingTamper,
   describeAlert,
   findTraceCandidates,
   newStreamId,
   parseAlertEvents,
   parseHeartbeat,
+  parsePendingTamper,
   parseSecurityOverview,
-  parseTraceMatches
+  parseTraceMatches,
+  removePendingTamper
 } from '../src/shared/viewerSecurity'
 import { HEARTBEAT_SECONDS as SERVER_HEARTBEAT } from '../supabase/functions/_shared/streams.ts'
 
@@ -100,7 +107,18 @@ describe('one video at a time', () => {
     assert.deepEqual(decideStream(null, 'b'.repeat(16), true, now), { action: 'claim', replaced: false })
     assert.deepEqual(decideStream(live, 'b'.repeat(16), true, now), { action: 'claim', replaced: true })
     assert.deepEqual(decideStream(stale, 'b'.repeat(16), true, now), { action: 'claim', replaced: false })
-    assert.deepEqual(decideStream(live, 'a'.repeat(16), false, now), { action: 'refresh' })
+    assert.deepEqual(decideStream(live, 'a'.repeat(16), false, now), { action: 'refresh', quiet: false })
+  })
+
+  it('a player that stopped checking in long enough to count as closed is "quiet" when it comes back', () => {
+    assert.deepEqual(decideStream(stale, 'a'.repeat(16), false, now), { action: 'refresh', quiet: true })
+    assert.deepEqual(decideStream(stale, 'a'.repeat(16), true, now), { action: 'refresh', quiet: true })
+    const day = Date.parse('2026-11-16T09:00:00Z')
+    assert.equal(
+      alertDedupKey({ kind: 'quiet_page', streamId: 'a'.repeat(16), at: day }),
+      alertDedupKey({ kind: 'quiet_page', streamId: 'a'.repeat(16), at: day + 6 * 3_600_000 }),
+      'one flag per player per day'
+    )
   })
 
   it('a renewal or heartbeat never takes over from a live player, so two devices cannot keep swapping', () => {
@@ -157,6 +175,73 @@ describe('viewing holds', () => {
     assert.deepEqual(parseHeartbeat({ ok: true, state: 'held', nextInSeconds: 1 }), { state: 'held', nextInSeconds: 20 })
     assert.equal(parseHeartbeat({ ok: true, state: 'gone' }), null)
   })
+
+  it('a heartbeat can carry a tamper report the app could not deliver, in the same shape as a direct report', () => {
+    const tamper = { sessionRef: REF, reason: 'hidden', platform: 'web' }
+    assert.deepEqual(parseHeartbeatRequest({ kind: 'document', tamper }), {
+      ok: true,
+      value: { kind: 'document', tamper: { sessionRef: REF, reason: 'hidden', platform: 'web' } }
+    })
+    const video = parseHeartbeatRequest({ kind: 'video', streamId: 'c'.repeat(32), tamper })
+    assert.ok(video.ok && video.value.kind === 'video' && video.value.tamper?.reason === 'hidden')
+    for (const bad of [
+      { ...tamper, reason: 'deleted' },
+      { ...tamper, sessionRef: 'x' },
+      { ...tamper, discordId: OTHER }
+    ]) {
+      assert.equal(parseHeartbeatRequest({ kind: 'document', tamper: bad }).ok, false, JSON.stringify(bad))
+    }
+    assert.deepEqual(parseHeartbeat({ ok: true, state: 'active', nextInSeconds: 20, tamper: 'done' }), {
+      state: 'active',
+      nextInSeconds: 20,
+      tamper: 'done'
+    })
+  })
+
+  it('reports that did not get through are kept once each, for a week at most', () => {
+    const now = Date.parse('2026-11-16T12:00:00Z')
+    const report = { sessionRef: REF, reason: 'hidden' as const, platform: 'web' as const, at: now }
+    let list = addPendingTamper([], report)
+    list = addPendingTamper(list, { ...report, at: now + 5 })
+    list = addPendingTamper(list, { ...report, reason: 'removed' })
+    assert.deepEqual(list.map((r) => r.reason), ['hidden', 'removed'])
+    assert.deepEqual(parsePendingTamper(JSON.parse(JSON.stringify(list)), now), list)
+    assert.deepEqual(parsePendingTamper(list, now + 8 * 86_400_000), [], 'older than a week')
+    assert.deepEqual(parsePendingTamper([{ ...report, reason: 'nope' }, 'x', null], now), [])
+    assert.deepEqual(removePendingTamper(list, { sessionRef: REF, reason: 'hidden' }).map((r) => r.reason), ['removed'])
+    let many: ReturnType<typeof addPendingTamper> = []
+    for (let i = 0; i < 30; i++) many = addPendingTamper(many, { ...report, sessionRef: `${REF}${i}` })
+    assert.equal(many.length, 20)
+    assert.equal(many[0].sessionRef, `${REF}10`, 'the oldest are dropped first')
+  })
+})
+
+describe('desktop app only, and the hourly limit', () => {
+  it('a call from a web page is "web"; the desktop app (a file page) is not', () => {
+    assert.equal(viewerClient('https://app.htnq.org'), 'web')
+    assert.equal(viewerClient('http://localhost:5173'), 'web')
+    assert.equal(viewerClient('null'), 'desktop')
+    assert.equal(viewerClient('file://'), 'desktop')
+    assert.equal(viewerClient(null), 'desktop')
+  })
+
+  const item = { kind: 'video' as const, id: 'v-new' }
+  const opens = (n: number) =>
+    [...Array(n)].map((_, i) => ({ video_id: `v${i}`, recording_id: null, document_id: null }))
+
+  it('the 41st different item within the hour is refused; anything already opened still opens', () => {
+    assert.equal(OPEN_HOURLY_LIMIT, 40)
+    assert.ok(OPEN_HOURLY_LIMIT > OPEN_BURST_LIMIT, 'members are flagged well before they are stopped')
+    assert.equal(overOpenLimit(opens(39), item), false)
+    assert.equal(overOpenLimit(opens(40), item), true)
+    assert.equal(overOpenLimit(opens(40), { kind: 'video', id: 'v7' }), false)
+    assert.equal(overOpenLimit([...opens(40), ...opens(40)], { kind: 'video', id: 'v7' }), false, 'repeat opens count once')
+    assert.equal(
+      overOpenLimit(opens(40), { kind: 'document', id: 'v7' }),
+      true,
+      'a document is not the video that happens to share its id'
+    )
+  })
 })
 
 describe('the Security tab requests', () => {
@@ -189,6 +274,20 @@ describe('the Security tab requests', () => {
       ok: true,
       value: { action: 'settings', autoHoldAfter: null }
     })
+  })
+
+  it('settings change only what the request names', () => {
+    assert.deepEqual(parseSecurityRequest({ action: 'settings', appOnly: true }), {
+      ok: true,
+      value: { action: 'settings', appOnly: true }
+    })
+    assert.deepEqual(parseSecurityRequest({ action: 'settings', autoHoldAfter: 3, appOnly: false }), {
+      ok: true,
+      value: { action: 'settings', autoHoldAfter: 3, appOnly: false }
+    })
+    for (const bad of [{ action: 'settings' }, { action: 'settings', appOnly: 'yes' }, { action: 'settings', appOnly: 1 }]) {
+      assert.equal(parseSecurityRequest(bad).ok, false, JSON.stringify(bad))
+    }
   })
 
   it('trace takes at most 20 distinct codes', () => {
@@ -226,6 +325,10 @@ describe('flags', () => {
     for (const action of ['viewing_held', 'viewing_released', 'viewer_security_set', 'leak_traced']) {
       assert.ok(migration.includes(`'${action}'`), `audit action ${action}`)
     }
+    for (const sql of [migration, schema]) {
+      assert.ok(sql.includes('add column if not exists app_only_viewing boolean not null default false'))
+      assert.ok(sql.includes('add constraint viewer_alerts_kind_check'), 'an earlier run gets the new kinds too')
+    }
   })
 
   it('are shaped with the item title, dropping unknown kinds and tamper flags without a reason', () => {
@@ -234,6 +337,7 @@ describe('flags', () => {
       row({ kind: 'second_stream', reason: null, recording_id: 'r1', platform: null }),
       row({ kind: 'many_opens', reason: null, session_ref: null, detail: { count: 31 } }),
       row({ kind: 'leak_traced', reason: null, document_id: 'd1' }),
+      row({ kind: 'quiet_page', reason: null, video_id: 'v1' }),
       row({ kind: 'tamper', reason: null }),
       row({ kind: 'made-up', reason: null })
     ]
@@ -249,7 +353,8 @@ describe('flags', () => {
         ['tamper', 'hidden', 'video', 'Daily FVG', undefined],
         ['second_stream', null, 'recording', null, undefined],
         ['many_opens', null, null, null, 31],
-        ['leak_traced', null, 'document', 'Level 1 notes', undefined]
+        ['leak_traced', null, 'document', 'Level 1 notes', undefined],
+        ['quiet_page', null, 'video', 'Daily FVG', undefined]
       ]
     )
     // What the app reads back is what the function sent.
@@ -260,7 +365,8 @@ describe('flags', () => {
         'Watermark hidden',
         'Started a video on another device while one was still playing',
         'Opened 31 different items within an hour',
-        'A leaked copy was traced to this viewing'
+        'A leaked copy was traced to this viewing',
+        "Kept renewing a video after the player's check-ins stopped (something on the page may be blocking them)"
       ]
     )
   })
@@ -278,7 +384,7 @@ describe('flags', () => {
     assert.deepEqual(by.get(MEMBER), {
       count: 2,
       lastAt: '2026-11-16T10:00:00+00:00',
-      byKind: { tamper: 1, second_stream: 1, many_opens: 0, leak_traced: 0 }
+      byKind: { tamper: 1, second_stream: 1, many_opens: 0, leak_traced: 0, quiet_page: 0 }
     })
     const summary = summariseAlerts(rows, now)
     assert.equal(summary.total, 4)
@@ -356,7 +462,10 @@ describe('the Security tab overview', () => {
     assert.deepEqual(overview.holds.map((h) => [h.discordId, h.reason]), [[MEMBER, 'auto_tamper']])
     assert.deepEqual(overview.recent, [])
     assert.equal(overview.autoHoldAfter, 3)
+    assert.equal(overview.appOnly, false)
     assert.equal(parseSecurityOverview({ ok: true, settings: { autoHoldAfter: 99 } })?.autoHoldAfter, null)
+    assert.equal(parseSecurityOverview({ ok: true, settings: { appOnly: true } })?.appOnly, true)
+    assert.equal(parseSecurityOverview({ ok: true, settings: { appOnly: 'true' } })?.appOnly, false)
     assert.equal(parseSecurityOverview({ ok: false }), null)
   })
 })

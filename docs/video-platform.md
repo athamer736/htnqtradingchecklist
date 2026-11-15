@@ -22,8 +22,8 @@ Customer app (Windows desktop or https://app.htnq.org)
         level-descriptions                                 (text at the top of each Mentorship page)
         issue-playback-token                                (every play and renewal)
         watermark-tamper                                    (player reports a hidden watermark: a viewer flag)
-        playback-heartbeat                                  (open players check in: one video per account, paused viewing)
-        viewer-security                                     (owner/admin: flags, pause/reauthorise, auto-pause, leak trace)
+        playback-heartbeat                                  (open players check in: one video per account, paused viewing, queued tamper reports)
+        viewer-security                                     (owner/admin: flags, pause/reauthorise, auto-pause, app-only, leak trace)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
      → Railway mentorship API (POST /api/v1/member-access) on every playback
@@ -240,7 +240,19 @@ expires. We do **not** promise instant CDN revocation.
   Safari) or is blocked, the shell expands to fill the page instead, with an
   in-player exit button. That isn't true OS fullscreen: the browser UI may
   stay visible.
-- Electron `setContentProtection` is best-effort and **not DRM**.
+- A second, faint layer repeats `@username`, `ID <Discord ID>` and `ref <session ref>` in a tilted grid
+  across the whole picture (drawn once per session with a random angle, size and strength), so a crop
+  or a blur of one spot still leaves the ID elsewhere in the frame. The name and ID also flash across
+  the player for under a second at random times.
+- Both layers are watched (`src/shared/watermarkGuard.ts`): removing, hiding, restyling, shrinking or
+  covering either stops the video with a notice and files a viewer flag. If that report can't be sent,
+  the app keeps it and sends it with the next check-in; a page that blocks the check-ins but keeps
+  renewing is flagged as "Blocked check-ins".
+- Electron `setContentProtection` is best-effort and **not DRM**. The installed app has DevTools off,
+  refuses to start with debugging switches, and has the Electron fuses for `RunAsNode`, `NODE_OPTIONS`
+  and `--inspect` turned off (`build/afterPack.cjs`). The owner can make videos and documents
+  desktop-app-only (Admin -> Security).
+- Members can open at most 40 different videos and documents an hour (`open_limit`).
 - The watermark is a deterrent and investigation aid. A DOM overlay can be
   removed by a determined user, and it does not prevent all screen recording
   or by itself establish a legal breach. Burned-in or provider-side

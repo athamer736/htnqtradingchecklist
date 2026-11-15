@@ -319,6 +319,8 @@ describe('playback enforces the tab role lists', () => {
       checkMentorship: async () => allowed,
       readStoredName: async () => null,
       checkHold: async () => false,
+      readAppOnly: async () => false,
+      recentOpens: async () => [],
       checkNda: async () => ({ allow: true, reason: 'not_enforced', signed: false }),
       signEmbed: async (id, exp) => `https://player.example/embed/${id}?expires=${exp}`,
       audit: async (row) => {

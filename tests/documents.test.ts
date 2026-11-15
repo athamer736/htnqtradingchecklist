@@ -111,6 +111,8 @@ function harness(s: Setup) {
     now: () => NOW,
     checkMentorship: async () => s.botLookup ?? botAllowed,
     checkHold: async () => false,
+    readAppOnly: async () => false,
+    recentOpens: async () => [],
     checkNda: ({ discordId, isStaff }) => {
       const gate: NdaGateDeps = {
         isStaff,
@@ -563,5 +565,32 @@ describe('client file checks', () => {
     assert.equal(hasPdfHeader(bytes('junk\n%PDF-1.4')), true)
     assert.equal(hasPdfHeader(bytes('<html></html>')), false)
     assert.equal(hasPdfHeader(new Uint8Array(0)), false)
+  })
+})
+
+describe('documents: desktop app only, and the hourly limit', () => {
+  const member = [R.student, R.level1]
+  const opened = (n: number) => [...Array(n)].map((_, i) => ({ video_id: `v${i}`, recording_id: null, document_id: null }))
+
+  it('with app-only on, a document asked for from the website is refused before it is downloaded', async () => {
+    const h = harness(await withDefaultSource({ roles: member }))
+    h.deps.readAppOnly = async () => true
+    const out = asJson(await runDocument({ documentId: DOC_ID, mode: 'open', client: 'web' }, auth(member), h.deps))
+    assert.equal(out.status, 403)
+    assert.equal(out.body.reasonCode, 'app_only')
+    assert.equal(h.state.downloads, 0)
+    const app = await runDocument({ documentId: DOC_ID, mode: 'open', client: 'desktop' }, auth(member), h.deps)
+    assert.equal(app.kind, 'pdf')
+  })
+
+  it('past 40 different items this hour, a new document is refused but an open one keeps rechecking', async () => {
+    const h = harness(await withDefaultSource({ roles: member }))
+    h.deps.recentOpens = async () => opened(40)
+    const out = asJson(await runDocument({ documentId: DOC_ID, mode: 'open' }, auth(member), h.deps))
+    assert.equal(out.status, 429)
+    assert.equal(out.body.reasonCode, 'open_limit')
+    assert.equal(h.state.downloads, 0)
+    const recheck = asJson(await runDocument({ documentId: DOC_ID, mode: 'recheck' }, auth(member), h.deps))
+    assert.equal(recheck.status, 200)
   })
 })

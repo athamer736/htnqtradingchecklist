@@ -63,6 +63,8 @@ export type PlaybackRequest = {
   streamId?: string
   /** True when an open player re-checks access, false for a fresh play. */
   renew?: boolean
+  /** Set by issue-playback-token from the Origin header (see viewerClient), never from the body. */
+  client?: 'desktop' | 'web'
 }
 
 export function parsePlaybackRequest(body: unknown): Parsed<PlaybackRequest> {

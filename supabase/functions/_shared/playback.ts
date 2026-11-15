@@ -5,11 +5,9 @@
 import type { AuthzResult } from './authz.ts'
 import { canPlayRecording, type EncodingStatus, type RecordingItem, type Visibility } from './decisions.ts'
 import { DENY_STATUS, denyBody, type DenyCode } from './messages.ts'
-import type { MentorshipLookupResult } from './mentorshipApi.ts'
-import type { NdaDecision } from './ndaGate.ts'
 import { canPlayTabVideo, canSeeUnpublishedInTab, type TabAccess } from './tabAccess.ts'
 import type { PlaybackRequest } from './validation.ts'
-import { resolveViewerGate } from './viewerGate.ts'
+import { resolveViewerGate, type ViewerGateDeps } from './viewerGate.ts'
 
 // Kept here so existing importers (and tests) are unaffected by the move to viewerGate.ts.
 export { playbackGrantWindow } from './viewerGate.ts'
@@ -55,18 +53,10 @@ export interface StreamClaim {
   itemId: string
 }
 
-export interface PlaybackDeps {
+/** The shared viewer gate's dependencies (hold, app-only, hourly limit, NDA, bot, name) plus these. */
+export interface PlaybackDeps extends ViewerGateDeps {
   loadVideo: (id: string) => Promise<LoadedVideo | null>
   loadRecording: (id: string) => Promise<LoadedRecording | null>
-  checkMentorship: (discordId: string) => Promise<MentorshipLookupResult>
-  /**
-   * The NDA gate: every non-staff viewer needs a signed NDA once the owner's deadline has
-   * passed (see ndaGate.ts). Called on every issue and renewal, so a revoked or newly signed
-   * NDA takes effect within one renewal.
-   */
-  checkNda: (viewer: { discordId: string; isStaff: boolean }) => Promise<NdaDecision>
-  /** The admin-entered legal name for this member, or null (also null if it can't be read). */
-  readStoredName: (discordId: string) => Promise<string | null>
   signEmbed: (bunnyVideoId: string, expiresAt: number) => Promise<string>
   /**
    * One video at a time per account (see streams.ts): records this player as the account's
@@ -77,8 +67,6 @@ export interface PlaybackDeps {
   audit: (row: AuditRow) => Promise<void>
   newSessionRef: () => string
   now: () => number
-  ttlSeconds: number
-  renewLeadSeconds: number
 }
 
 export interface PlaybackOutcome {
@@ -151,7 +139,11 @@ export async function runPlayback(
   // non-staff members need a signed NDA once the owner's deadline has passed. The bot's
   // member-access answer never blocks playback; see viewerGate.ts, which documents the steps
   // shared with documents (NDA gate, watermark name, access window).
-  const gate = await resolveViewerGate(auth, deps)
+  const gate = await resolveViewerGate(auth, deps, {
+    client: request.client ?? 'desktop',
+    freshOpen: request.renew !== true,
+    item: { kind: request.kind, id: request.id }
+  })
   if (!gate.ok) {
     await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: gate.code })
     return denied(gate.code)

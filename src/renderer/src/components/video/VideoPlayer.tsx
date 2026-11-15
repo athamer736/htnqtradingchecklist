@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TamperReason } from '../../../../shared/watermarkGuard'
 import RichText from './RichText'
-import TamperNotice, { reportWatermarkTamper } from './TamperNotice'
+import TamperNotice, { flushTamperReports, reportWatermarkTamper } from './TamperNotice'
 import WatermarkOverlay, { type WatermarkIdentity } from './WatermarkOverlay'
 
 const ACCESS_TICK_MS = 2_000
@@ -125,6 +125,8 @@ export default function VideoPlayer({
     }
   }, [])
 
+  useEffect(() => flushTamperReports(), [])
+
   const sessionRef = watermark.sessionRef
   const onTamper = useCallback(
     (reason: TamperReason) => {
@@ -201,6 +203,7 @@ export default function VideoPlayer({
                 frameRef={frameRef}
                 resetKey={embedUrl}
                 flash
+                tiles
                 onTamper={onTamper}
               />
             </>
@@ -252,9 +255,9 @@ export default function VideoPlayer({
       </div>
 
       <p className="pb-2 text-[11px] leading-relaxed text-muted">
-        Watermark shows your legal name, Discord username and Discord ID, and briefly flashes across the player now and
-        then. Hiding or changing it stops the video and is recorded on your account. One video plays at a time per
-        account.
+        Watermark shows your legal name, Discord username and Discord ID, repeats your ID faintly across the picture, and
+        briefly flashes across the player now and then. Hiding or changing it stops the video and is recorded on your
+        account. One video plays at a time per account.
       </p>
     </div>
   )

@@ -5,14 +5,15 @@
 import { isTamperReason, TAMPER_LABELS, type TamperReason } from './watermarkGuard'
 
 // Must match ALERT_KINDS in supabase/functions/_shared/viewerAlerts.ts (a test checks they agree).
-export const ALERT_KINDS = ['tamper', 'second_stream', 'many_opens', 'leak_traced'] as const
+export const ALERT_KINDS = ['tamper', 'second_stream', 'many_opens', 'leak_traced', 'quiet_page'] as const
 export type AlertKind = (typeof ALERT_KINDS)[number]
 
 export const ALERT_KIND_LABELS: Record<AlertKind, string> = {
   tamper: 'Watermark tampering',
   second_stream: 'Second device',
   many_opens: 'Many opens',
-  leak_traced: 'Leak traced'
+  leak_traced: 'Leak traced',
+  quiet_page: 'Blocked check-ins'
 }
 
 /** How often an open video or document checks in (the server uses the same interval). */
@@ -65,6 +66,8 @@ export interface SecurityOverview {
   holds: ViewingHold[]
   recent: AlertEvent[]
   autoHoldAfter: number | null
+  /** Videos and documents open in the desktop app only (owners and admins excepted). */
+  appOnly: boolean
 }
 
 export interface TraceMatch {
@@ -101,7 +104,8 @@ function kindCounts(value: unknown): KindCounts {
     tamper: count(o.tamper),
     second_stream: count(o.second_stream),
     many_opens: count(o.many_opens),
-    leak_traced: count(o.leak_traced)
+    leak_traced: count(o.leak_traced),
+    quiet_page: count(o.quiet_page)
   }
 }
 
@@ -169,8 +173,14 @@ export function parseSecurityOverview(body: unknown): SecurityOverview | null {
     flagged,
     holds,
     recent: parseAlertEvents(o.recent),
-    autoHoldAfter: parseAutoHold(asRecord(o.settings)?.autoHoldAfter)
+    ...parseViewerSettings(o.settings)
   }
+}
+
+/** The Security tab's settings, from an `overview` or `settings` answer. */
+export function parseViewerSettings(value: unknown): { autoHoldAfter: number | null; appOnly: boolean } {
+  const s = asRecord(value)
+  return { autoHoldAfter: parseAutoHold(s?.autoHoldAfter), appOnly: s?.appOnly === true }
 }
 
 export function parseTraceMatches(value: unknown): TraceMatch[] {
@@ -201,6 +211,8 @@ export function describeAlert(e: AlertEvent): string {
       return e.count ? `Opened ${e.count} different items within an hour` : 'Opened many items within an hour'
     case 'leak_traced':
       return 'A leaked copy was traced to this viewing'
+    case 'quiet_page':
+      return "Kept renewing a video after the player's check-ins stopped (something on the page may be blocking them)"
   }
 }
 
@@ -228,12 +240,72 @@ export function findTraceCandidates(text: string): string[] {
 
 export type HeartbeatState = 'active' | 'elsewhere' | 'held'
 
-export function parseHeartbeat(body: unknown): { state: HeartbeatState; nextInSeconds: number } | null {
+export interface Heartbeat {
+  state: HeartbeatState
+  nextInSeconds: number
+  /** Only when the check-in carried a tamper report: "done" means the app can forget it. */
+  tamper?: 'done' | 'retry'
+}
+
+export function parseHeartbeat(body: unknown): Heartbeat | null {
   const o = asRecord(body)
   if (!o || o.ok !== true) return null
   if (o.state !== 'active' && o.state !== 'elsewhere' && o.state !== 'held') return null
   const next = typeof o.nextInSeconds === 'number' && o.nextInSeconds >= 5 ? o.nextInSeconds : HEARTBEAT_SECONDS
-  return { state: o.state, nextInSeconds: Math.min(next, 120) }
+  return {
+    state: o.state,
+    nextInSeconds: Math.min(next, 120),
+    ...(o.tamper === 'done' || o.tamper === 'retry' ? { tamper: o.tamper } : {})
+  }
+}
+
+/** How long the app waits for a check-in before treating it as missed. */
+export const HEARTBEAT_TIMEOUT_MS = 10_000
+
+// --- Tamper reports that haven't reached the server yet -------------------------------------
+
+export interface PendingTamper {
+  sessionRef: string
+  reason: TamperReason
+  platform: 'desktop' | 'web'
+  at: number
+}
+
+const PENDING_TAMPER_MAX = 20
+const PENDING_TAMPER_MAX_AGE_MS = 7 * 86_400_000
+
+const sameReport = (a: Pick<PendingTamper, 'sessionRef' | 'reason'>, b: Pick<PendingTamper, 'sessionRef' | 'reason'>): boolean =>
+  a.sessionRef === b.sessionRef && a.reason === b.reason
+
+/** Reads the stored list, dropping anything malformed or older than a week (oldest first). */
+export function parsePendingTamper(value: unknown, now: number): PendingTamper[] {
+  if (!Array.isArray(value)) return []
+  const out: PendingTamper[] = []
+  for (const raw of value) {
+    const p = asRecord(raw)
+    if (!p || typeof p.sessionRef !== 'string' || !/^[a-z0-9]{8,64}$/i.test(p.sessionRef)) continue
+    if (!isTamperReason(p.reason) || typeof p.at !== 'number' || now - p.at > PENDING_TAMPER_MAX_AGE_MS) continue
+    const report: PendingTamper = {
+      sessionRef: p.sessionRef,
+      reason: p.reason,
+      platform: p.platform === 'desktop' ? 'desktop' : 'web',
+      at: p.at
+    }
+    if (!out.some((r) => sameReport(r, report))) out.push(report)
+  }
+  return out.slice(-PENDING_TAMPER_MAX)
+}
+
+export function addPendingTamper(list: readonly PendingTamper[], report: PendingTamper): PendingTamper[] {
+  if (list.some((r) => sameReport(r, report))) return [...list]
+  return [...list, report].slice(-PENDING_TAMPER_MAX)
+}
+
+export function removePendingTamper(
+  list: readonly PendingTamper[],
+  report: Pick<PendingTamper, 'sessionRef' | 'reason'>
+): PendingTamper[] {
+  return list.filter((r) => !sameReport(r, report))
 }
 
 /** A random id for one open player (32 hex digits). */

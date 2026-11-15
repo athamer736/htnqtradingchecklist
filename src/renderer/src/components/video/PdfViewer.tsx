@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TamperReason } from '../../../../shared/watermarkGuard'
 import type { PDFDocumentProxy, RenderTask } from '../../lib/pdfjs'
 import RichText from './RichText'
-import TamperNotice, { reportWatermarkTamper } from './TamperNotice'
+import TamperNotice, { flushTamperReports, reportWatermarkTamper } from './TamperNotice'
 import WatermarkOverlay, { type WatermarkIdentity } from './WatermarkOverlay'
 
 const ACCESS_TICK_MS = 2_000
@@ -184,6 +184,8 @@ export default function PdfViewer({
       void api.contentProtection?.set?.(false)
     }
   }, [])
+
+  useEffect(() => flushTamperReports(), [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {

@@ -7,6 +7,7 @@
 // never held: they are the ones who lift holds.
 
 import { isStreamId } from './streams.ts'
+import { parseTamperRequest, type TamperReport } from './tamper.ts'
 import { isSnowflake, type Parsed } from './validation.ts'
 
 export type HoldReason = 'manual' | 'auto_tamper'
@@ -45,17 +46,28 @@ function cleanNote(v: unknown): string | null {
 
 // --- playback-heartbeat -------------------------------------------------------------------
 
-export type HeartbeatRequest =
+export type HeartbeatRequest = (
   | { kind: 'video'; streamId: string; end: boolean }
   | { kind: 'document' }
+) & {
+  /** A tamper report the app couldn't deliver to watermark-tamper, carried here instead. */
+  tamper?: TamperReport
+}
 
 export function parseHeartbeatRequest(body: unknown): Parsed<HeartbeatRequest> {
   const o = asObject(body)
   if (!o) return { ok: false, error: 'invalid-body' }
-  if (o.kind === 'document') return { ok: true, value: { kind: 'document' } }
+  let tamper: TamperReport | undefined
+  if (o.tamper !== undefined) {
+    const report = parseTamperRequest(o.tamper)
+    if (!report.ok) return { ok: false, error: 'invalid-tamper' }
+    tamper = report.value
+  }
+  const extra = tamper ? { tamper } : {}
+  if (o.kind === 'document') return { ok: true, value: { kind: 'document', ...extra } }
   if (o.kind !== 'video') return { ok: false, error: 'invalid-kind' }
   if (!isStreamId(o.streamId)) return { ok: false, error: 'invalid-stream' }
-  return { ok: true, value: { kind: 'video', streamId: o.streamId, end: o.end === true } }
+  return { ok: true, value: { kind: 'video', streamId: o.streamId, end: o.end === true, ...extra } }
 }
 
 export type HeartbeatState = 'active' | 'elsewhere' | 'held'
@@ -67,7 +79,8 @@ export type SecurityRequest =
   | { action: 'member'; memberDiscordId: string }
   | { action: 'hold'; memberDiscordId: string; note: string | null }
   | { action: 'release'; memberDiscordId: string }
-  | { action: 'settings'; autoHoldAfter: number | null }
+  /** Changes whichever settings are named (at least one). */
+  | { action: 'settings'; autoHoldAfter?: number | null; appOnly?: boolean }
   | { action: 'trace'; codes: string[] }
 
 export const MAX_TRACE_CODES = 20
@@ -86,12 +99,17 @@ export function parseSecurityRequest(body: unknown): Parsed<SecurityRequest> {
       if (!isSnowflake(o.memberDiscordId)) return { ok: false, error: 'invalid-member' }
       return { ok: true, value: { action: 'hold', memberDiscordId: o.memberDiscordId, note: cleanNote(o.note) } }
     case 'settings': {
+      const value: Extract<SecurityRequest, { action: 'settings' }> = { action: 'settings' }
       const n = o.autoHoldAfter
-      if (n === null) return { ok: true, value: { action: 'settings', autoHoldAfter: null } }
-      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > AUTO_HOLD_MAX) {
-        return { ok: false, error: 'invalid-threshold' }
+      if (n === null) value.autoHoldAfter = null
+      else if (typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= AUTO_HOLD_MAX) value.autoHoldAfter = n
+      else if (n !== undefined) return { ok: false, error: 'invalid-threshold' }
+      if (o.appOnly !== undefined) {
+        if (typeof o.appOnly !== 'boolean') return { ok: false, error: 'invalid-app-only' }
+        value.appOnly = o.appOnly
       }
-      return { ok: true, value: { action: 'settings', autoHoldAfter: n } }
+      if (value.autoHoldAfter === undefined && value.appOnly === undefined) return { ok: false, error: 'no-settings' }
+      return { ok: true, value }
     }
     case 'trace': {
       if (!Array.isArray(o.codes) || o.codes.length === 0) return { ok: false, error: 'invalid-codes' }

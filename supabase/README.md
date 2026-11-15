@@ -225,7 +225,7 @@ that maps `pdf-lib`; deploy them from this folder so it is picked up. No new sec
 ### Viewer security: flags, paused viewing, one video at a time, leak tracing
 
 Run `migrations/20261115_viewer_security.sql` first. It creates three service-role-only tables
-(`viewer_alerts`, `viewing_holds`, `active_streams`), adds the auto-pause setting to
+(`viewer_alerts`, `viewing_holds`, `active_streams`), adds the auto-pause and app-only settings to
 `mentorship_settings` and widens the `content_audit` checks. Then deploy `watermark-tamper`,
 `playback-heartbeat` and `viewer-security`, and redeploy `issue-playback-token`, `issue-document` and
 `admin-members` (they share the changed code). No new secrets are needed.
@@ -233,8 +233,20 @@ Run `migrations/20261115_viewer_security.sql` first. It creates three service-ro
 - **Flags** (`viewer_alerts`): the player or PDF viewer stopped because its watermark was removed,
   hidden or restyled (`watermark-tamper`; the member is the signed-in user and the item comes from
   their own grant for that session); a new play pushed out a video still playing on another device;
-  25 or more different items opened within an hour; a leaked copy traced to the member. Player reports
-  come from the viewer's device, so treat them as a lead, not proof.
+  25 or more different items opened within an hour; a leaked copy traced to the member; a video kept
+  renewing after its player's 20 s check-ins had stopped (`quiet_page`: the app always checks in before
+  it renews, so this is what a page blocking the app's reports looks like). A tamper report that
+  doesn't get through is kept by the app and sent again with its next check-in. Player reports come
+  from the viewer's device, so treat them as a lead, not proof.
+- **Hourly limit**: members (not staff) can open at most 40 different videos, recordings and documents
+  within an hour; the next new one is refused with `open_limit` (anything already opened in that hour
+  still opens, and renewals are never counted). If the history can't be read, nothing is refused.
+- **Desktop app only** (`mentorship_settings.app_only_viewing`, off by default): when the owner turns
+  it on in Admin -> Security, videos and documents requested from a web page are refused with
+  `app_only`; owners and admins keep the website. "Web" is read from the request's Origin header
+  (browsers always send it and page code can't change it); the desktop app loads from a file and
+  sends none. This keeps members off the website, where DevTools and capture can't be switched off;
+  it doesn't stop someone who writes their own client.
 - **Paused viewing** (`viewing_holds`): an owner/admin pauses a member from Admin -> Security or
   Members, or it happens automatically after the owner's number of tamper flags (off by default).
   Every video, recording and document is refused with `viewing_held` until an admin reauthorises
@@ -250,7 +262,7 @@ Run `migrations/20261115_viewer_security.sql` first. It creates three service-ro
   codes to `viewer-security`, which returns the member, item and time from `playback_audit`.
   The marks survive sharing and most editing, not a screenshot or a re-typed copy.
 
-Pauses, reauthorisations, the auto-pause setting and traces are written to `content_audit`.
+Pauses, reauthorisations, setting changes and traces are written to `content_audit`.
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep

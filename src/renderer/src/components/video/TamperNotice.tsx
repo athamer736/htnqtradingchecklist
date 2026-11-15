@@ -1,20 +1,33 @@
 import { TAMPER_LABELS, type TamperReason } from '../../../../shared/watermarkGuard'
+import type { PendingTamper } from '../../../../shared/viewerSecurity'
 import { isDesktop } from '../../lib/supabase'
+import { pendingTampers, queueTamper, settleTamper } from '../../lib/tamperQueue'
 import { invoke } from '../../store/useMentorship'
+
+async function sendTamper(report: Omit<PendingTamper, 'at'>): Promise<void> {
+  const body = await invoke('watermark-tamper', { action: 'report', ...report })
+  // Delivered, or about a session the server doesn't know (nothing to retry).
+  if (body?.ok === true || body?.reasonCode === 'invalid_request') settleTamper(report)
+}
 
 /**
  * Records a tamper report against the signed-in member. The server works out the item from this
  * session's own grant, so only the session reference and the reason are sent. Fire and forget:
- * the viewer has already stopped whether or not the report gets through.
+ * the viewer has already stopped whether or not the report gets through. Until it does, it is kept
+ * and sent again with the player's check-ins and the next time a player opens.
  */
 export function reportWatermarkTamper(sessionRef: string | undefined, reason: TamperReason): void {
   if (!sessionRef) return
-  void invoke('watermark-tamper', {
-    action: 'report',
-    sessionRef,
-    reason,
-    platform: isDesktop ? 'desktop' : 'web'
-  })
+  const report = { sessionRef, reason, platform: isDesktop ? ('desktop' as const) : ('web' as const) }
+  queueTamper(report)
+  void sendTamper(report)
+}
+
+/** Sends reports that didn't get through earlier (called when a player opens). */
+export function flushTamperReports(): void {
+  for (const r of pendingTampers().slice(0, 5)) {
+    void sendTamper({ sessionRef: r.sessionRef, reason: r.reason, platform: r.platform })
+  }
 }
 
 /** Shown in place of the video or document once its watermark was tampered with. */

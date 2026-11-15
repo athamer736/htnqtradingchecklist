@@ -5,8 +5,10 @@ import {
   colorAlpha,
   flashFontPx,
   inlineStyleIntact,
+  inspectTiles,
   inspectWatermark,
   nextFlashDelayMs,
+  pickTileLook,
   pickWatermarkLook,
   pickWatermarkPosition,
   randomTagName,
@@ -14,6 +16,8 @@ import {
   type Box,
   type LayerStyle,
   type TamperReason,
+  type TileLook,
+  type TileSnapshot,
   type WatermarkLook,
   type WatermarkSnapshot
 } from '../../../../shared/watermarkGuard'
@@ -131,6 +135,74 @@ function flashBoxCss(fontFamily: string, fontPx: number): string {
   ].join(';')
 }
 
+function tileHostCss(zIndex: number): string {
+  const rules: [string, string][] = [
+    ['position', 'absolute'],
+    ['inset', '0'],
+    ['z-index', String(zIndex)],
+    ['display', 'block'],
+    ['visibility', 'visible'],
+    ['opacity', '1'],
+    ['overflow', 'hidden'],
+    ['margin', '0'],
+    ['padding', '0'],
+    ['pointer-events', 'none'],
+    ['user-select', 'none'],
+    ['filter', 'none'],
+    ['clip-path', 'none'],
+    ['mask', 'none'],
+    ['mix-blend-mode', 'normal'],
+    ['transform', 'none']
+  ]
+  return rules.map(([k, v]) => `${k}:${v}!important`).join(';')
+}
+
+/** One repeat of the ID pattern as a PNG data URL, or null when the page can't draw. */
+function drawTile(lines: string[], t: TileLook, fontFamily: string): string | null {
+  const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(t.tileW * scale)
+  canvas.height = Math.round(t.tileH * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.scale(scale, scale)
+  ctx.translate(t.tileW / 2, t.tileH / 2)
+  ctx.rotate((t.angleDeg * Math.PI) / 180)
+  ctx.font = `600 ${t.fontPx}px ${fontFamily}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  lines.forEach((line, i) => {
+    const y = (i - (lines.length - 1) / 2) * t.fontPx * 1.35
+    ctx.fillStyle = `rgba(0,0,0,${Math.round(t.alpha * 80) / 100})`
+    ctx.fillText(line, 1, y + 1)
+    ctx.fillStyle = `rgba(255,255,255,${t.alpha})`
+    ctx.fillText(line, 0, y)
+  })
+  return canvas.toDataURL('image/png')
+}
+
+function tileLinesOf(identity: WatermarkIdentity): string[] {
+  return [
+    identity.username ? `@${identity.username}` : '',
+    `ID ${identity.discordId}`,
+    identity.sessionRef ? `ref ${identity.sessionRef}` : ''
+  ].filter(Boolean)
+}
+
+function patternCss(image: string, t: TileLook): string {
+  return [
+    'all:initial',
+    'position:absolute',
+    'inset:0',
+    'display:block',
+    'pointer-events:none',
+    `background-image:url("${image}")`,
+    'background-repeat:repeat',
+    `background-size:${t.tileW}px ${t.tileH}px`,
+    `background-position:${t.offsetX}px ${t.offsetY}px`
+  ].join(';')
+}
+
 function nameLineOf(identity: WatermarkIdentity): string {
   return [identity.legalName, identity.username ? `@${identity.username}` : null].filter(Boolean).join(' | ')
 }
@@ -189,7 +261,9 @@ function zOf(el: Element): number | null {
  *
  * With `flash` (videos), the viewer's details also flash large across the whole player for under
  * a second at random moments, so a screen recording or a cropped clip still shows who it was. The
- * flash is checked the same way while it is up.
+ * flash is checked the same way while it is up. With `tiles` (videos), a faint pattern of the
+ * viewer's ID and the session ref covers the whole picture all the time, so no crop is free of it;
+ * it is checked with the watermark.
  *
  * This is a deterrent and investigation aid, not DRM: code in the viewer's own browser can
  * always be changed, and it does not stop filming the screen.
@@ -200,6 +274,7 @@ export default function WatermarkOverlay({
   frameRef,
   resetKey,
   flash = false,
+  tiles = false,
   onTamper
 }: {
   identity: WatermarkIdentity
@@ -211,6 +286,8 @@ export default function WatermarkOverlay({
   resetKey: string | number
   /** Briefly flash the viewer's details across the whole player now and then (videos). */
   flash?: boolean
+  /** Repeat the viewer's ID faintly across the whole picture (videos). */
+  tiles?: boolean
   onTamper: (reason: TamperReason) => void
 }): null {
   const identityRef = useRef(identity)
@@ -274,6 +351,30 @@ export default function WatermarkOverlay({
     if (look.insertFirst && frame.parentNode === container) container.insertBefore(host, frame)
     else container.appendChild(host)
 
+    // The faint ID pattern across the whole picture (videos). Skipped if the page can't draw it.
+    const tileLook = pickTileLook()
+    const pattern = document.createElement('div')
+    let expectedPattern: string | null = null
+    let tileHost: HTMLElement | null = null
+    let tileRoot: ShadowRoot | null = null
+    let tileInline = new Map<string, string>()
+    const writePattern = (id: WatermarkIdentity): boolean => {
+      const image = drawTile(tileLinesOf(id), tileLook, look.fontFamily)
+      if (!image) return false
+      expectedPattern = patternCss(image, tileLook)
+      pattern.setAttribute('style', expectedPattern)
+      return true
+    }
+    if (tiles && writePattern(identityRef.current)) {
+      tileHost = document.createElement(randomTagName())
+      tileRoot = tileHost.attachShadow({ mode: 'closed' })
+      tileRoot.append(pattern)
+      tileHost.setAttribute('style', tileHostCss(look.zIndex))
+      tileInline = inlineOf(tileHost)
+      // Same layer as the moving watermark but earlier in the page, so the watermark stays on top.
+      container.insertBefore(tileHost, host)
+    }
+
     const textIntact = (): boolean =>
       box.parentNode === root &&
       idEl.parentNode === box &&
@@ -294,6 +395,20 @@ export default function WatermarkOverlay({
       host: boxOf(host),
       container: boxOf(container),
       hostZ: zOf(host),
+      expectedZ: look.zIndex,
+      frameZ: zOf(frame)
+    })
+
+    const tileSnapshot = (t: HTMLElement, r: ShadowRoot): TileSnapshot => ({
+      hostAttached: t.isConnected && t.parentNode === container,
+      frameAttached: frame.isConnected && frame.parentNode === container,
+      attributesIntact: attributesAllowed(t.getAttributeNames()) && inlineStyleIntact(tileInline, inlineOf(t)),
+      hostPseudo: hasPseudoContent(t),
+      patternIntact: pattern.parentNode === r && pattern.getAttribute('style') === expectedPattern,
+      layers: [t, pattern].map(layerOf),
+      host: boxOf(t),
+      container: boxOf(container),
+      hostZ: zOf(t),
       expectedZ: look.zIndex,
       frameZ: zOf(frame)
     })
@@ -390,7 +505,8 @@ export default function WatermarkOverlay({
       if (stopped) return
       let reason: TamperReason | null
       try {
-        reason = inspectWatermark(snapshot())
+        reason =
+          inspectWatermark(snapshot()) ?? (tileHost && tileRoot ? inspectTiles(tileSnapshot(tileHost, tileRoot)) : null)
       } catch {
         reason = 'removed'
       }
@@ -423,6 +539,10 @@ export default function WatermarkOverlay({
     observer.observe(container, { childList: true })
     observer.observe(host, { attributes: true })
     observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true })
+    if (tileHost && tileRoot) {
+      observer.observe(tileHost, { attributes: true })
+      observer.observe(tileRoot, { childList: true, subtree: true, attributes: true })
+    }
 
     const resize = new ResizeObserver(() => {
       const next = watermarkFontPx(container.clientWidth, window.innerWidth)
@@ -441,15 +561,18 @@ export default function WatermarkOverlay({
     if (flash) later(showFlash, nextFlashDelayMs(true))
 
     setTextRef.current = (id) => {
-      if (!stopped) writeText(id)
+      if (stopped) return
+      writeText(id)
+      if (tileHost) writePattern(id)
     }
 
     return () => {
       stop()
       setTextRef.current = null
       host.remove()
+      tileHost?.remove()
     }
-  }, [containerRef, frameRef, resetKey, flash])
+  }, [containerRef, frameRef, resetKey, flash, tiles])
 
   useEffect(() => {
     identityRef.current = identity

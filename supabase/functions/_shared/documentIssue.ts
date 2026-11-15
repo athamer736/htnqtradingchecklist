@@ -93,7 +93,11 @@ export async function runDocument(
     return deniedWith(seesUnfinished ? 'document_not_ready' : 'document_not_found')
   }
 
-  const gate = await resolveViewerGate(auth, deps)
+  const gate = await resolveViewerGate(auth, deps, {
+    client: request.client ?? 'desktop',
+    freshOpen: request.mode === 'open',
+    item: { kind: 'document', id: doc.id }
+  })
   if (!gate.ok) return deniedWith(gate.code)
   const { legalName, grant } = gate
 

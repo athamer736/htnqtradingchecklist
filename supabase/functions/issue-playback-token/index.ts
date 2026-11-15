@@ -7,6 +7,8 @@
 //
 // Body: exactly one of { videoId } or { recordingId }, plus the open player's own
 // { streamId } and { renew: true } on re-checks (one video at a time per account).
+// Whether the call came from the website or the desktop app is read from the Origin header
+// (the owner can limit viewing to the app), never from the body.
 // Discord ID and legal name are never taken from the request body or editable user
 // metadata; the name comes from the bot or the admin-entered record for the verified ID.
 //
@@ -27,6 +29,7 @@ import { runPlayback, type LoadedRecording, type LoadedVideo } from '../_shared/
 import { slugForLegacy } from '../_shared/tabCompat.ts'
 import { getTab } from '../_shared/tabStore.ts'
 import { parsePlaybackRequest } from '../_shared/validation.ts'
+import { viewerClient } from '../_shared/viewerGate.ts'
 import { checkOpenBurst, streamClaimer } from '../_shared/viewerSecurityStore.ts'
 import { playbackAuditWriter, viewerGateDeps } from '../_shared/viewerWiring.ts'
 
@@ -56,7 +59,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const auth = await authorize(req, ctx.authzDeps)
   const gate = viewerGateDeps(admin, env, { baseUrl: mentorshipBaseUrl, token: mentorshipToken }, RENEW_LEAD_SECONDS)
 
-  const outcome = await runPlayback(parsed.value, auth, {
+  const request = { ...parsed.value, client: viewerClient(req.headers.get('origin')) }
+  const outcome = await runPlayback(request, auth, {
     loadVideo: async (id): Promise<LoadedVideo | null> => {
       const { data } = await admin
         .from('videos')

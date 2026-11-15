@@ -2,6 +2,8 @@
 // videos and documents, once the role, tab and visibility checks have passed:
 //
 //   0. a viewing hold (staff paused this member's viewing until they reauthorise it)
+//   0b. the owner's "desktop app only" setting (owners and admins excepted)
+//   0c. the hourly limit on different items opened (fresh opens only; staff excepted)
 //   1. the NDA gate (non-staff members need a signed NDA once the owner's deadline passes)
 //   2. the bot's member-access answer, which never blocks viewing; it only supplies the
 //      recheck interval and a legal name for the watermark
@@ -16,7 +18,29 @@ import { pickWatermarkName } from './memberNames.ts'
 import type { DenyCode } from './messages.ts'
 import { MENTORSHIP_MAX_RECHECK_SECONDS, type MentorshipLookupResult } from './mentorshipApi.ts'
 import type { NdaDecision } from './ndaGate.ts'
+import { overOpenLimit, type OpenedItem } from './viewerAlerts.ts'
 import { isHeldViewer } from './viewerSecurity.ts'
+
+export type ViewerClient = 'desktop' | 'web'
+
+/**
+ * Where a request came from. Browsers always send an http(s) Origin with these cross-site calls
+ * and page code can't change it; the desktop app loads from a file and sends none (or "null").
+ * A script that leaves the header out counts as the app: the app-only setting keeps members off
+ * the website, it does not stop someone who writes their own client.
+ */
+export function viewerClient(origin: string | null): ViewerClient {
+  return origin !== null && /^https?:\/\//i.test(origin.trim()) ? 'web' : 'desktop'
+}
+
+export interface ViewingRequest {
+  client: ViewerClient
+  /** A fresh open, not a renewal or recheck of something already open. */
+  freshOpen: boolean
+  item: OpenedItem
+}
+
+type GrantItemIds = { video_id: string | null; recording_id: string | null; document_id: string | null }
 
 export interface ViewerGateDeps {
   checkMentorship: (discordId: string) => Promise<MentorshipLookupResult>
@@ -33,6 +57,10 @@ export interface ViewerGateDeps {
    * hiccup never locks every member out; the open-player heartbeat checks again.
    */
   checkHold: (discordId: string) => Promise<boolean>
+  /** Whether the owner limited viewing to the desktop app. A failed read counts as off. */
+  readAppOnly: () => Promise<boolean>
+  /** The items of this member's grants in the last hour, or null when they can't be read (no limit then). */
+  recentOpens: (userId: string) => Promise<GrantItemIds[] | null>
   ttlSeconds: number
   renewLeadSeconds: number
 }
@@ -48,11 +76,19 @@ export type ViewerGateResult =
 
 export async function resolveViewerGate(
   auth: Extract<AuthzResult, { ok: true }>,
-  deps: ViewerGateDeps
+  deps: ViewerGateDeps,
+  viewing: ViewingRequest
 ): Promise<ViewerGateResult> {
   // Always the Discord ID from the verified linked identity, never the request.
   const held = await deps.checkHold(auth.discordId).catch(() => false)
   if (isHeldViewer(held, auth.caps.isManager)) return { ok: false, code: 'viewing_held' }
+  if (viewing.client === 'web' && !auth.caps.isManager && (await deps.readAppOnly().catch(() => false))) {
+    return { ok: false, code: 'app_only' }
+  }
+  if (viewing.freshOpen && !auth.caps.isStaff) {
+    const opens = await deps.recentOpens(auth.userId).catch(() => null)
+    if (opens && overOpenLimit(opens, viewing.item)) return { ok: false, code: 'open_limit' }
+  }
   const [nda, mentorship] = await Promise.all([
     deps.checkNda({ discordId: auth.discordId, isStaff: auth.caps.isStaff }),
     deps.checkMentorship(auth.discordId)

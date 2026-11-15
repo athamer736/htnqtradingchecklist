@@ -311,6 +311,10 @@ export type PlaybackDenyReason =
   | 'viewing_held'
   /** A newer play on the same account took over (one video at a time). */
   | 'stream_elsewhere'
+  /** The owner limited viewing to the desktop app and this came from the website. */
+  | 'app_only'
+  /** Too many different items opened within the hour. */
+  | 'open_limit'
 
 export interface PlaybackWatermark {
   /** The viewer's own Discord ID: always shown, the primary watermark identifier. */
@@ -410,7 +414,11 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   viewing_held:
     'Your access to mentorship videos and documents is paused while staff review your account. Contact staff to have it restored.',
   stream_elsewhere:
-    'This video was closed because your account started playing a video somewhere else. Only one video can play at a time on each account.'
+    'This video was closed because your account started playing a video somewhere else. Only one video can play at a time on each account.',
+  app_only:
+    'Mentorship videos and documents open in the HTNQ Trading Mentorship desktop app only. Open them there, or ask staff for the download link.',
+  open_limit:
+    'You have opened the most different videos and documents allowed in one hour. Anything you opened in the last hour still opens; new ones open again later.'
 }
 
 export function isVideoLevel(n: unknown): n is VideoLevel {

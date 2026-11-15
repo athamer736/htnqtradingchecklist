@@ -15,6 +15,7 @@ import {
   ITEM_KIND,
   KIND_CHIP,
   MemberAlertsPanel,
+  StaffChip,
   canBePaused,
   formatWhen,
   holdLine,
@@ -73,6 +74,39 @@ function AutoPauseCard({ current }: { current: number | null }): JSX.Element {
         {busy && <span className="text-xs text-muted">Saving…</span>}
         {error && <span className="text-xs text-rose-300">{error}</span>}
       </div>
+    </section>
+  )
+}
+
+function AppOnlyCard({ on }: { on: boolean }): JSX.Element {
+  const setAppOnly = useSecurity((s) => s.setAppOnly)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const change = async (next: boolean): Promise<void> => {
+    if (next && !window.confirm('Members on the website will not be able to open videos or documents. Turn this on?')) return
+    setBusy(true)
+    setError(null)
+    const failure = await setAppOnly(next)
+    setBusy(false)
+    if (failure) setError(failure)
+  }
+
+  return (
+    <section className="rounded-xl border border-line bg-bg-card p-4" aria-label="Desktop app only">
+      <h2 className="text-sm font-semibold text-slate-100">Desktop app only</h2>
+      <p className="mt-1 text-xs leading-relaxed text-muted">
+        Videos and documents open in the Windows app only; on the website members see a message telling them to use the
+        app. The app keeps its window out of screen captures where Windows allows it and has its developer tools switched
+        off, which a web browser can't do. Owners and admins can still use the website. Turn this on once members have
+        the latest app.
+      </p>
+      <label className="mt-3 flex items-center gap-2 text-xs text-slate-200">
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void change(e.target.checked)} />
+        {on ? 'On: the website is closed to members' : 'Off: members can use the website or the app'}
+        {busy && <span className="text-muted">Saving…</span>}
+      </label>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
     </section>
   )
 }
@@ -167,6 +201,7 @@ function TraceCard({ members }: { members: ReadonlyMap<string, AdminMember> }): 
                 return (
                   <li key={m.sessionRef} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                     <span className="font-medium text-slate-100">{memberLabel(m.discordId, member)}</span>
+                    <StaffChip member={member} />
                     <span className="text-muted">Discord ID {m.discordId}</span>
                     <span className="text-slate-300">
                       {m.itemKind ? `${ITEM_KIND[m.itemKind]}: ${m.itemTitle ?? '(since deleted)'}` : 'Unknown item'}
@@ -183,7 +218,11 @@ function TraceCard({ members }: { members: ReadonlyMap<string, AdminMember> }): 
                   </li>
                 )
               })}
-              <li className="text-[11px] text-muted">Each match is now listed as a "Leak traced" flag on that member.</li>
+              <li className="text-[11px] text-muted">
+                Each match is now listed as a "Leak traced" flag on that member. A match names the account that opened
+                it, not necessarily the person who shared it: a shared or stolen login looks the same, so check before
+                acting.
+              </li>
             </ul>
           )}
         </div>
@@ -221,8 +260,10 @@ export default function SecurityTab(): JSX.Element {
         <p className="max-w-3xl text-[11px] leading-relaxed text-muted">
           Flags are raised when a watermark is removed or hidden (the video or document stops), when a new play on another
           device pushes out a video that was still playing (one video at a time per account), when a member opens an
-          unusually large number of items within an hour, and when a leaked copy is traced to them. A flag is a lead, not
-          proof. Pausing a member stops all their videos, recordings and documents until an admin reauthorises them.
+          unusually large number of items within an hour, when a video keeps renewing after its player stopped checking in
+          (something on the page may be blocking the reports), and when a leaked copy is traced to them. A flag is a lead,
+          not proof. Members (not staff) can open at most 40 different items an hour. Pausing a member stops all their
+          videos, recordings and documents until an admin reauthorises them.
         </p>
         <button type="button" className="btn-ghost px-2.5 py-1 text-xs" onClick={() => void loadOverview()}>
           Refresh
@@ -252,7 +293,10 @@ export default function SecurityTab(): JSX.Element {
             ))}
           </div>
 
-          <AutoPauseCard current={overview.autoHoldAfter} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <AutoPauseCard current={overview.autoHoldAfter} />
+            <AppOnlyCard on={overview.appOnly} />
+          </div>
 
           <section className="rounded-xl border border-line bg-bg-card p-4" aria-label="Paused members">
             <h2 className="text-sm font-semibold text-slate-100">Viewing paused ({overview.holds.length})</h2>
@@ -288,6 +332,7 @@ export default function SecurityTab(): JSX.Element {
                     <div key={f.discordId} className="rounded-lg border border-line px-3 py-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium text-slate-100">{memberLabel(f.discordId, member)}</span>
+                        <StaffChip member={member} />
                         <span className="chip bg-rose-400/15 text-rose-200">
                           {f.count} flag{f.count === 1 ? '' : 's'}
                         </span>

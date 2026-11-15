@@ -4,6 +4,7 @@ import {
   parseAlertEvents,
   parseSecurityOverview,
   parseTraceMatches,
+  parseViewerSettings,
   parseViewingHold,
   type AlertEvent,
   type SecurityOverview,
@@ -45,6 +46,8 @@ interface SecurityState {
   reauthorise: (discordId: string) => Promise<string | null>
   /** Pause automatically after this many tamper flags (null = off). Error message or null. */
   setAutoHold: (after: number | null) => Promise<string | null>
+  /** Videos and documents open in the desktop app only (owners and admins excepted). Error message or null. */
+  setAppOnly: (on: boolean) => Promise<string | null>
   /** Looks up clues found in a leaked file (or typed in). `label` says where they came from. */
   traceClues: (clues: string[], label: string) => Promise<void>
   setTraceError: (message: string) => void
@@ -68,6 +71,14 @@ export const useSecurity = create<SecurityState>((set, get) => {
     if (get().memberAlerts[discordId]) refresh.push(get().loadMemberAlerts(discordId))
     if (get().overview) refresh.push(get().loadOverview())
     await Promise.all(refresh)
+  }
+
+  const saveSettings = async (change: { autoHoldAfter?: number | null; appOnly?: boolean }): Promise<string | null> => {
+    const body = await invoke('viewer-security', { action: 'settings', ...change })
+    if (body?.ok !== true) return toFailure(body, 'Could not save the setting.').message
+    const { overview } = get()
+    if (overview) set({ overview: { ...overview, ...parseViewerSettings(body.settings) } })
+    return null
   }
 
   return {
@@ -125,13 +136,8 @@ export const useSecurity = create<SecurityState>((set, get) => {
       return null
     },
 
-    setAutoHold: async (after) => {
-      const body = await invoke('viewer-security', { action: 'settings', autoHoldAfter: after })
-      if (body?.ok !== true) return toFailure(body, 'Could not save the setting.').message
-      const { overview } = get()
-      if (overview) set({ overview: { ...overview, autoHoldAfter: after } })
-      return null
-    },
+    setAutoHold: (after) => saveSettings({ autoHoldAfter: after }),
+    setAppOnly: (on) => saveSettings({ appOnly: on }),
 
     traceClues: async (clues, label) => {
       if (clues.length === 0) {

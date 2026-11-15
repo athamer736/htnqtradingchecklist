@@ -3,8 +3,8 @@ import { fetchDocument } from '../lib/documentApi'
 import { afterRenewFailure, grantFromSuccess, playbackTick, type PlaybackGrant } from '../../../shared/playbackSession'
 import type { DocumentWatermark } from '../../../shared/documents'
 import { PLAYBACK_MESSAGES, type PlaybackDenied } from '../../../shared/video'
-import { HEARTBEAT_SECONDS, parseHeartbeat } from '../../../shared/viewerSecurity'
-import { invoke } from './useMentorship'
+import { HEARTBEAT_SECONDS } from '../../../shared/viewerSecurity'
+import { checkIn } from './useMentorship'
 
 // The open document lives in memory only. The PDF bytes carry the viewer's own details on every
 // page, so they must never be written to disk, localStorage or the IndexedDB cache.
@@ -109,7 +109,7 @@ export const useDocumentViewer = create<DocumentViewerState>((set, get) => ({
     const { current } = get()
     if (!current) return
     set({ beating: true })
-    const beat = parseHeartbeat(await invoke('playback-heartbeat', { kind: 'document' }))
+    const beat = await checkIn({ kind: 'document' })
     if (get().current !== current) return
     if (beat?.state === 'held') {
       openSerial++

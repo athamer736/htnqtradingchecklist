@@ -9,14 +9,17 @@ import {
   colorAlpha,
   flashFontPx,
   inlineStyleIntact,
+  inspectTiles,
   inspectWatermark,
   isTamperReason,
   nextFlashDelayMs,
+  pickTileLook,
   pickWatermarkLook,
   pickWatermarkPosition,
   randomTagName,
   watermarkFontPx,
   type LayerStyle,
+  type TileSnapshot,
   type WatermarkSnapshot
 } from '../src/shared/watermarkGuard'
 
@@ -203,4 +206,49 @@ test('the ID flash is brief, first comes within 30-90 s, then every 1.5-4 minute
   assert.equal(flashFontPx(200), 14)
   assert.equal(flashFontPx(800), 32)
   assert.equal(flashFontPx(4000), 44)
+})
+
+const tiles = (over: Partial<TileSnapshot> = {}): TileSnapshot => ({
+  hostAttached: true,
+  frameAttached: true,
+  attributesIntact: true,
+  hostPseudo: false,
+  patternIntact: true,
+  layers: [layer(), layer()],
+  host: { left: 1, top: 1, width: 958, height: 538 },
+  container: { left: 0, top: 0, width: 960, height: 540 },
+  hostZ: 24,
+  expectedZ: 24,
+  frameZ: null,
+  ...over
+})
+
+test('the faint ID pattern gets a new angle, spacing and offset each time, and stays faint', () => {
+  const looks = [1, 2, 3, 4, 5, 6].map((s) => pickTileLook(seeded(s)))
+  for (const t of looks) {
+    assert.ok(Math.abs(t.angleDeg) >= 15 && Math.abs(t.angleDeg) <= 32)
+    assert.ok(t.tileW >= 300 && t.tileW <= 400 && t.tileH >= 170 && t.tileH <= 230)
+    assert.ok(t.offsetX >= 0 && t.offsetX <= t.tileW && t.offsetY >= 0 && t.offsetY <= t.tileH)
+    assert.ok(t.alpha >= 0.1 && t.alpha <= 0.14, 'faint enough to watch through')
+  }
+  assert.ok(new Set(looks.map((t) => `${t.angleDeg}/${t.tileW}/${t.offsetX}`)).size > 3)
+})
+
+test('the ID pattern is checked like the watermark: removed, emptied, hidden, faded, restyled, shrunk or moved', () => {
+  assert.equal(inspectTiles(tiles()), null)
+  const cases: [Partial<TileSnapshot>, string][] = [
+    [{ hostAttached: false }, 'removed'],
+    [{ frameAttached: false }, 'moved'],
+    [{ patternIntact: false }, 'text_changed'],
+    [{ layers: [layer(), layer({ visibility: 'hidden' })] }, 'hidden'],
+    [{ layers: [layer({ opacity: 0.2 }), layer()] }, 'transparent'],
+    [{ layers: [layer(), layer({ filter: 'opacity(0)' })] }, 'restyled'],
+    [{ attributesIntact: false }, 'restyled'],
+    [{ hostZ: 1 }, 'restyled'],
+    [{ host: { left: 0, top: 0, width: 400, height: 540 } }, 'shrunk'],
+    [{ host: { left: 600, top: 0, width: 960, height: 540 } }, 'moved'],
+    [{ frameZ: 30 }, 'covered']
+  ]
+  for (const [over, reason] of cases) assert.equal(inspectTiles(tiles(over)), reason, JSON.stringify(over))
+  assert.equal(inspectTiles(tiles({ container: { left: 0, top: 0, width: 0, height: 0 }, host: { left: 0, top: 0, width: 0, height: 0 } })), null)
 })

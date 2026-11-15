@@ -158,6 +158,78 @@ export function flashFontPx(playerWidth: number): number {
   return Math.round(Math.min(44, Math.max(14, playerWidth * 0.04)))
 }
 
+// --- Tiled ID pattern (videos) ------------------------------------------------------------------
+
+/**
+ * A faint pattern of the viewer's ID repeated across the whole picture, so no crop of a recording
+ * is free of it. Drawn as an image (no text to select or edit), with a new angle, spacing and
+ * offset each time a lesson opens.
+ */
+export interface TileLook {
+  angleDeg: number
+  /** One repeat of the pattern, in CSS pixels. */
+  tileW: number
+  tileH: number
+  offsetX: number
+  offsetY: number
+  fontPx: number
+  /** Alpha of the white text (a slightly weaker dark copy keeps it visible on light frames). */
+  alpha: number
+}
+
+export function pickTileLook(rand: Rand = Math.random): TileLook {
+  const tileW = Math.round(between(rand, 300, 400))
+  const tileH = Math.round(between(rand, 170, 230))
+  return {
+    angleDeg: (rand() < 0.5 ? -1 : 1) * Math.round(between(rand, 15, 32)),
+    tileW,
+    tileH,
+    offsetX: Math.round(rand() * tileW),
+    offsetY: Math.round(rand() * tileH),
+    fontPx: Math.round(between(rand, 12, 14)),
+    alpha: Math.round(between(rand, 0.1, 0.14) * 100) / 100
+  }
+}
+
+/** The pattern must cover at least this share of the player's width and height. */
+export const MIN_TILE_COVER = 0.9
+
+export interface TileSnapshot {
+  hostAttached: boolean
+  frameAttached: boolean
+  attributesIntact: boolean
+  hostPseudo: boolean
+  /** The pattern element is still in place and still carries the image the app drew. */
+  patternIntact: boolean
+  /** The pattern's host first, then the pattern element. */
+  layers: LayerStyle[]
+  host: Box
+  container: Box
+  hostZ: number | null
+  expectedZ: number
+  frameZ: number | null
+}
+
+/** Why the tiled pattern looks tampered with, or null when it looks as the app left it. */
+export function inspectTiles(s: TileSnapshot): TamperReason | null {
+  if (!s.hostAttached) return 'removed'
+  if (!s.frameAttached) return 'moved'
+  if (!s.patternIntact) return 'text_changed'
+  if (s.layers.some(isHidden)) return 'hidden'
+  if (s.layers.some((l) => !(l.opacity >= MIN_OPACITY))) return 'transparent'
+  if (!s.attributesIntact || s.hostPseudo || s.layers.some(isRestyled) || s.hostZ !== s.expectedZ) {
+    return 'restyled'
+  }
+  const c = s.container
+  if (c.width > 0 && c.height > 0) {
+    if (s.host.width < c.width * MIN_TILE_COVER || s.host.height < c.height * MIN_TILE_COVER) return 'shrunk'
+    if (Math.abs(s.host.left - c.left) > c.width * (1 - MIN_TILE_COVER)) return 'moved'
+    if (Math.abs(s.host.top - c.top) > c.height * (1 - MIN_TILE_COVER)) return 'moved'
+  }
+  if (s.frameZ !== null && s.hostZ !== null && s.frameZ >= s.hostZ) return 'covered'
+  return null
+}
+
 // --- Tamper rules -------------------------------------------------------------------------------
 
 /** The computed style of one watermark element, reduced to what matters here. */

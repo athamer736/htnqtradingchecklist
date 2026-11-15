@@ -9,6 +9,8 @@
 --                       second_stream  a new play pushed out a video still playing elsewhere
 --                       many_opens     unusually many different items opened within an hour
 --                       leak_traced    staff traced a leaked file or reference to this viewing
+--                       quiet_page     a player kept renewing access after its check-ins
+--                                      stopped (the page may be blocking the app's reports)
 --                     Player reports come from the viewer's own device: evidence, not proof.
 --   viewing_holds     Members whose viewing (videos, recordings, documents) is paused until an
 --                     owner or admin reauthorises them. Placed by hand or automatically.
@@ -16,6 +18,9 @@
 --                     checked in (every 20 s).
 --   mentorship_settings.auto_hold_after_flags
 --                     Pause viewing automatically after this many tamper flags (null = off).
+--   mentorship_settings.app_only_viewing
+--                     Videos and documents open in the desktop app only (owners and admins
+--                     excepted). Off by default.
 --
 -- The owner chooses a retention period for viewer_alerts.
 
@@ -24,7 +29,8 @@ create table if not exists public.viewer_alerts (
   user_id       uuid        not null,
   discord_id    text        not null check (discord_id ~ '^[0-9]{5,32}$'),
   kind          text        not null
-                  check (kind in ('tamper', 'second_stream', 'many_opens', 'leak_traced')),
+                  check (kind in ('tamper', 'second_stream', 'many_opens', 'leak_traced',
+                                  'quiet_page')),
   dedup_key     text        not null unique check (char_length(dedup_key) <= 200),
   session_ref   text        check (session_ref ~ '^[A-Za-z0-9]{8,64}$'),
   reason        text
@@ -38,6 +44,12 @@ create table if not exists public.viewer_alerts (
   created_at    timestamptz not null default now(),
   check ((kind = 'tamper') = (reason is not null))
 );
+
+-- Keeps the kind list current when the table was created by an earlier run of this file.
+alter table public.viewer_alerts drop constraint if exists viewer_alerts_kind_check;
+alter table public.viewer_alerts
+  add constraint viewer_alerts_kind_check
+  check (kind in ('tamper', 'second_stream', 'many_opens', 'leak_traced', 'quiet_page'));
 
 create index if not exists viewer_alerts_member_idx
   on public.viewer_alerts (discord_id, created_at desc);
@@ -76,7 +88,8 @@ revoke all on public.active_streams from anon, authenticated;
 alter table public.mentorship_settings
   add column if not exists auto_hold_after_flags smallint
     check (auto_hold_after_flags between 1 and 20),
-  add column if not exists auto_hold_set_by text;
+  add column if not exists auto_hold_set_by text,
+  add column if not exists app_only_viewing boolean not null default false;
 
 -- Audit: pausing and reauthorising members, the auto-pause setting and leak traces (ids only).
 alter table public.content_audit drop constraint if exists content_audit_action_check;

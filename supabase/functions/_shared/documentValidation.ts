@@ -108,7 +108,12 @@ export function parseDocumentManageRequest(body: unknown): Parsed<DocumentManage
 
 // --- issue-document ---------------------------------------------------------
 
-export type DocumentIssueRequest = { documentId: string; mode: 'open' | 'recheck' }
+export type DocumentIssueRequest = {
+  documentId: string
+  mode: 'open' | 'recheck'
+  /** Set by issue-document from the Origin header (see viewerClient), never from the body. */
+  client?: 'desktop' | 'web'
+}
 
 export function parseDocumentIssueRequest(body: unknown): Parsed<DocumentIssueRequest> {
   const o = asObject(body)

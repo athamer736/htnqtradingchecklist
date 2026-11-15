@@ -5,18 +5,26 @@
 //   second_stream  a new play pushed out a video that was still playing elsewhere on the account
 //   many_opens     unusually many different videos and documents opened within an hour
 //   leak_traced    staff traced a leaked file or reference back to this member's viewing
+//   quiet_page     a player kept renewing its access after its check-ins had stopped, which is
+//                  what a page that blocks the app's reports looks like
 //
 // Reports from the player come from the viewer's own device, so a flag is a lead, not proof.
 
 import { TAMPER_REASONS, asPlatform, type TamperReason, type ViewerPlatform } from './tamper.ts'
 
 // Must match ALERT_KINDS in src/shared/viewerSecurity.ts (a test checks they agree).
-export const ALERT_KINDS = ['tamper', 'second_stream', 'many_opens', 'leak_traced'] as const
+export const ALERT_KINDS = ['tamper', 'second_stream', 'many_opens', 'leak_traced', 'quiet_page'] as const
 export type AlertKind = (typeof ALERT_KINDS)[number]
 
 /** Different items opened within the window before a many_opens flag is raised. */
 export const OPEN_BURST_LIMIT = 25
 export const OPEN_BURST_WINDOW_MS = 60 * 60_000
+/**
+ * Different items a member may open within the same window. The next new one is refused (staff
+ * excepted); anything already opened in the window still opens. Well above any study session,
+ * well below what saving the whole library takes.
+ */
+export const OPEN_HOURLY_LIMIT = 40
 
 export const ALERT_SELECT =
   'created_at, discord_id, kind, reason, session_ref, platform, video_id, recording_id, document_id, detail'
@@ -108,7 +116,7 @@ export function shapeAlertEvents(rows: readonly AlertRow[], titles: AlertTitles)
 export type KindCounts = Record<AlertKind, number>
 
 export function emptyKindCounts(): KindCounts {
-  return { tamper: 0, second_stream: 0, many_opens: 0, leak_traced: 0 }
+  return { tamper: 0, second_stream: 0, many_opens: 0, leak_traced: 0, quiet_page: 0 }
 }
 
 export interface MemberFlags {
@@ -164,6 +172,7 @@ export function alertDedupKey(
     | { kind: 'second_stream'; sessionRef: string }
     | { kind: 'many_opens'; userId: string; at: number }
     | { kind: 'leak_traced'; sessionRef: string }
+    | { kind: 'quiet_page'; streamId: string; at: number }
 ): string {
   switch (a.kind) {
     case 'tamper':
@@ -174,6 +183,8 @@ export function alertDedupKey(
       return `opens:${a.userId}:${new Date(a.at).toISOString().slice(0, 13)}`
     case 'leak_traced':
       return `leak:${a.sessionRef}`
+    case 'quiet_page':
+      return `quiet:${a.streamId}:${new Date(a.at).toISOString().slice(0, 10)}`
   }
 }
 
@@ -200,13 +211,29 @@ export function shapeTraceMatches(rows: readonly TraceRow[], titles: AlertTitles
   return out
 }
 
-/** How many different videos, recordings and documents these grants were for. */
-export function distinctItems(rows: ReadonlyArray<Pick<AlertRow, 'video_id' | 'recording_id' | 'document_id'>>): number {
+export interface OpenedItem {
+  kind: 'video' | 'recording' | 'document'
+  id: string
+}
+
+function itemKeys(rows: ReadonlyArray<ItemIds>): Set<string> {
   const seen = new Set<string>()
   for (const r of rows) {
     if (r.video_id) seen.add(`v:${r.video_id}`)
     else if (r.recording_id) seen.add(`r:${r.recording_id}`)
     else if (r.document_id) seen.add(`d:${r.document_id}`)
   }
-  return seen.size
+  return seen
+}
+
+/** How many different videos, recordings and documents these grants were for. */
+export function distinctItems(rows: ReadonlyArray<ItemIds>): number {
+  return itemKeys(rows).size
+}
+
+/** Whether opening `item` now would take the member past the hourly limit (given this hour's grants). */
+export function overOpenLimit(rows: ReadonlyArray<ItemIds>, item: OpenedItem, limit = OPEN_HOURLY_LIMIT): boolean {
+  const seen = itemKeys(rows)
+  const key = { video: 'v', recording: 'r', document: 'd' }[item.kind]
+  return !seen.has(`${key}:${item.id}`) && seen.size >= limit
 }
