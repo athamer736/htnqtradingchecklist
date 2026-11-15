@@ -6,7 +6,8 @@ import {
   ALERT_KINDS,
   ALERT_KIND_LABELS,
   AUTO_HOLD_CHOICES,
-  findTraceCandidates
+  findTraceCandidates,
+  type DmTest
 } from '../../../../shared/viewerSecurity'
 import type { AdminMember } from '../../../../shared/video'
 import {
@@ -106,6 +107,53 @@ function AppOnlyCard({ on }: { on: boolean }): JSX.Element {
         {on ? 'On: the website is closed to members' : 'Off: members can use the website or the app'}
         {busy && <span className="text-muted">Saving…</span>}
       </label>
+      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+    </section>
+  )
+}
+
+const DM_TEST_NOTE: Record<DmTest, { tone: string; text: string }> = {
+  sent: { tone: 'text-emerald-300', text: 'Test message sent. Check your Discord DMs from the bot.' },
+  blocked: {
+    tone: 'text-amber-200',
+    text: "Discord wouldn't deliver the test message. In Discord, open the server's Privacy Settings, allow direct messages from server members, then turn this off and on again to re-test."
+  },
+  failed: {
+    tone: 'text-amber-200',
+    text: "The test message couldn't be sent just now. Alerts will still be tried; turn this off and on again to re-test."
+  }
+}
+
+function DmAlertsCard({ on }: { on: boolean }): JSX.Element {
+  const setTamperDm = useSecurity((s) => s.setTamperDm)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [test, setTest] = useState<DmTest | null>(null)
+
+  const change = async (next: boolean): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    setTest(null)
+    const res = await setTamperDm(next)
+    setBusy(false)
+    setError(res.error)
+    setTest(res.dmTest)
+  }
+
+  return (
+    <section className="rounded-xl border border-line bg-bg-card p-4" aria-label="Discord DM alerts">
+      <h2 className="text-sm font-semibold text-slate-100">Discord DM alerts</h2>
+      <p className="mt-1 text-xs leading-relaxed text-muted">
+        The bot sends you a direct message as soon as a watermark is removed, hidden or changed, with the member, the
+        item and the app, so you can check this tab. At most one message per member every 10 minutes; the rest show
+        here. This is just for you: each owner or admin turns it on for themselves.
+      </p>
+      <label className="mt-3 flex items-center gap-2 text-xs text-slate-200">
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => void change(e.target.checked)} />
+        {on ? 'On: DM me about tampering flags' : 'Off: no DMs'}
+        {busy && <span className="text-muted">Saving…</span>}
+      </label>
+      {test && <p className={`mt-2 text-xs ${DM_TEST_NOTE[test].tone}`}>{DM_TEST_NOTE[test].text}</p>}
       {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
     </section>
   )
@@ -293,9 +341,10 @@ export default function SecurityTab(): JSX.Element {
             ))}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <AutoPauseCard current={overview.autoHoldAfter} />
             <AppOnlyCard on={overview.appOnly} />
+            <DmAlertsCard on={overview.tamperDm} />
           </div>
 
           <section className="rounded-xl border border-line bg-bg-card p-4" aria-label="Paused members">

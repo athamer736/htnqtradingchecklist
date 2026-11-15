@@ -2,11 +2,13 @@ import { create } from 'zustand'
 import { isSupabaseConfigured } from '../lib/supabase'
 import {
   parseAlertEvents,
+  parseDmTest,
   parseSecurityOverview,
   parseTraceMatches,
   parseViewerSettings,
   parseViewingHold,
   type AlertEvent,
+  type DmTest,
   type SecurityOverview,
   type TraceMatch,
   type ViewingHold
@@ -48,6 +50,8 @@ interface SecurityState {
   setAutoHold: (after: number | null) => Promise<string | null>
   /** Videos and documents open in the desktop app only (owners and admins excepted). Error message or null. */
   setAppOnly: (on: boolean) => Promise<string | null>
+  /** A Discord DM to me for each new tamper flag. Turning it on sends a test DM (`dmTest`). */
+  setTamperDm: (on: boolean) => Promise<{ error: string | null; dmTest: DmTest | null }>
   /** Looks up clues found in a leaked file (or typed in). `label` says where they came from. */
   traceClues: (clues: string[], label: string) => Promise<void>
   setTraceError: (message: string) => void
@@ -73,12 +77,16 @@ export const useSecurity = create<SecurityState>((set, get) => {
     await Promise.all(refresh)
   }
 
-  const saveSettings = async (change: { autoHoldAfter?: number | null; appOnly?: boolean }): Promise<string | null> => {
+  const saveSettings = async (change: {
+    autoHoldAfter?: number | null
+    appOnly?: boolean
+    tamperDm?: boolean
+  }): Promise<{ error: string | null; dmTest: DmTest | null }> => {
     const body = await invoke('viewer-security', { action: 'settings', ...change })
-    if (body?.ok !== true) return toFailure(body, 'Could not save the setting.').message
+    if (body?.ok !== true) return { error: toFailure(body, 'Could not save the setting.').message, dmTest: null }
     const { overview } = get()
     if (overview) set({ overview: { ...overview, ...parseViewerSettings(body.settings) } })
-    return null
+    return { error: null, dmTest: parseDmTest(body.dmTest) }
   }
 
   return {
@@ -136,8 +144,9 @@ export const useSecurity = create<SecurityState>((set, get) => {
       return null
     },
 
-    setAutoHold: (after) => saveSettings({ autoHoldAfter: after }),
-    setAppOnly: (on) => saveSettings({ appOnly: on }),
+    setAutoHold: async (after) => (await saveSettings({ autoHoldAfter: after })).error,
+    setAppOnly: async (on) => (await saveSettings({ appOnly: on })).error,
+    setTamperDm: (on) => saveSettings({ tamperDm: on }),
 
     traceClues: async (clues, label) => {
       if (clues.length === 0) {

@@ -1006,6 +1006,17 @@ alter table public.mentorship_settings
   add column if not exists auto_hold_set_by text,
   add column if not exists app_only_viewing boolean not null default false;
 
+-- Owners and admins who turned on "DM me" for watermark tamper flags (Admin -> Security). The bot
+-- DMs each of them, at most once per flagged member every 10 minutes, after re-checking their
+-- live Discord role. (migrations/20261115_tamper_dm_alerts.sql)
+create table if not exists public.security_alert_recipients (
+  discord_id  text        primary key check (discord_id ~ '^[0-9]{5,32}$'),
+  added_at    timestamptz not null default now()
+);
+
+alter table public.security_alert_recipients enable row level security;
+revoke all on public.security_alert_recipients from anon, authenticated;
+
 -- Audit: pausing and reauthorising members, the auto-pause setting and leak traces (ids only).
 alter table public.content_audit drop constraint if exists content_audit_action_check;
 alter table public.content_audit

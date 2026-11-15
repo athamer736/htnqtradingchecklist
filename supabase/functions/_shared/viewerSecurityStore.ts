@@ -36,10 +36,12 @@ export interface NewAlert {
 
 /** Records a flag once (by its dedup key). Resolves true only when a new row was written. */
 export async function insertAlert(admin: SupabaseClient, a: NewAlert): Promise<boolean> {
-  return (await writeAlert(admin, a)) === 'new'
+  return (await writeAlert(admin, a)).status === 'new'
 }
 
-async function writeAlert(admin: SupabaseClient, a: NewAlert): Promise<'new' | 'duplicate' | 'failed'> {
+type WriteOutcome = { status: 'new'; id: string; createdAt: string } | { status: 'duplicate' } | { status: 'failed' }
+
+async function writeAlert(admin: SupabaseClient, a: NewAlert): Promise<WriteOutcome> {
   try {
     const { data, error } = await admin
       .from('viewer_alerts')
@@ -59,12 +61,23 @@ async function writeAlert(admin: SupabaseClient, a: NewAlert): Promise<'new' | '
         },
         { onConflict: 'dedup_key', ignoreDuplicates: true }
       )
-      .select('id')
-    if (error || !Array.isArray(data)) return 'failed'
-    return data.length > 0 ? 'new' : 'duplicate'
+      .select('id, created_at')
+    if (error || !Array.isArray(data)) return { status: 'failed' }
+    const row = data[0] as { id?: unknown; created_at?: unknown } | undefined
+    if (!row) return { status: 'duplicate' }
+    return { status: 'new', id: String(row.id), createdAt: String(row.created_at) }
   } catch {
-    return 'failed'
+    return { status: 'failed' }
   }
+}
+
+/** A tamper flag that was just written, for the staff DM. */
+export interface RecordedTamper {
+  id: string
+  createdAt: string
+  videoId: string | null
+  recordingId: string | null
+  documentId: string | null
 }
 
 /**
@@ -74,7 +87,7 @@ async function writeAlert(admin: SupabaseClient, a: NewAlert): Promise<'new' | '
  * viewing. One flag per session and reason; reaching the owner's threshold pauses their viewing
  * (owners and admins are never paused).
  *
- *   recorded / duplicate  done (the client can forget the report)
+ *   recorded / duplicate  done (the client can forget the report); `alert` is the new row
  *   no_grant              the session isn't one of this member's grants: nothing to record
  *   failed                couldn't be written: the client keeps it and tries again later
  */
@@ -82,7 +95,7 @@ export async function recordTamper(
   admin: SupabaseClient,
   viewer: { userId: string; discordId: string; isManager: boolean },
   report: TamperReport
-): Promise<{ outcome: 'recorded' | 'duplicate' | 'no_grant' | 'failed'; held: boolean }> {
+): Promise<{ outcome: 'recorded' | 'duplicate' | 'no_grant' | 'failed'; held: boolean; alert?: RecordedTamper }> {
   const { data: grant, error } = await admin
     .from('playback_audit')
     .select('video_id, recording_id, document_id')
@@ -106,10 +119,16 @@ export async function recordTamper(
     recordingId: grant.recording_id ?? null,
     documentId: grant.document_id ?? null
   })
-  if (written === 'failed') return { outcome: 'failed', held: false }
-  if (written === 'duplicate' || viewer.isManager) {
-    return { outcome: written === 'new' ? 'recorded' : 'duplicate', held: false }
+  if (written.status === 'failed') return { outcome: 'failed', held: false }
+  if (written.status === 'duplicate') return { outcome: 'duplicate', held: false }
+  const alert: RecordedTamper = {
+    id: written.id,
+    createdAt: written.createdAt,
+    videoId: grant.video_id ?? null,
+    recordingId: grant.recording_id ?? null,
+    documentId: grant.document_id ?? null
   }
+  if (viewer.isManager) return { outcome: 'recorded', held: false, alert }
 
   let held = false
   const threshold = await readAutoHoldAfter(admin)
@@ -129,7 +148,58 @@ export async function recordTamper(
       })
     }
   }
-  return { outcome: 'recorded', held }
+  return { outcome: 'recorded', held, alert }
+}
+
+/** Tamper flags from this member in the DM gap before `before` (that flag excluded); null on a failed read. */
+export async function countEarlierTamperFlags(
+  admin: SupabaseClient,
+  discordId: string,
+  before: { id: string; createdAt: string },
+  gapMs: number
+): Promise<number | null> {
+  const at = Date.parse(before.createdAt)
+  if (!Number.isFinite(at)) return null
+  const { count, error } = await admin
+    .from('viewer_alerts')
+    .select('id', { count: 'exact', head: true })
+    .eq('discord_id', discordId)
+    .eq('kind', 'tamper')
+    .neq('id', before.id)
+    .gte('created_at', new Date(at - gapMs).toISOString())
+    .lt('created_at', before.createdAt)
+  return error ? null : (count ?? 0)
+}
+
+// --- Discord DM alerts -------------------------------------------------------------------------
+
+export async function readTamperDmRecipients(admin: SupabaseClient, limit: number): Promise<string[]> {
+  const { data, error } = await admin
+    .from('security_alert_recipients')
+    .select('discord_id')
+    .order('added_at', { ascending: true })
+    .limit(limit)
+  if (error || !Array.isArray(data)) return []
+  return data.map((r) => String((r as { discord_id: unknown }).discord_id))
+}
+
+/** Whether this owner/admin gets the DMs (false when it can't be read). */
+export async function isTamperDmRecipient(admin: SupabaseClient, discordId: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from('security_alert_recipients')
+    .select('discord_id')
+    .eq('discord_id', discordId)
+    .maybeSingle()
+  return !error && data !== null
+}
+
+export async function setTamperDmRecipient(admin: SupabaseClient, discordId: string, on: boolean): Promise<boolean> {
+  const { error } = on
+    ? await admin
+        .from('security_alert_recipients')
+        .upsert({ discord_id: discordId }, { onConflict: 'discord_id', ignoreDuplicates: true })
+    : await admin.from('security_alert_recipients').delete().eq('discord_id', discordId)
+  return !error
 }
 
 async function titlesFor(

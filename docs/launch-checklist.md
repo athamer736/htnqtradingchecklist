@@ -237,3 +237,6 @@ Do these in order; each step is safe on its own because nothing is enforced unti
 15. [ ] Installed app (new release): Ctrl+Shift+I and F12 do nothing; starting it with
     `--remote-debugging-port=9222` closes at once; `npx @electron/fuses read --app "<path to exe>"` shows
     RunAsNode, EnableNodeOptionsEnvironmentVariable and EnableNodeCliInspectArguments Disabled.
+16. [ ] Run `20261115_tamper_dm_alerts.sql`. Admin -> Security -> Discord DM alerts: turn it on and get the test DM
+    from the bot. As a test student, hide a watermark: a DM names the student, the item and the app within a few
+    seconds; hiding it again within 10 minutes sends no second DM. Turn it off: no more DMs.

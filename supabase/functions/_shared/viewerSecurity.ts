@@ -79,8 +79,8 @@ export type SecurityRequest =
   | { action: 'member'; memberDiscordId: string }
   | { action: 'hold'; memberDiscordId: string; note: string | null }
   | { action: 'release'; memberDiscordId: string }
-  /** Changes whichever settings are named (at least one). */
-  | { action: 'settings'; autoHoldAfter?: number | null; appOnly?: boolean }
+  /** Changes whichever settings are named (at least one). `tamperDm` is the caller's own DM alerts. */
+  | { action: 'settings'; autoHoldAfter?: number | null; appOnly?: boolean; tamperDm?: boolean }
   | { action: 'trace'; codes: string[] }
 
 export const MAX_TRACE_CODES = 20
@@ -108,7 +108,13 @@ export function parseSecurityRequest(body: unknown): Parsed<SecurityRequest> {
         if (typeof o.appOnly !== 'boolean') return { ok: false, error: 'invalid-app-only' }
         value.appOnly = o.appOnly
       }
-      if (value.autoHoldAfter === undefined && value.appOnly === undefined) return { ok: false, error: 'no-settings' }
+      if (o.tamperDm !== undefined) {
+        if (typeof o.tamperDm !== 'boolean') return { ok: false, error: 'invalid-tamper-dm' }
+        value.tamperDm = o.tamperDm
+      }
+      if (value.autoHoldAfter === undefined && value.appOnly === undefined && value.tamperDm === undefined) {
+        return { ok: false, error: 'no-settings' }
+      }
       return { ok: true, value }
     }
     case 'trace': {

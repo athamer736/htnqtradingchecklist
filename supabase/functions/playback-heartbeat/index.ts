@@ -12,8 +12,8 @@
 //
 // A check-in can also carry a watermark tamper report that the app couldn't deliver to
 // watermark-tamper. It is recorded the same way (recordTamper, with the live role lookup so the
-// automatic pause never applies to owners or admins), and the answer says whether the app can
-// forget it: tamper "done", or "retry" to send it again.
+// automatic pause never applies to owners or admins, and the same staff DM), and the answer says
+// whether the app can forget it: tamper "done", or "retry" to send it again.
 //
 // Body: { kind: 'video', streamId, end?, tamper? } | { kind: 'document', tamper? }
 
@@ -26,6 +26,7 @@ import { createWindowLimiter } from '../_shared/rateLimit.ts'
 import { HEARTBEAT_SECONDS } from '../_shared/streams.ts'
 import { parseHeartbeatRequest, type HeartbeatState } from '../_shared/viewerSecurity.ts'
 import { heartbeatStream, readHold, recordTamper } from '../_shared/viewerSecurityStore.ts'
+import { notifyTamper } from '../_shared/viewerWiring.ts'
 
 // Generous: a player sends 3 a minute; several windows open at once stay well inside this.
 const beats = createWindowLimiter(30, 60_000)
@@ -74,6 +75,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       ).catch(() => ({ outcome: 'failed' as const, held: false }))
       tamper = result.outcome === 'failed' ? 'retry' : 'done'
       if (result.held) state = 'held'
+      await notifyTamper(ctx, { discordId: auth.discordId, username: auth.username }, beat.tamper, result)
     } else {
       tamper = 'retry'
     }

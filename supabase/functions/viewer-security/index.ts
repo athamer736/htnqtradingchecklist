@@ -5,8 +5,10 @@
 //   member    every flag recorded against one member, and whether their viewing is paused
 //   hold      pause all of one member's viewing (videos, recordings, documents) until reauthorised
 //   release   reauthorise a paused member
-//   settings  pause automatically after N watermark tamper flags (null = off), and/or open videos
-//             and documents in the desktop app only (owners and admins excepted)
+//   settings  pause automatically after N watermark tamper flags (null = off), open videos and
+//             documents in the desktop app only (owners and admins excepted), and/or the caller's
+//             own Discord DM for each new tamper flag (turning it on sends a test DM at once and
+//             answers dmTest: sent | blocked | failed)
 //   trace     turn codes found in a leaked file (or a "ref" read off a screen) into the member,
 //             item and time of the viewing they came from; each match is flagged "leak_traced"
 //
@@ -19,6 +21,7 @@ import { canViewMemberIdentity } from '../_shared/decisions.ts'
 import { handleOptions, json, readJsonBody } from '../_shared/http.ts'
 import { deny } from '../_shared/messages.ts'
 import { resolveCapabilities } from '../_shared/roles.ts'
+import { sendDiscordDm, testDmMessage, type DmResult } from '../_shared/staffAlerts.ts'
 import { decodeTrace } from '../_shared/traceCode.ts'
 import {
   ALERT_SELECT,
@@ -33,13 +36,15 @@ import {
 import { parseSecurityRequest } from '../_shared/viewerSecurity.ts'
 import {
   insertAlert,
+  isTamperDmRecipient,
   listHolds,
   loadAlertTitles,
   placeHold,
   readAppOnly,
   readAutoHoldAfter,
   releaseHold,
-  saveViewerSettings
+  saveViewerSettings,
+  setTamperDmRecipient
 } from '../_shared/viewerSecurityStore.ts'
 
 const COUNT_ROWS = 10_000
@@ -68,7 +73,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   switch (request.action) {
     case 'overview': {
-      const [counts, recent, holds, autoHoldAfter, appOnly] = await Promise.all([
+      const [counts, recent, holds, autoHoldAfter, appOnly, tamperDm] = await Promise.all([
         admin
           .from('viewer_alerts')
           .select('discord_id, kind, created_at')
@@ -77,7 +82,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         admin.from('viewer_alerts').select(ALERT_SELECT).order('created_at', { ascending: false }).limit(RECENT),
         listHolds(admin),
         readAutoHoldAfter(admin),
-        readAppOnly(admin).catch(() => false)
+        readAppOnly(admin).catch(() => false),
+        isTamperDmRecipient(admin, auth.discordId)
       ])
       if (counts.error || recent.error || holds === null) return deny('upstream_failed')
       const rows = (recent.data ?? []) as AlertRow[]
@@ -91,7 +97,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         flagged,
         holds,
         recent: shapeAlertEvents(rows, titles),
-        settings: { autoHoldAfter, appOnly }
+        settings: { autoHoldAfter, appOnly, tamperDm }
       })
     }
 
@@ -170,17 +176,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
         ...(request.autoHoldAfter !== undefined ? { autoHoldAfter: request.autoHoldAfter } : {}),
         ...(request.appOnly !== undefined ? { appOnly: request.appOnly } : {})
       }
-      if (!(await saveViewerSettings(admin, change, auth.discordId))) return deny('upstream_failed')
+      if (Object.keys(change).length > 0 && !(await saveViewerSettings(admin, change, auth.discordId))) {
+        return deny('upstream_failed')
+      }
+      let dmTest: DmResult | undefined
+      if (request.tamperDm !== undefined) {
+        if (!(await setTamperDmRecipient(admin, auth.discordId, request.tamperDm))) return deny('upstream_failed')
+        if (request.tamperDm) dmTest = await sendDiscordDm(ctx.env.botToken, auth.discordId, testDmMessage())
+      }
       await writeContentAudit(admin, {
         ...actor,
         action: 'viewer_security_set',
         target_kind: 'section',
         target_id: null,
         target_section: 'viewer_security',
-        detail: change
+        detail: { ...change, ...(request.tamperDm !== undefined ? { tamperDm: request.tamperDm } : {}) }
       })
-      const [autoHoldAfter, appOnly] = await Promise.all([readAutoHoldAfter(admin), readAppOnly(admin).catch(() => false)])
-      return json({ ok: true, settings: { autoHoldAfter, appOnly } })
+      const [autoHoldAfter, appOnly, tamperDm] = await Promise.all([
+        readAutoHoldAfter(admin),
+        readAppOnly(admin).catch(() => false),
+        isTamperDmRecipient(admin, auth.discordId)
+      ])
+      return json({ ok: true, settings: { autoHoldAfter, appOnly, tamperDm }, ...(dmTest ? { dmTest } : {}) })
     }
 
     case 'trace': {

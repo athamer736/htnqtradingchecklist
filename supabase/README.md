@@ -238,6 +238,13 @@ Run `migrations/20261115_viewer_security.sql` first. It creates three service-ro
   it renews, so this is what a page blocking the app's reports looks like). A tamper report that
   doesn't get through is kept by the app and sent again with its next check-in. Player reports come
   from the viewer's device, so treat them as a lead, not proof.
+- **Discord DM alerts** (`security_alert_recipients`, `migrations/20261115_tamper_dm_alerts.sql`): an
+  owner or admin who turns on "DM me" in Admin -> Security gets a DM from the bot (`DISCORD_BOT_TOKEN`,
+  no bot changes) for each new watermark tamper flag: member, item, app and whether they were paused,
+  never a legal name. At most one DM per flagged member every 10 minutes; it is sent after the
+  response, and each recipient's live role is checked first (anyone no longer an owner or admin is
+  taken off). Turning it on sends a test DM and says if Discord refused it (DMs from server members
+  off). Redeploy `viewer-security`, `watermark-tamper` and `playback-heartbeat` after running the SQL.
 - **Hourly limit**: members (not staff) can open at most 40 different videos, recordings and documents
   within an hour; the next new one is refused with `open_limit` (anything already opened in that hour
   still opens, and renewals are never counted). If the history can't be read, nothing is refused.

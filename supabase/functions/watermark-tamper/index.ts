@@ -11,6 +11,9 @@
 // If this call doesn't get through, the app keeps the report and sends it with its next
 // check-in (playback-heartbeat), which records it the same way (recordTamper).
 //
+// A new flag is also sent as a Discord DM to the owners and admins who turned that on in Admin ->
+// Security (staffAlerts.ts), after the response.
+//
 // Reports come from code running on the viewer's device, so they are evidence to look into,
 // not proof on their own. The Admin panel reads them through viewer-security.
 
@@ -21,6 +24,7 @@ import { deny } from '../_shared/messages.ts'
 import { createWindowLimiter } from '../_shared/rateLimit.ts'
 import { parseTamperRequest } from '../_shared/tamper.ts'
 import { recordTamper } from '../_shared/viewerSecurityStore.ts'
+import { notifyTamper } from '../_shared/viewerWiring.ts'
 
 const reports = createWindowLimiter(20, 10 * 60_000)
 
@@ -49,5 +53,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   )
   if (result.outcome === 'failed') return deny('upstream_failed')
   if (result.outcome === 'no_grant') return deny('invalid_request')
+  await notifyTamper(ctx, { discordId: auth.discordId, username: auth.username }, parsed.value, result)
   return json({ ok: true, recorded: result.outcome === 'recorded', held: result.held })
 })

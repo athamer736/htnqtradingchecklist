@@ -68,6 +68,15 @@ export interface SecurityOverview {
   autoHoldAfter: number | null
   /** Videos and documents open in the desktop app only (owners and admins excepted). */
   appOnly: boolean
+  /** The signed-in owner/admin gets a Discord DM for each new watermark tamper flag. */
+  tamperDm: boolean
+}
+
+/** The test DM sent when DM alerts are turned on: blocked = Discord refused (DMs from server members are off). */
+export type DmTest = 'sent' | 'blocked' | 'failed'
+
+export function parseDmTest(value: unknown): DmTest | null {
+  return value === 'sent' || value === 'blocked' || value === 'failed' ? value : null
 }
 
 export interface TraceMatch {
@@ -178,9 +187,9 @@ export function parseSecurityOverview(body: unknown): SecurityOverview | null {
 }
 
 /** The Security tab's settings, from an `overview` or `settings` answer. */
-export function parseViewerSettings(value: unknown): { autoHoldAfter: number | null; appOnly: boolean } {
+export function parseViewerSettings(value: unknown): Pick<SecurityOverview, 'autoHoldAfter' | 'appOnly' | 'tamperDm'> {
   const s = asRecord(value)
-  return { autoHoldAfter: parseAutoHold(s?.autoHoldAfter), appOnly: s?.appOnly === true }
+  return { autoHoldAfter: parseAutoHold(s?.autoHoldAfter), appOnly: s?.appOnly === true, tamperDm: s?.tamperDm === true }
 }
 
 export function parseTraceMatches(value: unknown): TraceMatch[] {

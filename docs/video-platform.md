@@ -23,7 +23,7 @@ Customer app (Windows desktop or https://app.htnq.org)
         issue-playback-token                                (every play and renewal)
         watermark-tamper                                    (player reports a hidden watermark: a viewer flag)
         playback-heartbeat                                  (open players check in: one video per account, paused viewing, queued tamper reports)
-        viewer-security                                     (owner/admin: flags, pause/reauthorise, auto-pause, app-only, leak trace)
+        viewer-security                                     (owner/admin: flags, pause/reauthorise, auto-pause, app-only, DM alerts, leak trace)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
      → Railway mentorship API (POST /api/v1/member-access) on every playback
