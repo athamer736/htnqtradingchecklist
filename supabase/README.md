@@ -188,6 +188,7 @@ supabase functions deploy issue-playback-token
 supabase functions deploy create-document-upload
 supabase functions deploy manage-documents
 supabase functions deploy issue-document
+supabase functions deploy watermark-tamper
 supabase functions delete list-videos   # replaced by list-content
 ```
 
@@ -218,6 +219,16 @@ and widens the `content_audit` checks. Then deploy `create-document-upload`, `ma
 `issue-document`, and redeploy `list-content`, `manage-tabs`, `issue-playback-token` (they share
 the code changed for documents). `issue-document` and `manage-documents` each have a `deno.json`
 that maps `pdf-lib`; deploy them from this folder so it is picked up. No new secrets are needed.
+
+### Watermark tamper reports
+
+Run `migrations/20261115_watermark_tamper.sql` first: it creates the service-role-only
+`watermark_tamper_events` table. Then deploy `watermark-tamper` and redeploy `admin-members`.
+The player and PDF viewer stop and report when their watermark is removed, hidden, made
+transparent or restyled; the member is the signed-in user and the item comes from their own
+grant for that session (`playback_audit.session_ref`). Owners and admins see the count on each
+member in Admin -> Members and can open the list. Reports come from the viewer's device, so treat
+them as evidence to look into, not proof. No new secrets are needed.
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep

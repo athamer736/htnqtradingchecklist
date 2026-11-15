@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { TamperReason } from '../../../../shared/watermarkGuard'
 import RichText from './RichText'
+import TamperNotice, { reportWatermarkTamper } from './TamperNotice'
 import WatermarkOverlay, { type WatermarkIdentity } from './WatermarkOverlay'
 
 const ACCESS_TICK_MS = 2_000
@@ -12,8 +14,12 @@ const ACCESS_TICK_MS = 2_000
  * (iframe + overlay) via the Fullscreen API instead, or, where that API isn't
  * available for elements (iPhone Safari), expand the shell to fill the page.
  *
+ * If the watermark is removed, hidden or restyled the video is taken down (not just paused) and the
+ * attempt is reported against this session, so it shows on the member in Admin.
+ *
  * Limitations (documented honestly):
- * - DOM overlays can be removed by a determined user via DevTools.
+ * - DOM overlays can be removed by a determined user via DevTools; the check runs in the same page,
+ *   so someone who also edits the app's code can switch it off.
  * - Electron setContentProtection (when available) blocks some OS capture paths
  *   but not all devices/platforms, and is not DRM.
  * - Revoked access stops the player at the next access check (within a few
@@ -43,6 +49,8 @@ export default function VideoPlayer({
   onTick: () => void
 }): JSX.Element {
   const shellRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLIFrameElement>(null)
+  const [tamper, setTamper] = useState<TamperReason | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [fsError, setFsError] = useState<string | null>(null)
@@ -117,6 +125,15 @@ export default function VideoPlayer({
     }
   }, [])
 
+  const sessionRef = watermark.sessionRef
+  const onTamper = useCallback(
+    (reason: TamperReason) => {
+      setTamper(reason)
+      reportWatermarkTamper(sessionRef, reason)
+    },
+    [sessionRef]
+  )
+
   const big = isFullscreen || expanded
 
   return (
@@ -136,7 +153,11 @@ export default function VideoPlayer({
               {showDetails ? 'Hide details' : 'Show details'}
             </button>
           )}
-          <button type="button" className="btn-ghost px-3 py-2 text-xs sm:text-sm" onClick={() => void toggleFullscreen()}>
+          <button
+            type="button"
+            className="btn-ghost px-3 py-2 text-xs sm:text-sm"
+            onClick={() => void toggleFullscreen()}
+          >
             {big ? 'Exit fullscreen' : 'Fullscreen'}
           </button>
         </div>
@@ -161,21 +182,37 @@ export default function VideoPlayer({
           {/*
             allow: no fullscreen / no picture-in-picture — watermark stays with shell.
           */}
-          <iframe
-            key={embedUrl}
-            src={embedUrl}
-            title="Mentorship video"
-            className="absolute inset-0 h-full w-full border-0"
-            allow="accelerometer; encrypted-media; gyroscope"
-            referrerPolicy="no-referrer"
-          />
-          <WatermarkOverlay identity={watermark} />
+          {tamper ? (
+            <TamperNotice reason={tamper} item="video" onClose={onClose} />
+          ) : (
+            <>
+              <iframe
+                key={embedUrl}
+                ref={frameRef}
+                src={embedUrl}
+                title="Mentorship video"
+                className="absolute inset-0 h-full w-full border-0"
+                allow="accelerometer; encrypted-media; gyroscope"
+                referrerPolicy="no-referrer"
+              />
+              <WatermarkOverlay
+                identity={watermark}
+                containerRef={shellRef}
+                frameRef={frameRef}
+                resetKey={embedUrl}
+                onTamper={onTamper}
+              />
+            </>
+          )}
           {big && (
             <button
               type="button"
               onClick={() => void exitFullscreen()}
               className="absolute right-3 top-3 z-30 rounded-md bg-black/60 px-3 py-1.5 text-xs font-medium text-solid-white/90 hover:bg-black/80"
-              style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: 'max(0.75rem, env(safe-area-inset-right))' }}
+              style={{
+                top: 'max(0.75rem, env(safe-area-inset-top))',
+                right: 'max(0.75rem, env(safe-area-inset-right))'
+              }}
             >
               Exit fullscreen
             </button>
@@ -214,7 +251,8 @@ export default function VideoPlayer({
       </div>
 
       <p className="pb-2 text-[11px] leading-relaxed text-muted">
-        Watermark shows your legal name, Discord username and Discord ID.
+        Watermark shows your legal name, Discord username and Discord ID. Hiding or changing it stops the video and is
+        recorded on your account.
       </p>
     </div>
   )

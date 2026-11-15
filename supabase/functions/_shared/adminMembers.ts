@@ -27,6 +27,9 @@ export interface AdminMember {
   levelWithoutStudent: boolean
   /** An admin has recorded a legal name for them (set by the function, not Discord). */
   hasStoredName?: boolean
+  /** Watermark tamper reports recorded against them, and the latest (set by the function). */
+  tamperCount?: number
+  lastTamperAt?: string
 }
 
 const ROLE_RANK: Record<PrimaryRole, number> = { owner: 0, admin: 1, mentor: 2, student: 3, partial: 4, none: 5 }

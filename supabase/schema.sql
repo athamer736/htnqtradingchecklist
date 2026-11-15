@@ -935,3 +935,29 @@ alter table public.content_audit
        and target_id is not null and target_discord_id is null
        and target_level is null and target_section is null)
   );
+
+-- === Watermark tamper reports (also supabase/migrations/20261115_watermark_tamper.sql) ====
+-- The player reports a removed, hidden or restyled watermark; the item comes from the
+-- reporter's own grant for that session. Service-role only.
+
+create table if not exists public.watermark_tamper_events (
+  id            uuid        primary key default gen_random_uuid(),
+  user_id       uuid        not null,
+  discord_id    text        not null check (discord_id ~ '^[0-9]{5,32}$'),
+  session_ref   text        not null check (session_ref ~ '^[A-Za-z0-9]{8,64}$'),
+  video_id      uuid,
+  recording_id  uuid,
+  document_id   uuid,
+  reason        text        not null
+                  check (reason in ('removed', 'moved', 'hidden', 'transparent',
+                                    'restyled', 'shrunk', 'covered', 'text_changed')),
+  platform      text        check (platform in ('desktop', 'web')),
+  created_at    timestamptz not null default now(),
+  unique (session_ref, reason)
+);
+
+create index if not exists watermark_tamper_events_member_idx
+  on public.watermark_tamper_events (discord_id, created_at desc);
+
+alter table public.watermark_tamper_events enable row level security;
+revoke all on public.watermark_tamper_events from anon, authenticated;

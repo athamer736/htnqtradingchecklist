@@ -21,6 +21,7 @@ Customer app (Windows desktop or https://app.htnq.org)
        admin-members | admin-member-identity | admin-member-name   (owner/admin: Admin panel)
         level-descriptions                                 (text at the top of each Mentorship page)
         issue-playback-token                                (every play and renewal)
+        watermark-tamper                                    (player reports a hidden watermark; owner/admin log)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
      → Railway mentorship API (POST /api/v1/member-access) on every playback

@@ -222,6 +222,9 @@ export interface AdminMember {
   levelWithoutStudent: boolean
   /** An admin has recorded a legal name for them. Unset if the server could not tell. */
   hasStoredName?: boolean
+  /** Watermark tamper reports recorded against them, and when the latest was. Unset when none. */
+  tamperCount?: number
+  lastTamperAt?: string
 }
 
 export interface AdminMembersResponse {

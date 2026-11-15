@@ -14,6 +14,7 @@ import { listGuildMembers } from '../_shared/discord.ts'
 import { handleOptions, json } from '../_shared/http.ts'
 import { listStoredNameIds } from '../_shared/memberNameStore.ts'
 import { deny } from '../_shared/messages.ts'
+import { countTamperByMember } from '../_shared/tamper.ts'
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const opt = handleOptions(req)
@@ -42,8 +43,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // Flags only (ids, never names). If this read fails the list still loads; the
   // flag is simply left unset and the panel shows nothing for it.
   const stored = await listStoredNameIds(ctx.admin)
-  const members = sortAdminMembers(shaped).map((m) =>
-    stored.ok ? { ...m, hasStoredName: stored.value.has(m.discordId) } : m
-  )
+  // Tamper counts are a flag on the list too; if the read fails they are simply not shown.
+  const tamper = await ctx.admin
+    .from('watermark_tamper_events')
+    .select('discord_id, created_at')
+    .order('created_at', { ascending: false })
+    .limit(5000)
+  const tamperBy = countTamperByMember(tamper.error ? [] : (tamper.data ?? []))
+  const members = sortAdminMembers(shaped).map((m) => {
+    const named = stored.ok ? { ...m, hasStoredName: stored.value.has(m.discordId) } : m
+    const t = tamperBy.get(m.discordId)
+    return t ? { ...named, tamperCount: t.count, lastTamperAt: t.lastAt } : named
+  })
   return json({ ok: true, members, truncated: result.truncated })
 })

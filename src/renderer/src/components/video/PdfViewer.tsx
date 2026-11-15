@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { TamperReason } from '../../../../shared/watermarkGuard'
 import type { PDFDocumentProxy, RenderTask } from '../../lib/pdfjs'
 import RichText from './RichText'
+import TamperNotice, { reportWatermarkTamper } from './TamperNotice'
 import WatermarkOverlay, { type WatermarkIdentity } from './WatermarkOverlay'
 
 const ACCESS_TICK_MS = 2_000
@@ -16,7 +18,9 @@ const MAX_CANVAS_EDGE = 4096
  * A watermarked PDF inside a shell that owns fullscreen, mirroring the video player.
  *
  * The file itself already has the viewer's name, Discord ID and a session reference stamped on
- * every page by the server. On top of that this shows the same moving overlay as the videos.
+ * every page by the server. On top of that this shows the same moving overlay as the videos, with the
+ * same tamper check: if the overlay is removed, hidden or restyled the pages are taken down and the
+ * attempt is reported.
  *
  * Pages are drawn on canvases only: there is no text layer, no download or print button, and the
  * context menu, drag and the print/save/copy shortcuts are blocked. Honest limits: that is a
@@ -60,6 +64,7 @@ export default function PdfViewer({
   const [expanded, setExpanded] = useState(false)
   const [fsError, setFsError] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(true)
+  const [tamper, setTamper] = useState<TamperReason | null>(null)
 
   // --- Load the document (a copy of the bytes: pdf.js hands its copy to the worker) -----------
   useEffect(() => {
@@ -189,6 +194,15 @@ export default function PdfViewer({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
+  const sessionRef = watermark.sessionRef
+  const onTamper = useCallback(
+    (reason: TamperReason) => {
+      setTamper(reason)
+      reportWatermarkTamper(sessionRef, reason)
+    },
+    [sessionRef]
+  )
+
   const big = isFullscreen || expanded
   const pageWidth = Math.max(160, Math.min(MAX_PAGE_WIDTH, available) * zoom)
 
@@ -259,36 +273,48 @@ export default function PdfViewer({
           onContextMenu={(e) => e.preventDefault()}
           onDragStart={(e) => e.preventDefault()}
         >
-          <div
-            ref={scrollRef}
-            className="absolute inset-0 select-none overflow-auto px-3 py-3"
-            style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
-          >
-            {loadError ? (
-              <p className="mx-auto mt-10 max-w-sm text-center text-sm text-slate-200">
-                This document could not be displayed. Close it and try again, or contact staff.
-              </p>
-            ) : !doc ? (
-              <div className="mt-10 flex items-center justify-center gap-3 text-sm text-slate-300">
-                <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-                Preparing your copy…
-              </div>
-            ) : (
-              <div className="mx-auto flex flex-col items-center gap-3" style={{ width: pageWidth }}>
-                {sizes.map((size, i) => (
-                  <PageCanvas
-                    key={i}
-                    doc={doc}
-                    pageNumber={i + 1}
-                    size={size}
-                    cssWidth={pageWidth}
-                    root={scrollRef}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          <WatermarkOverlay identity={watermark} />
+          {tamper ? (
+            <TamperNotice reason={tamper} item="document" onClose={onClose} />
+          ) : (
+            <div
+              ref={scrollRef}
+              className="absolute inset-0 select-none overflow-auto px-3 py-3"
+              style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+            >
+              {loadError ? (
+                <p className="mx-auto mt-10 max-w-sm text-center text-sm text-slate-200">
+                  This document could not be displayed. Close it and try again, or contact staff.
+                </p>
+              ) : !doc ? (
+                <div className="mt-10 flex items-center justify-center gap-3 text-sm text-slate-300">
+                  <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+                  Preparing your copy…
+                </div>
+              ) : (
+                <div className="mx-auto flex flex-col items-center gap-3" style={{ width: pageWidth }}>
+                  {sizes.map((size, i) => (
+                    <PageCanvas
+                      key={i}
+                      doc={doc}
+                      pageNumber={i + 1}
+                      size={size}
+                      cssWidth={pageWidth}
+                      root={scrollRef}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {!tamper && (
+            <WatermarkOverlay
+              identity={watermark}
+              containerRef={shellRef}
+              frameRef={scrollRef}
+              resetKey="document"
+              onTamper={onTamper}
+            />
+          )}
           {big && (
             <button
               type="button"
@@ -331,7 +357,8 @@ export default function PdfViewer({
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted">
-        Every page is marked with your name, Discord username and Discord ID. This copy is for you only.
+        Every page is marked with your name, Discord username and Discord ID. This copy is for you only. Hiding or
+        changing the on-screen watermark closes the document and is recorded on your account.
       </p>
     </div>
   )
