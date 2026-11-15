@@ -19,19 +19,19 @@ type Tab = 'members' | 'security' | 'library' | 'tabs'
 export default function AdminView(): JSX.Element {
   const status = useMentorship((s) => s.status)
   const caps = useMentorship((s) => s.capabilities)
-  const load = useMentorship((s) => s.load)
+  const ensureLoaded = useMentorship((s) => s.ensureLoaded)
   const resetAdmin = useAdmin((s) => s.reset)
   const resetSecurity = useSecurity((s) => s.reset)
   const [tab, setTab] = useState<Tab | null>(null)
 
   useEffect(() => {
-    void load()
+    void ensureLoaded()
     // Legal names fetched in this panel must not outlive it.
     return () => {
       resetAdmin()
       resetSecurity()
     }
-  }, [load, resetAdmin, resetSecurity])
+  }, [ensureLoaded, resetAdmin, resetSecurity])
 
   if (status !== 'ready' || !caps) return <MentorshipStatus />
 

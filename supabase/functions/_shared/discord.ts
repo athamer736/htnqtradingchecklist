@@ -36,11 +36,47 @@ export function cleanDiscordUsername(v: unknown): string | undefined {
   return s.length >= 2 && s.length <= 32 ? s : undefined
 }
 
+/**
+ * Discord limits single-member lookups per server, shared by every member using the app, so a
+ * burst (quick page switches, many members at once) gets a 429 with a wait of well under a
+ * second. A wait up to this long is sat out once and the lookup retried.
+ */
+export const MEMBER_RETRY_MAX_WAIT_MS = 1500
+
+/** Seconds Discord asked us to wait: the JSON body's `retry_after`, else the headers. */
+async function rateLimitWait(res: Response): Promise<number | undefined> {
+  const body = (await res.json().catch(() => null)) as { retry_after?: unknown } | null
+  const candidates = [body?.retry_after, res.headers.get('x-ratelimit-reset-after'), res.headers.get('retry-after')]
+  for (const c of candidates) {
+    const n = typeof c === 'number' ? c : typeof c === 'string' && c.trim() ? Number(c) : NaN
+    if (Number.isFinite(n) && n >= 0) return n
+  }
+  return undefined
+}
+
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
 export async function fetchGuildMember(
   botToken: string,
   guildId: string,
   discordId: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  sleep: (ms: number) => Promise<void> = pause
+): Promise<DiscordMemberResult> {
+  const first = await lookupGuildMember(botToken, guildId, discordId, fetchImpl)
+  if (first.kind !== 'rate_limited') return first
+  // Jitter so lookups limited together don't all retry at the same instant.
+  const waitMs = Math.ceil((first.retryAfterSeconds ?? 1) * 1000) + Math.floor(Math.random() * 250)
+  if (waitMs > MEMBER_RETRY_MAX_WAIT_MS) return first
+  await sleep(waitMs)
+  return lookupGuildMember(botToken, guildId, discordId, fetchImpl)
+}
+
+async function lookupGuildMember(
+  botToken: string,
+  guildId: string,
+  discordId: string,
+  fetchImpl: typeof fetch
 ): Promise<DiscordMemberResult> {
   try {
     const res = await fetchImpl(
@@ -56,13 +92,7 @@ export async function fetchGuildMember(
       return username ? { kind: 'member', roles, username } : { kind: 'member', roles }
     }
     if (res.status === 404) return { kind: 'not_member' }
-    if (res.status === 429) {
-      const retry = Number(res.headers.get('retry-after') ?? '')
-      return {
-        kind: 'rate_limited',
-        retryAfterSeconds: Number.isFinite(retry) ? retry : undefined
-      }
-    }
+    if (res.status === 429) return { kind: 'rate_limited', retryAfterSeconds: await rateLimitWait(res) }
     const text = await res.text().catch(() => '')
     return { kind: 'error', status: res.status, detail: text.slice(0, 200) }
   } catch (err) {

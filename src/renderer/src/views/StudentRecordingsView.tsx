@@ -113,7 +113,7 @@ function StudentPicker({
 export default function StudentRecordingsView(): JSX.Element {
   const status = useMentorship((s) => s.status)
   const caps = useMentorship((s) => s.capabilities)
-  const load = useMentorship((s) => s.load)
+  const ensureLoaded = useMentorship((s) => s.ensureLoaded)
   const loadRecordings = useMentorship((s) => s.loadRecordings)
   const loadStudentSummaries = useMentorship((s) => s.loadStudentSummaries)
   const recordings = useMentorship((s) => s.recordings)
@@ -134,10 +134,10 @@ export default function StudentRecordingsView(): JSX.Element {
   const ndaGate = useNdaGate()
 
   useEffect(() => {
-    void load()
+    void ensureLoaded()
     void loadDescriptions()
     return () => stop()
-  }, [load, loadDescriptions, stop])
+  }, [ensureLoaded, loadDescriptions, stop])
 
   const isStaff = Boolean(caps?.isStaff)
   const canView = Boolean(caps && (caps.isStaff || caps.isStudent))

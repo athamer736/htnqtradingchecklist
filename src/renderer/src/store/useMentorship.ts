@@ -19,6 +19,7 @@ import {
   type UploadCredentials,
   type UploadTarget,
   type Visibility,
+  isTemporaryPlaybackFailure,
   thumbnailFileProblem
 } from '../../../shared/video'
 import type { DocumentUploadCredentials } from '../../../shared/documents'
@@ -176,7 +177,12 @@ interface MentorshipState {
   nextBeatAt: number
   beating: boolean
 
+  /** When the content list last arrived (ms), 0 before the first. */
+  loadedAt: number
+  /** Asks the server for the content list now (Refresh, after a change). */
   load: () => Promise<void>
+  /** Opening a page: reuses a list loaded in the last 30 s, or joins one already on its way. */
+  ensureLoaded: () => Promise<void>
   /** Loads the Recordings page text (tab descriptions arrive with `load`). */
   loadRecordingsDescription: () => Promise<void>
   /** Owner/admin. A blank text removes the description. Resolves to an error message, or null on success. */
@@ -219,6 +225,7 @@ interface MentorshipState {
 const initial = {
   status: 'idle' as LoadStatus,
   error: null,
+  loadedAt: 0,
   capabilities: null,
   tabs: [],
   videos: [],
@@ -292,41 +299,86 @@ const ACCESS_EXPIRED: PlaybackDenied = {
   message: PLAYBACK_MESSAGES.access_expired
 }
 
+/** Page switches reuse a content list this fresh instead of asking again. */
+const CONTENT_FRESH_MS = 30_000
+/** A first load that hit a passing failure waits this long (or the server's hint, at most 3 s) and tries once more. */
+const CONTENT_RETRY_MS = 1500
+
+/** Discord or the server was briefly busy: worth keeping what's on screen and trying again. */
+function isPassingFailure(failure: Failure): boolean {
+  return isTemporaryPlaybackFailure(failure.reasonCode) || failure.reasonCode === 'rate_limited'
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+// Only the newest content request may write its answer; a sign-out also retires older ones.
+let contentRequest = 0
+let contentInFlight: Promise<void> | null = null
+
 export const useMentorship = create<MentorshipState>((set, get) => ({
   ...initial,
 
-  load: async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      set({
-        status: 'error',
-        error: {
-          ok: false,
-          reasonCode: 'misconfigured',
-          message: 'Cloud login is required for mentorship content. Sign in with Discord to continue.'
+  load: () => {
+    const seq = ++contentRequest
+    const run = (async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        set({
+          status: 'error',
+          error: {
+            ok: false,
+            reasonCode: 'misconfigured',
+            message: 'Cloud login is required for mentorship content. Sign in with Discord to continue.'
+          }
+        })
+        return
+      }
+      set({ status: get().capabilities ? 'ready' : 'loading', error: null })
+      let body = await invoke('list-content', {})
+      if ((!body || body.ok !== true) && !get().capabilities && seq === contentRequest) {
+        const first = toFailure(body)
+        if (isPassingFailure(first)) {
+          await wait(Math.min((first.retryAfterSeconds ?? 0) * 1000 || CONTENT_RETRY_MS, 3000))
+          if (seq !== contentRequest) return
+          body = await invoke('list-content', {})
         }
-      })
-      return
-    }
-    set({ status: get().capabilities ? 'ready' : 'loading', error: null })
-    const body = await invoke('list-content', {})
-    if (!body || body.ok !== true) {
+      }
+      if (seq !== contentRequest) return
+      if (!body || body.ok !== true) {
+        const failure = toFailure(body, 'Could not load mentorship content.')
+        if (get().capabilities && isPassingFailure(failure)) {
+          set({ status: 'ready' })
+          return
+        }
+        set({
+          status: 'error',
+          error: failure,
+          capabilities: null,
+          tabs: [],
+          videos: [],
+          documents: []
+        })
+        return
+      }
       set({
-        status: 'error',
-        error: toFailure(body, 'Could not load mentorship content.'),
-        capabilities: null,
-        tabs: [],
-        videos: [],
-        documents: []
+        status: 'ready',
+        loadedAt: Date.now(),
+        capabilities: body.capabilities as MentorshipCapabilities,
+        tabs: Array.isArray(body.tabs) ? (body.tabs as MentorshipTab[]) : [],
+        videos: (body.videos as ContentVideo[] | undefined) ?? [],
+        documents: Array.isArray(body.documents) ? (body.documents as ContentDocument[]) : []
       })
-      return
-    }
-    set({
-      status: 'ready',
-      capabilities: body.capabilities as MentorshipCapabilities,
-      tabs: Array.isArray(body.tabs) ? (body.tabs as MentorshipTab[]) : [],
-      videos: (body.videos as ContentVideo[] | undefined) ?? [],
-      documents: Array.isArray(body.documents) ? (body.documents as ContentDocument[]) : []
+    })().finally(() => {
+      if (contentInFlight === run) contentInFlight = null
     })
+    contentInFlight = run
+    return run
+  },
+
+  ensureLoaded: () => {
+    if (contentInFlight) return contentInFlight
+    const { status, loadedAt } = get()
+    if (status === 'ready' && Date.now() - loadedAt < CONTENT_FRESH_MS) return Promise.resolve()
+    return get().load()
   },
 
   loadRecordingsDescription: async () => {
@@ -648,5 +700,9 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
     return toFailure(body, 'The thumbnail could not be saved.')
   },
 
-  reset: () => set({ ...initial })
+  reset: () => {
+    contentRequest++
+    contentInFlight = null
+    set({ ...initial })
+  }
 }))

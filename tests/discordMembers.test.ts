@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { listGuildMembers } from '../supabase/functions/_shared/discord.ts'
+import { fetchGuildMember, listGuildMembers, MEMBER_RETRY_MAX_WAIT_MS } from '../supabase/functions/_shared/discord.ts'
 
 // Builds a Discord "list guild members" page of `n` members with ascending ids.
 function page(start: number, n: number): unknown[] {
@@ -85,5 +85,53 @@ describe('listGuildMembers', () => {
 
     const notArray = (async () => new Response('{"x":1}', { status: 200 })) as unknown as typeof fetch
     assert.deepEqual(await listGuildMembers('t', 'g', {}, notArray), { kind: 'error', status: 502 })
+  })
+})
+
+describe('fetchGuildMember rate limits', () => {
+  const limited = (retryAfter: number): Response =>
+    new Response(JSON.stringify({ message: 'You are being rate limited.', retry_after: retryAfter, global: false }), {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil(retryAfter)) }
+    })
+  const member = (): Response => new Response(JSON.stringify({ roles: ['1'] }), { status: 200 })
+  function sequence(...responses: Array<() => Response>): { f: typeof fetch; calls: () => number } {
+    let i = 0
+    const f = (async () => responses[Math.min(i++, responses.length - 1)]()) as unknown as typeof fetch
+    return { f, calls: () => i }
+  }
+
+  it('waits out a short limit once, using the precise wait from the body', async () => {
+    const { f, calls } = sequence(() => limited(0.42), member)
+    const waits: number[] = []
+    const out = await fetchGuildMember('t', 'g', '123456', f, async (ms) => void waits.push(ms))
+    assert.deepEqual(out, { kind: 'member', roles: ['1'] })
+    assert.equal(calls(), 2)
+    assert.equal(waits.length, 1)
+    assert.ok(waits[0] >= 420 && waits[0] < 420 + 250, String(waits[0]))
+  })
+
+  it('retries only once', async () => {
+    const { f, calls } = sequence(() => limited(0.2), () => limited(0.2), member)
+    const out = await fetchGuildMember('t', 'g', '123456', f, async () => {})
+    assert.equal(out.kind, 'rate_limited')
+    assert.equal(calls(), 2)
+  })
+
+  it('gives up at once when Discord asks for a longer wait', async () => {
+    const { f, calls } = sequence(() => limited(MEMBER_RETRY_MAX_WAIT_MS / 1000 + 1), member)
+    let slept = false
+    const out = await fetchGuildMember('t', 'g', '123456', f, async () => {
+      slept = true
+    })
+    assert.deepEqual(out, { kind: 'rate_limited', retryAfterSeconds: MEMBER_RETRY_MAX_WAIT_MS / 1000 + 1 })
+    assert.equal(calls(), 1)
+    assert.equal(slept, false)
+  })
+
+  it('falls back to the Retry-After header when the body has no wait', async () => {
+    const { f } = sequence(() => new Response('', { status: 429, headers: { 'Retry-After': '7' } }))
+    const out = await fetchGuildMember('t', 'g', '123456', f, async () => {})
+    assert.deepEqual(out, { kind: 'rate_limited', retryAfterSeconds: 7 })
   })
 })

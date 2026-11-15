@@ -58,6 +58,7 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
   const videos = useMentorship((s) => s.videos)
   const documents = useMentorship((s) => s.documents)
   const load = useMentorship((s) => s.load)
+  const ensureLoaded = useMentorship((s) => s.ensureLoaded)
   const playing = useMentorship((s) => s.playing)
   const playTarget = useMentorship((s) => s.playTarget)
   const playError = useMentorship((s) => s.playError)
@@ -74,12 +75,12 @@ export default function ContentSectionView({ tabId }: { tabId: string }): JSX.El
   const ndaGate = useNdaGate()
 
   useEffect(() => {
-    void load()
+    void ensureLoaded()
     return () => {
       stop()
       closeDocument()
     }
-  }, [load, stop, closeDocument])
+  }, [ensureLoaded, stop, closeDocument])
 
   const gate = <MentorshipStatus />
   if (status !== 'ready' || !caps) return gate

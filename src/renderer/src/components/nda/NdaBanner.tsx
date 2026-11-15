@@ -16,10 +16,10 @@ export function formatDeadline(iso: string): string {
 export function useNdaGate(): { loading: boolean; locked: boolean } {
   const nda = useNda((s) => s.nda)
   const status = useNda((s) => s.status)
-  const load = useNda((s) => s.load)
+  const ensureLoaded = useNda((s) => s.ensureLoaded)
   useEffect(() => {
-    void load()
-  }, [load])
+    void ensureLoaded()
+  }, [ensureLoaded])
   return {
     loading: status === 'loading' && !nda,
     locked: ndaLocked(nda)

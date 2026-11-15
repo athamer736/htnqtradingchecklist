@@ -17,8 +17,12 @@ interface NdaStore {
   memberStates: Record<string, MemberNdaState>
   memberStatesStatus: Load
 
+  /** When the NDA status last arrived (ms), 0 before the first. */
+  loadedAt: number
   /** Whether the member has signed and when the deadline is. A failure leaves the old answer. */
   load: () => Promise<void>
+  /** Opening a page: reuses a status from the last 30 s, or joins a check already on its way. */
+  ensureLoaded: () => Promise<void>
   loadTerms: () => Promise<void>
   /** Resolves to an error message, or null once signed (or already signed). */
   sign: (legalName: string, consent: string, termsSha256: string) => Promise<string | null>
@@ -31,6 +35,7 @@ interface NdaStore {
 
 const initial = {
   status: 'idle' as Load,
+  loadedAt: 0,
   nda: null,
   terms: null,
   termsStatus: 'idle' as Load,
@@ -64,17 +69,39 @@ function parseTerms(value: unknown): NdaTerms | null {
   return null
 }
 
+/** Page switches reuse an NDA status this fresh instead of asking again. */
+const STATUS_FRESH_MS = 30_000
+
+// Only the newest status request may write its answer; a sign-out also retires older ones.
+let statusRequest = 0
+let statusInFlight: Promise<void> | null = null
+
 export const useNda = create<NdaStore>((set, get) => ({
   ...initial,
 
-  load: async () => {
-    set({ status: get().nda ? 'ready' : 'loading' })
-    const nda = parseStatus(await invoke('nda', { action: 'status' }))
-    if (!nda) {
-      set({ status: get().nda ? 'ready' : 'error' })
-      return
-    }
-    set({ status: 'ready', nda })
+  load: () => {
+    const seq = ++statusRequest
+    const run = (async () => {
+      set({ status: get().nda ? 'ready' : 'loading' })
+      const nda = parseStatus(await invoke('nda', { action: 'status' }))
+      if (seq !== statusRequest) return
+      if (!nda) {
+        set({ status: get().nda ? 'ready' : 'error' })
+        return
+      }
+      set({ status: 'ready', nda, loadedAt: Date.now() })
+    })().finally(() => {
+      if (statusInFlight === run) statusInFlight = null
+    })
+    statusInFlight = run
+    return run
+  },
+
+  ensureLoaded: () => {
+    if (statusInFlight) return statusInFlight
+    const { status, loadedAt } = get()
+    if (status === 'ready' && Date.now() - loadedAt < STATUS_FRESH_MS) return Promise.resolve()
+    return get().load()
   },
 
   loadTerms: async () => {
@@ -128,5 +155,9 @@ export const useNda = create<NdaStore>((set, get) => ({
     set({ memberStatesStatus: failed ? 'error' : 'ready' })
   },
 
-  reset: () => set({ ...initial })
+  reset: () => {
+    statusRequest++
+    statusInFlight = null
+    set({ ...initial })
+  }
 }))
