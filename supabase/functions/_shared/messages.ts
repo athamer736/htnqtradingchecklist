@@ -34,6 +34,8 @@ export type DenyCode =
   | 'document_unavailable'
   | 'document_too_large'
   | 'rate_limited'
+  | 'viewing_held'
+  | 'stream_elsewhere'
 
 export const DENY_MESSAGES: Record<DenyCode, string> = {
   unauthenticated: 'Sign in with Discord to watch mentorship videos.',
@@ -77,7 +79,11 @@ export const DENY_MESSAGES: Record<DenyCode, string> = {
   document_unavailable:
     'This document could not be prepared for viewing. Contact staff so they can upload it again.',
   document_too_large: 'PDFs can be up to 25 MB.',
-  rate_limited: 'You are opening documents too quickly. Wait a moment and try again.'
+  rate_limited: 'You are opening documents too quickly. Wait a moment and try again.',
+  viewing_held:
+    'Your access to mentorship videos and documents is paused while staff review your account. Contact staff to have it restored.',
+  stream_elsewhere:
+    'This video was closed because your account started playing a video somewhere else. Only one video can play at a time on each account.'
 }
 
 export const DENY_STATUS: Record<DenyCode, number> = {
@@ -110,7 +116,9 @@ export const DENY_STATUS: Record<DenyCode, number> = {
   document_not_ready: 409,
   document_unavailable: 422,
   document_too_large: 413,
-  rate_limited: 429
+  rate_limited: 429,
+  viewing_held: 403,
+  stream_elsewhere: 409
 }
 
 export function denyBody(reasonCode: DenyCode): { ok: false; reasonCode: DenyCode; message: string } {

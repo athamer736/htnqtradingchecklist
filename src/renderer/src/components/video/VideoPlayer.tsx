@@ -200,6 +200,7 @@ export default function VideoPlayer({
                 containerRef={shellRef}
                 frameRef={frameRef}
                 resetKey={embedUrl}
+                flash
                 onTamper={onTamper}
               />
             </>
@@ -251,8 +252,9 @@ export default function VideoPlayer({
       </div>
 
       <p className="pb-2 text-[11px] leading-relaxed text-muted">
-        Watermark shows your legal name, Discord username and Discord ID. Hiding or changing it stops the video and is
-        recorded on your account.
+        Watermark shows your legal name, Discord username and Discord ID, and briefly flashes across the player now and
+        then. Hiding or changing it stops the video and is recorded on your account. One video plays at a time per
+        account.
       </p>
     </div>
   )

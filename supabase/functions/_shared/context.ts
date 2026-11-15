@@ -67,8 +67,8 @@ export function loadContext(): MentorshipContext | null {
     mentorshipToken: optional('MENTORSHIP_API_TOKEN'),
     mentorshipNdaSignToken: optional('MENTORSHIP_NDA_SIGN_TOKEN'),
     allowLocalHttp: Deno.env.get('MENTORSHIP_API_ALLOW_HTTP_LOCALHOST') === '1',
-    // Bounded: 1-30 minutes, default 12. Clients renew before expiry.
-    playbackTtlSeconds: clampInt(optional('PLAYBACK_TTL_SECONDS'), 12 * 60, 60, 30 * 60)
+    // Can only shorten the signed embed link (EMBED_LINK_SECONDS caps it): 30 s at the least.
+    playbackTtlSeconds: clampInt(optional('PLAYBACK_TTL_SECONDS'), 12 * 60, 30, 30 * 60)
   }
 
   const authzDeps: AuthzDeps = {

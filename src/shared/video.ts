@@ -222,9 +222,11 @@ export interface AdminMember {
   levelWithoutStudent: boolean
   /** An admin has recorded a legal name for them. Unset if the server could not tell. */
   hasStoredName?: boolean
-  /** Watermark tamper reports recorded against them, and when the latest was. Unset when none. */
-  tamperCount?: number
-  lastTamperAt?: string
+  /** Viewer alerts (flags) recorded against them, and when the latest was. Unset when none. */
+  flagCount?: number
+  lastFlagAt?: string
+  /** Staff paused all of their viewing until reauthorised. */
+  viewingHeld?: boolean
 }
 
 export interface AdminMembersResponse {
@@ -305,6 +307,10 @@ export type PlaybackDenyReason =
   | 'nda_required'
   /** Client-side: the open player couldn't re-confirm access before it lapsed. */
   | 'access_expired'
+  /** Staff paused this member's viewing until they reauthorise it. */
+  | 'viewing_held'
+  /** A newer play on the same account took over (one video at a time). */
+  | 'stream_elsewhere'
 
 export interface PlaybackWatermark {
   /** The viewer's own Discord ID: always shown, the primary watermark identifier. */
@@ -400,7 +406,11 @@ export const PLAYBACK_MESSAGES: Record<PlaybackDenyReason, string> = {
   rate_limited: 'Too many requests. Wait a moment and try again.',
   nda_required: 'Sign the mentorship NDA to keep watching. Open any Mentorship page and choose Read and sign the NDA.',
   access_expired:
-    'We could not re-confirm your access in time, so playback stopped. This is usually temporary: press play to try again.'
+    'We could not re-confirm your access in time, so playback stopped. This is usually temporary: press play to try again.',
+  viewing_held:
+    'Your access to mentorship videos and documents is paused while staff review your account. Contact staff to have it restored.',
+  stream_elsewhere:
+    'This video was closed because your account started playing a video somewhere else. Only one video can play at a time on each account.'
 }
 
 export function isVideoLevel(n: unknown): n is VideoLevel {

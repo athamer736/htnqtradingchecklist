@@ -1,6 +1,7 @@
 // The part of "may this verified member view this item right now" that is the same for
 // videos and documents, once the role, tab and visibility checks have passed:
 //
+//   0. a viewing hold (staff paused this member's viewing until they reauthorise it)
 //   1. the NDA gate (non-staff members need a signed NDA once the owner's deadline passes)
 //   2. the bot's member-access answer, which never blocks viewing; it only supplies the
 //      recheck interval and a legal name for the watermark
@@ -15,6 +16,7 @@ import { pickWatermarkName } from './memberNames.ts'
 import type { DenyCode } from './messages.ts'
 import { MENTORSHIP_MAX_RECHECK_SECONDS, type MentorshipLookupResult } from './mentorshipApi.ts'
 import type { NdaDecision } from './ndaGate.ts'
+import { isHeldViewer } from './viewerSecurity.ts'
 
 export interface ViewerGateDeps {
   checkMentorship: (discordId: string) => Promise<MentorshipLookupResult>
@@ -26,6 +28,11 @@ export interface ViewerGateDeps {
   checkNda: (viewer: { discordId: string; isStaff: boolean }) => Promise<NdaDecision>
   /** The admin-entered legal name for this member, or null (also null if it can't be read). */
   readStoredName: (discordId: string) => Promise<string | null>
+  /**
+   * Whether staff paused this member's viewing. A failed read counts as not held, so a database
+   * hiccup never locks every member out; the open-player heartbeat checks again.
+   */
+  checkHold: (discordId: string) => Promise<boolean>
   ttlSeconds: number
   renewLeadSeconds: number
 }
@@ -44,6 +51,8 @@ export async function resolveViewerGate(
   deps: ViewerGateDeps
 ): Promise<ViewerGateResult> {
   // Always the Discord ID from the verified linked identity, never the request.
+  const held = await deps.checkHold(auth.discordId).catch(() => false)
+  if (isHeldViewer(held, auth.caps.isManager)) return { ok: false, code: 'viewing_held' }
   const [nda, mentorship] = await Promise.all([
     deps.checkNda({ discordId: auth.discordId, isStaff: auth.caps.isStaff }),
     deps.checkMentorship(auth.discordId)
@@ -81,6 +90,12 @@ export async function resolveViewerGate(
 const MIN_ACCESS_VALID_SECONDS = 30
 
 /**
+ * How long a signed Bunny embed link works. It only has to load the player (playback then carries
+ * on), so it is kept short: a link copied out of the page is useless a minute later.
+ */
+export const EMBED_LINK_SECONDS = 60
+
+/**
  * How long an allowed decision may be used. Access lapses after the bot's
  * recheck interval (never more than 300 s); the client renews early enough
  * to leave room for a bounded retry before that deadline.
@@ -98,6 +113,6 @@ export function playbackGrantWindow(
   return {
     accessValidForSeconds,
     renewAfterSeconds: Math.max(accessValidForSeconds - lead, 15),
-    embedTtlSeconds: Math.min(ttlSeconds, accessValidForSeconds + renewLeadSeconds)
+    embedTtlSeconds: Math.min(ttlSeconds, EMBED_LINK_SECONDS)
   }
 }

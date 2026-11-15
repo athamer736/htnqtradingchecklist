@@ -5,6 +5,7 @@
 import { isVisibility, type Visibility } from './decisions.ts'
 import { normaliseLegalName, usableLegalName } from './mentorshipApi.ts'
 import type { MoveDirection } from './ordering.ts'
+import { isStreamId } from './streams.ts'
 import { slugForLegacy } from './tabCompat.ts'
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -55,7 +56,14 @@ function cleanDescription(v: unknown, max: number): string | null {
 
 // --- issue-playback-token ---------------------------------------------------
 
-export type PlaybackRequest = { kind: 'video'; id: string } | { kind: 'recording'; id: string }
+export type PlaybackRequest = {
+  kind: 'video' | 'recording'
+  id: string
+  /** The open player's own random id (one video at a time per account). Older apps omit it. */
+  streamId?: string
+  /** True when an open player re-checks access, false for a fresh play. */
+  renew?: boolean
+}
 
 export function parsePlaybackRequest(body: unknown): Parsed<PlaybackRequest> {
   const o = asObject(body)
@@ -66,7 +74,17 @@ export function parsePlaybackRequest(body: unknown): Parsed<PlaybackRequest> {
   if (hasVideo === hasRecording) return { ok: false, error: 'exactly-one-target' }
   const id = hasVideo ? o.videoId : o.recordingId
   if (!isUuid(id)) return { ok: false, error: 'invalid-id' }
-  return { ok: true, value: { kind: hasVideo ? 'video' : 'recording', id } }
+  if (o.streamId !== undefined && !isStreamId(o.streamId)) return { ok: false, error: 'invalid-stream' }
+  if (o.renew !== undefined && typeof o.renew !== 'boolean') return { ok: false, error: 'invalid-renew' }
+  return {
+    ok: true,
+    value: {
+      kind: hasVideo ? 'video' : 'recording',
+      id,
+      ...(o.streamId !== undefined ? { streamId: o.streamId } : {}),
+      ...(o.renew === true ? { renew: true } : {})
+    }
+  }
 }
 
 // --- create-upload ----------------------------------------------------------

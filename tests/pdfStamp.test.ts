@@ -13,6 +13,8 @@ import {
   toContent,
   type StampIdentity
 } from '../supabase/functions/_shared/pdfStamp.ts'
+import { decodeTrace, encodeTraceCode, encodeTraceId } from '../supabase/functions/_shared/traceCode.ts'
+import { findTraceCandidates } from '../src/shared/viewerSecurity'
 
 const VIEWER: StampIdentity = {
   discordId: '123456789012345678',
@@ -90,6 +92,26 @@ describe('stampPdf', () => {
     const doc = await PDFDocument.load(res.bytes)
     assert.equal(doc.getSubject(), 'Issued to Discord ID 123456789012345678')
     assert.equal(doc.getKeywords(), 'ref:abcdef0123456789')
+  })
+
+  it('hides a trace code on every page and in the document ID, which still lead back to the viewing', async () => {
+    const res = await stampPdf(await fixture(3, { rotate: 90 }), VIEWER)
+    assert.ok(res.ok)
+    const code = encodeTraceCode(VIEWER.sessionRef)
+    assert.ok(code)
+    for (const t of await pageTexts(res.bytes)) assert.ok(t.includes(code), 'trace code on the page')
+
+    // @ts-ignore - no type declarations for the legacy Node build
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(res.bytes), verbosity: 0 }).promise
+    const [id] = pdf.fingerprints
+    const meta = await pdf.getMetadata()
+    await pdf.destroy()
+    assert.equal(id, encodeTraceId(VIEWER.sessionRef))
+    assert.equal(meta.info.Custom?.DocumentControl, code)
+
+    // Even with every visible stamp edited out, the Admin trace tool finds the viewing.
+    for (const clue of findTraceCandidates([code, id].join(' '))) assert.equal(decodeTrace(clue), VIEWER.sessionRef)
   })
 
   it('a viewer with no name still gets the Discord ID and session reference on every page', async () => {

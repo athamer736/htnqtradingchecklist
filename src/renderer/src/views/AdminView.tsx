@@ -1,31 +1,37 @@
 import { useEffect, useState } from 'react'
 import LibraryTab from '../components/admin/LibraryTab'
 import MembersTab from '../components/admin/MembersTab'
+import SecurityTab from '../components/admin/SecurityTab'
 import TabsTab from '../components/admin/TabsTab'
 import { canOpenAdmin, canOpenLibrary } from '../../../shared/mentorshipNav'
 import { useAdmin } from '../store/useAdmin'
 import { useMentorship } from '../store/useMentorship'
+import { useSecurity } from '../store/useSecurity'
 import { MentorshipStatus } from './ContentSectionView'
 
-// Admin panel. Members and Library are for owners/admins; Tabs is also open to
+// Admin panel. Members, Security and Library are for owners/admins; Tabs is also open to
 // "tab manager" roles. Visibility here is only a convenience: every function behind
 // it re-checks the caller's LIVE Discord roles, so opening this view without the
 // role just shows an error.
 
-type Tab = 'members' | 'library' | 'tabs'
+type Tab = 'members' | 'security' | 'library' | 'tabs'
 
 export default function AdminView(): JSX.Element {
   const status = useMentorship((s) => s.status)
   const caps = useMentorship((s) => s.capabilities)
   const load = useMentorship((s) => s.load)
   const resetAdmin = useAdmin((s) => s.reset)
+  const resetSecurity = useSecurity((s) => s.reset)
   const [tab, setTab] = useState<Tab | null>(null)
 
   useEffect(() => {
     void load()
     // Legal names fetched in this panel must not outlive it.
-    return () => resetAdmin()
-  }, [load, resetAdmin])
+    return () => {
+      resetAdmin()
+      resetSecurity()
+    }
+  }, [load, resetAdmin, resetSecurity])
 
   if (status !== 'ready' || !caps) return <MentorshipStatus />
 
@@ -38,7 +44,12 @@ export default function AdminView(): JSX.Element {
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    ...(caps.isManager ? ([{ id: 'members', label: 'Members' }] as const) : []),
+    ...(caps.isManager
+      ? ([
+          { id: 'members', label: 'Members' },
+          { id: 'security', label: 'Security' }
+        ] as const)
+      : []),
     ...(canOpenLibrary(caps) ? ([{ id: 'library', label: 'Library' }] as const) : []),
     ...(caps.canManageTabs ? ([{ id: 'tabs', label: 'Tabs' }] as const) : [])
   ]
@@ -50,7 +61,7 @@ export default function AdminView(): JSX.Element {
         <h1 className="text-xl font-semibold text-slate-100">Admin</h1>
         <p className="mt-1 text-sm text-muted">
           {caps.isManager
-            ? 'Members, the video library order, and the Mentorship tabs.'
+            ? 'Members, viewer security, the video library order, and the Mentorship tabs.'
             : canOpenLibrary(caps)
               ? 'Rename and reorder videos in every tab.'
               : 'The Mentorship tabs.'}
@@ -73,6 +84,7 @@ export default function AdminView(): JSX.Element {
         ))}
       </div>
       {current === 'members' && <MembersTab />}
+      {current === 'security' && <SecurityTab />}
       {current === 'library' && <LibraryTab />}
       {current === 'tabs' && <TabsTab />}
     </div>

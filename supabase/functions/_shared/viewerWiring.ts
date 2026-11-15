@@ -11,6 +11,7 @@ import { evaluateNda } from './ndaGate.ts'
 import { readEnforceFrom, readNdaCache, writeNdaCache } from './ndaStore.ts'
 import type { AuditRow } from './playback.ts'
 import type { ViewerGateDeps } from './viewerGate.ts'
+import { readHold } from './viewerSecurityStore.ts'
 
 export function viewerGateDeps(
   admin: SupabaseClient,
@@ -46,6 +47,7 @@ export function viewerGateDeps(
       const stored = await readStoredName(admin, discordId)
       return stored.ok ? stored.value : null
     },
+    checkHold: (discordId) => readHold(admin, discordId),
     ttlSeconds: env.playbackTtlSeconds,
     renewLeadSeconds
   }

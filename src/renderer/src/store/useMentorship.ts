@@ -28,6 +28,7 @@ import {
   playbackTick,
   type PlaybackGrant
 } from '../../../shared/playbackSession'
+import { HEARTBEAT_SECONDS, newStreamId, parseHeartbeat } from '../../../shared/viewerSecurity'
 
 // Everything here is in memory only. Watermark legal names in particular must
 // never be written to localStorage.
@@ -164,6 +165,9 @@ interface MentorshipState {
   playTarget: PlaybackTarget | null
   playError: PlaybackDenied | null
   playLoading: boolean
+  /** When the open player next checks in (one video per account, paused viewing). */
+  nextBeatAt: number
+  beating: boolean
 
   load: () => Promise<void>
   /** Loads the Recordings page text (tab descriptions arrive with `load`). */
@@ -188,6 +192,8 @@ interface MentorshipState {
   searchStudents: (query: string) => Promise<Result<{ students: StudentSummary[] }>>
   play: (target: PlaybackTarget) => Promise<void>
   renew: () => Promise<void>
+  /** Closes the player if the account started a video elsewhere or its viewing was paused. */
+  heartbeat: () => Promise<void>
   /** Called periodically by the open player: renews when due, closes when access lapsed. */
   tick: () => void
   stop: () => void
@@ -228,10 +234,29 @@ const initial = {
   renewing: false,
   playTarget: null,
   playError: null,
-  playLoading: false
+  playLoading: false,
+  nextBeatAt: 0,
+  beating: false
 }
 
-const CLOSED = { playing: null, grant: null, renewing: false, playTarget: null }
+const CLOSED = { playing: null, grant: null, renewing: false, playTarget: null, nextBeatAt: 0, beating: false }
+
+// One id per app window, so switching videos in the same window never looks like a second device.
+let windowStreamId: string | null = null
+
+function playerStreamId(): string {
+  windowStreamId ??= newStreamId()
+  return windowStreamId
+}
+
+/** Frees the account's one video slot when this window's player closes (best effort). */
+function releaseStream(): void {
+  if (windowStreamId) void invoke('playback-heartbeat', { kind: 'video', streamId: windowStreamId, end: true })
+}
+
+function closedBy(reasonCode: 'stream_elsewhere' | 'viewing_held'): PlaybackDenied {
+  return { ok: false, reasonCode, message: PLAYBACK_MESSAGES[reasonCode] }
+}
 
 const ACCESS_EXPIRED: PlaybackDenied = {
   ok: false,
@@ -432,14 +457,23 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
 
   play: async (target) => {
     set({ playLoading: true, playError: null, playTarget: target })
-    const body = await invoke(
-      'issue-playback-token',
-      target.kind === 'video' ? { videoId: target.id } : { recordingId: target.id }
-    )
+    const body = await invoke('issue-playback-token', {
+      ...(target.kind === 'video' ? { videoId: target.id } : { recordingId: target.id }),
+      streamId: playerStreamId()
+    })
     if (isPlaybackSuccess(body)) {
-      set({ playLoading: false, playing: body, grant: grantFromSuccess(body, Date.now()), renewing: false, playError: null })
+      set({
+        playLoading: false,
+        playing: body,
+        grant: grantFromSuccess(body, Date.now()),
+        renewing: false,
+        playError: null,
+        nextBeatAt: Date.now() + HEARTBEAT_SECONDS * 1000,
+        beating: false
+      })
       return
     }
+    if (get().playing) releaseStream()
     set({ ...CLOSED, playLoading: false, playError: toFailure(body) as PlaybackDenied })
   },
 
@@ -450,10 +484,11 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
     const { playing, playTarget, renewing } = get()
     if (!playing || !playTarget || renewing) return
     set({ renewing: true })
-    const body = await invoke(
-      'issue-playback-token',
-      playTarget.kind === 'video' ? { videoId: playTarget.id } : { recordingId: playTarget.id }
-    )
+    const body = await invoke('issue-playback-token', {
+      ...(playTarget.kind === 'video' ? { videoId: playTarget.id } : { recordingId: playTarget.id }),
+      streamId: playerStreamId(),
+      renew: true
+    })
     const current = get()
     if (current.playing !== playing || !current.grant) return
     if (isPlaybackSuccess(body)) {
@@ -476,18 +511,42 @@ export const useMentorship = create<MentorshipState>((set, get) => ({
       set({ renewing: false, grant: step.grant })
       return
     }
+    releaseStream()
     set({ ...CLOSED, playError: failure as PlaybackDenied })
   },
 
-  tick: () => {
-    const { grant, renewing, playing } = get()
-    if (!grant || !playing) return
-    const action = playbackTick(grant, Date.now(), renewing)
-    if (action === 'expire') set({ ...CLOSED, playError: ACCESS_EXPIRED })
-    else if (action === 'renew') void get().renew()
+  heartbeat: async () => {
+    const { playing, playTarget } = get()
+    if (!playing || !playTarget) return
+    set({ beating: true })
+    const beat = parseHeartbeat(await invoke('playback-heartbeat', { kind: 'video', streamId: playerStreamId() }))
+    if (get().playTarget !== playTarget || !get().playing) return
+    if (beat?.state === 'elsewhere' || beat?.state === 'held') {
+      set({ ...CLOSED, playError: closedBy(beat.state === 'held' ? 'viewing_held' : 'stream_elsewhere') })
+      return
+    }
+    // No answer (offline, or an older server): try again next time; renewals still re-check access.
+    set({ beating: false, nextBeatAt: Date.now() + (beat?.nextInSeconds ?? HEARTBEAT_SECONDS) * 1000 })
   },
 
-  stop: () => set({ ...CLOSED, playError: null, playLoading: false }),
+  tick: () => {
+    const { grant, renewing, playing, beating, nextBeatAt } = get()
+    if (!grant || !playing) return
+    const now = Date.now()
+    const action = playbackTick(grant, now, renewing)
+    if (action === 'expire') {
+      releaseStream()
+      set({ ...CLOSED, playError: ACCESS_EXPIRED })
+      return
+    }
+    if (action === 'renew') void get().renew()
+    if (!beating && now >= nextBeatAt) void get().heartbeat()
+  },
+
+  stop: () => {
+    if (get().playing) releaseStream()
+    set({ ...CLOSED, playError: null, playLoading: false })
+  },
 
   manage: async (kind, id, action) => {
     const body = await invoke('manage-content', { kind, id, ...action })

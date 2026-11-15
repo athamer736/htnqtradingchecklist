@@ -153,7 +153,7 @@ Set these in **Supabase → Edge Functions → Secrets** (or with
 | `BUNNY_STREAM_TOKEN_KEY` | Library **Token Authentication** key (signs embed URLs) |
 | `BUNNY_STREAM_API_KEY` | Library **API key** (creates/deletes videos, signs TUS uploads, reads encoding status) |
 | `BUNNY_STREAM_CDN_HOSTNAME` | Optional: library CDN hostname (e.g. `vz-xxxx.b-cdn.net`) for thumbnails |
-| `PLAYBACK_TTL_SECONDS` | Optional: upper bound on the signed embed lifetime, 60-1800, default 720. The bot's recheck interval (max 300 s) caps it further, so by default embeds last 390 s |
+| `PLAYBACK_TTL_SECONDS` | Optional: upper bound on the signed embed lifetime, 30-1800, default 720. The embed link itself is capped at 60 s (`EMBED_LINK_SECONDS`): it only has to last until the player loads it, so a copied link stops working after a minute. Access is still re-checked every 300 s at most |
 
 Discord role IDs for owner, admin, mentor, student and Levels 1-3 are built in
 (see `functions/_shared/roles.ts`). Only set `DISCORD_ROLE_OWNER`,
@@ -189,6 +189,8 @@ supabase functions deploy create-document-upload
 supabase functions deploy manage-documents
 supabase functions deploy issue-document
 supabase functions deploy watermark-tamper
+supabase functions deploy playback-heartbeat
+supabase functions deploy viewer-security
 supabase functions delete list-videos   # replaced by list-content
 ```
 
@@ -220,15 +222,35 @@ and widens the `content_audit` checks. Then deploy `create-document-upload`, `ma
 the code changed for documents). `issue-document` and `manage-documents` each have a `deno.json`
 that maps `pdf-lib`; deploy them from this folder so it is picked up. No new secrets are needed.
 
-### Watermark tamper reports
+### Viewer security: flags, paused viewing, one video at a time, leak tracing
 
-Run `migrations/20261115_watermark_tamper.sql` first: it creates the service-role-only
-`watermark_tamper_events` table. Then deploy `watermark-tamper` and redeploy `admin-members`.
-The player and PDF viewer stop and report when their watermark is removed, hidden, made
-transparent or restyled; the member is the signed-in user and the item comes from their own
-grant for that session (`playback_audit.session_ref`). Owners and admins see the count on each
-member in Admin -> Members and can open the list. Reports come from the viewer's device, so treat
-them as evidence to look into, not proof. No new secrets are needed.
+Run `migrations/20261115_viewer_security.sql` first. It creates three service-role-only tables
+(`viewer_alerts`, `viewing_holds`, `active_streams`), adds the auto-pause setting to
+`mentorship_settings` and widens the `content_audit` checks. Then deploy `watermark-tamper`,
+`playback-heartbeat` and `viewer-security`, and redeploy `issue-playback-token`, `issue-document` and
+`admin-members` (they share the changed code). No new secrets are needed.
+
+- **Flags** (`viewer_alerts`): the player or PDF viewer stopped because its watermark was removed,
+  hidden or restyled (`watermark-tamper`; the member is the signed-in user and the item comes from
+  their own grant for that session); a new play pushed out a video still playing on another device;
+  25 or more different items opened within an hour; a leaked copy traced to the member. Player reports
+  come from the viewer's device, so treat them as a lead, not proof.
+- **Paused viewing** (`viewing_holds`): an owner/admin pauses a member from Admin -> Security or
+  Members, or it happens automatically after the owner's number of tamper flags (off by default).
+  Every video, recording and document is refused with `viewing_held` until an admin reauthorises
+  them; an open player closes at its next 20 s check-in. Owners and admins are never paused. If the
+  table can't be read, viewing is allowed (a database fault never locks everyone out).
+- **One video at a time** (`active_streams`): each open player sends a random stream id with its
+  first play, its renewals and a 20 s heartbeat (`playback-heartbeat`). The newest play wins and the
+  older player closes with `stream_elsewhere`; a renewal never takes over from a live player. Older
+  app versions that send no stream id are not limited.
+- **Leak tracing**: every served PDF carries a trace code for its session as invisible text on every
+  page, as the PDF document ID and in its metadata (`traceCode.ts`), as well as the visible footer.
+  Admin -> Security -> Trace a leak reads a leaked PDF on the admin's computer and sends only those
+  codes to `viewer-security`, which returns the member, item and time from `playback_audit`.
+  The marks survive sharing and most editing, not a screenshot or a re-typed copy.
+
+Pauses, reauthorisations, the auto-pause setting and traces are written to `content_audit`.
 
 Until `MENTORSHIP_API_*` and Bunny secrets are set, playback and uploads fail
 closed with a clear "not configured / unavailable" message. Local journals keep

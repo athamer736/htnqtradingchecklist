@@ -1,15 +1,17 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  FLASH_VISIBLE_MS,
   MIN_TEXT_ALPHA,
   TAMPER_LABELS,
   TAMPER_REASONS,
   attributesAllowed,
   colorAlpha,
+  flashFontPx,
   inlineStyleIntact,
   inspectWatermark,
   isTamperReason,
-  parseTamperEvents,
+  nextFlashDelayMs,
   pickWatermarkLook,
   pickWatermarkPosition,
   randomTagName,
@@ -192,18 +194,13 @@ test('only the style attribute and data-* attributes are allowed on the watermar
   assert.equal(attributesAllowed(['style', 'class']), false)
 })
 
-test('the admin tamper log keeps well-formed events only', () => {
-  const events = parseTamperEvents([
-    { at: '2026-11-15T18:00:00+00:00', reason: 'hidden', platform: 'web', itemKind: 'video', itemTitle: 'Daily FVG' },
-    { at: '2026-11-15T17:00:00+00:00', reason: 'removed', platform: 'mac', itemKind: 'podcast', itemTitle: 7 },
-    { at: '2026-11-15T16:00:00+00:00', reason: 'bored' },
-    { reason: 'hidden' },
-    null,
-    'x'
-  ])
-  assert.deepEqual(events, [
-    { at: '2026-11-15T18:00:00+00:00', reason: 'hidden', platform: 'web', itemKind: 'video', itemTitle: 'Daily FVG' },
-    { at: '2026-11-15T17:00:00+00:00', reason: 'removed', platform: null, itemKind: null, itemTitle: null }
-  ])
-  assert.deepEqual(parseTamperEvents({ events: [] }), [])
+test('the ID flash is brief, first comes within 30-90 s, then every 1.5-4 minutes', () => {
+  assert.ok(FLASH_VISIBLE_MS > 0 && FLASH_VISIBLE_MS < 1000)
+  assert.equal(nextFlashDelayMs(true, () => 0), 30_000)
+  assert.equal(nextFlashDelayMs(true, () => 0.999999), 90_000)
+  assert.equal(nextFlashDelayMs(false, () => 0), 90_000)
+  assert.equal(nextFlashDelayMs(false, () => 0.999999), 240_000)
+  assert.equal(flashFontPx(200), 14)
+  assert.equal(flashFontPx(800), 32)
+  assert.equal(flashFontPx(4000), 44)
 })

@@ -5,15 +5,16 @@
 // (the viewer's own Discord ID, plus their legal name when one is on file).
 // Service-role reads bypass RLS, so every check is enforced in runPlayback.
 //
-// Body: exactly one of { videoId } or { recordingId }. Discord ID and legal
-// name are never taken from the request body or editable user metadata; the
-// name comes from the bot or the admin-entered record for the verified ID.
+// Body: exactly one of { videoId } or { recordingId }, plus the open player's own
+// { streamId } and { renew: true } on re-checks (one video at a time per account).
+// Discord ID and legal name are never taken from the request body or editable user
+// metadata; the name comes from the bot or the admin-entered record for the verified ID.
 //
 // Required secrets: DISCORD_BOT_TOKEN, DISCORD_GUILD_ID,
 //   MENTORSHIP_API_BASE_URL, MENTORSHIP_API_TOKEN,
 //   BUNNY_STREAM_LIBRARY_ID, BUNNY_STREAM_TOKEN_KEY
-// Optional: PLAYBACK_TTL_SECONDS (upper bound on the signed embed lifetime,
-//   default 720, max 1800; the bot's recheck interval caps it further),
+// Optional: PLAYBACK_TTL_SECONDS (can shorten the signed embed link below its
+//   60-second cap, down to 30 s),
 //   DISCORD_ROLE_* overrides, MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1 (test-only mock)
 
 import { authorize } from '../_shared/authz.ts'
@@ -26,6 +27,7 @@ import { runPlayback, type LoadedRecording, type LoadedVideo } from '../_shared/
 import { slugForLegacy } from '../_shared/tabCompat.ts'
 import { getTab } from '../_shared/tabStore.ts'
 import { parsePlaybackRequest } from '../_shared/validation.ts'
+import { checkOpenBurst, streamClaimer } from '../_shared/viewerSecurityStore.ts'
 import { playbackAuditWriter, viewerGateDeps } from '../_shared/viewerWiring.ts'
 
 const RENEW_LEAD_SECONDS = 90
@@ -98,10 +100,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const token = await signBunnyEmbedToken(tokenKey, bunnyVideoId, expiresAt)
       return buildBunnyEmbedUrl({ libraryId, videoId: bunnyVideoId, token, expiresUnixSeconds: expiresAt })
     },
+    claimStream: streamClaimer(admin),
     audit: playbackAuditWriter(admin),
     newSessionRef,
     now: () => Date.now()
   })
+
+  const watermark = outcome.body.watermark as { sessionRef?: unknown } | undefined
+  if (outcome.status === 200 && auth.ok && !parsed.value.renew && typeof watermark?.sessionRef === 'string') {
+    await checkOpenBurst(admin, { userId: auth.userId, discordId: auth.discordId, sessionRef: watermark.sessionRef })
+  }
 
   const retryAfter = outcome.body.retryAfterSeconds
   return json(outcome.body, outcome.status, typeof retryAfter === 'number' ? { 'Retry-After': String(retryAfter) } : {})

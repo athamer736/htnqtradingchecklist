@@ -1,11 +1,15 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import {
+  FLASH_VISIBLE_MS,
   attributesAllowed,
   colorAlpha,
+  flashFontPx,
   inlineStyleIntact,
   inspectWatermark,
+  nextFlashDelayMs,
   pickWatermarkLook,
   pickWatermarkPosition,
+  randomTagName,
   watermarkFontPx,
   type Box,
   type LayerStyle,
@@ -28,6 +32,8 @@ const CHECK_EVERY_MS = 1_000
 // A failed check must still fail this long afterwards before it counts, so a passing layout
 // change (fullscreen, resize) is never reported.
 const CONFIRM_AFTER_MS = 600
+// The flash is checked twice while it is up; both checks must fail before it counts.
+const FLASH_CHECKS_MS = [120, 480]
 
 function hostCss(look: WatermarkLook, pos: { x: number; y: number }): string {
   const rules: [string, string][] = [
@@ -74,6 +80,52 @@ function boxCss(look: WatermarkLook, fontPx: number): string {
     'text-shadow:0 1px 2px rgba(0,0,0,0.6)',
     'overflow-wrap:anywhere',
     'white-space:normal',
+    'user-select:none',
+    '-webkit-user-select:none'
+  ].join(';')
+}
+
+function flashHostCss(zIndex: number): string {
+  const rules: [string, string][] = [
+    ['position', 'absolute'],
+    ['inset', '0'],
+    ['z-index', String(zIndex)],
+    ['display', 'flex'],
+    ['align-items', 'center'],
+    ['justify-content', 'center'],
+    ['visibility', 'visible'],
+    ['opacity', '1'],
+    ['margin', '0'],
+    ['padding', '0'],
+    ['background', 'rgba(0,0,0,0.35)'],
+    ['pointer-events', 'none'],
+    ['user-select', 'none'],
+    ['filter', 'none'],
+    ['clip-path', 'none'],
+    ['mask', 'none'],
+    ['mix-blend-mode', 'normal'],
+    ['transform', 'none']
+  ]
+  return rules.map(([k, v]) => `${k}:${v}!important`).join(';')
+}
+
+function flashBoxCss(fontFamily: string, fontPx: number): string {
+  return [
+    'all:initial',
+    'display:block',
+    'box-sizing:border-box',
+    'max-width:90%',
+    'background:rgba(0,0,0,0.6)',
+    'color:rgba(255,255,255,0.95)',
+    `font-family:${fontFamily}`,
+    `font-size:${fontPx}px`,
+    'font-weight:700',
+    'line-height:1.3',
+    'text-align:center',
+    'padding:0.5em 0.9em',
+    'border-radius:8px',
+    'text-shadow:0 2px 4px rgba(0,0,0,0.7)',
+    'overflow-wrap:anywhere',
     'user-select:none',
     '-webkit-user-select:none'
   ].join(';')
@@ -135,6 +187,10 @@ function zOf(el: Element): number | null {
  * checked every second and on every change; if it is removed, hidden, made transparent, shrunk,
  * moved or pushed behind the player, `onTamper` is called once and the checks stop.
  *
+ * With `flash` (videos), the viewer's details also flash large across the whole player for under
+ * a second at random moments, so a screen recording or a cropped clip still shows who it was. The
+ * flash is checked the same way while it is up.
+ *
  * This is a deterrent and investigation aid, not DRM: code in the viewer's own browser can
  * always be changed, and it does not stop filming the screen.
  */
@@ -143,6 +199,7 @@ export default function WatermarkOverlay({
   containerRef,
   frameRef,
   resetKey,
+  flash = false,
   onTamper
 }: {
   identity: WatermarkIdentity
@@ -152,6 +209,8 @@ export default function WatermarkOverlay({
   frameRef: RefObject<HTMLElement>
   /** Change it when the video or document element is replaced, to start over with a new look. */
   resetKey: string | number
+  /** Briefly flash the viewer's details across the whole player now and then (videos). */
+  flash?: boolean
   onTamper: (reason: TamperReason) => void
 }): null {
   const identityRef = useRef(identity)
@@ -239,12 +298,92 @@ export default function WatermarkOverlay({
       frameZ: zOf(frame)
     })
 
+    const flashTimers = new Set<number>()
+    let flashHost: HTMLElement | null = null
+
     const stop = (): void => {
       stopped = true
       window.clearInterval(checkTimer)
       window.clearInterval(moveTimer)
+      for (const t of flashTimers) window.clearTimeout(t)
+      flashTimers.clear()
+      flashHost?.remove()
+      flashHost = null
       observer.disconnect()
       resize.disconnect()
+    }
+
+    const later = (fn: () => void, ms: number): void => {
+      const t = window.setTimeout(() => {
+        flashTimers.delete(t)
+        fn()
+      }, ms)
+      flashTimers.add(t)
+    }
+
+    const showFlash = (): void => {
+      if (stopped) return
+      const id = identityRef.current
+      const fHost = document.createElement(randomTagName())
+      const fRoot = fHost.attachShadow({ mode: 'closed' })
+      const fBox = document.createElement('div')
+      const fId = document.createElement('div')
+      const idText = `Discord ID ${id.discordId}`
+      fId.textContent = idText
+      fId.setAttribute('style', 'all:unset;display:block')
+      const lines = [nameLineOf(id), id.sessionRef ? `ref ${id.sessionRef}` : '']
+      const [nameEl, refEl] = lines.map((text) => {
+        const el = document.createElement('div')
+        el.textContent = text
+        el.setAttribute('style', 'all:unset;display:block')
+        return el
+      })
+      refEl.setAttribute('style', 'all:unset;display:block;font-size:0.6em;color:rgba(255,255,255,0.75)')
+      fBox.setAttribute('style', flashBoxCss(look.fontFamily, flashFontPx(container.clientWidth)))
+      fBox.replaceChildren(...[nameEl, fId, refEl].filter((el) => el.textContent))
+      fRoot.append(fBox)
+      fHost.setAttribute('style', flashHostCss(look.zIndex))
+      const fInline = inlineOf(fHost)
+      container.appendChild(fHost)
+      flashHost = fHost
+
+      const fSnapshot = (): WatermarkSnapshot => ({
+        hostAttached: fHost.isConnected && fHost.parentNode === container,
+        frameAttached: frame.isConnected && frame.parentNode === container,
+        attributesIntact: attributesAllowed(fHost.getAttributeNames()) && inlineStyleIntact(fInline, inlineOf(fHost)),
+        hostPseudo: hasPseudoContent(fHost),
+        textIntact: fBox.parentNode === fRoot && fId.parentNode === fBox && fId.textContent === idText,
+        layers: [fHost, fBox, fId].map(layerOf),
+        textColorAlpha: colorAlpha(getComputedStyle(fId).color),
+        fontSizePx: Number.parseFloat(getComputedStyle(fId).fontSize),
+        host: boxOf(fHost),
+        container: boxOf(container),
+        hostZ: zOf(fHost),
+        expectedZ: look.zIndex,
+        frameZ: zOf(frame)
+      })
+      let failures = 0
+      for (const at of FLASH_CHECKS_MS) {
+        later(() => {
+          if (stopped) return
+          let reason: TamperReason | null
+          try {
+            reason = inspectWatermark(fSnapshot())
+          } catch {
+            reason = 'removed'
+          }
+          if (!reason) return
+          failures += 1
+          if (failures < FLASH_CHECKS_MS.length) return
+          stop()
+          onTamperRef.current(reason)
+        }, at)
+      }
+      later(() => {
+        fHost.remove()
+        if (flashHost === fHost) flashHost = null
+        if (!stopped) later(showFlash, nextFlashDelayMs(false))
+      }, FLASH_VISIBLE_MS)
     }
 
     const evaluate = (): void => {
@@ -299,6 +438,7 @@ export default function WatermarkOverlay({
       pos = pickWatermarkPosition()
       writeHost()
     }, look.moveEveryMs)
+    if (flash) later(showFlash, nextFlashDelayMs(true))
 
     setTextRef.current = (id) => {
       if (!stopped) writeText(id)
@@ -309,7 +449,7 @@ export default function WatermarkOverlay({
       setTextRef.current = null
       host.remove()
     }
-  }, [containerRef, frameRef, resetKey])
+  }, [containerRef, frameRef, resetKey, flash])
 
   useEffect(() => {
     identityRef.current = identity

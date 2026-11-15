@@ -74,6 +74,7 @@ function deps(token = TOKEN, timeoutMs = 1_000): PlaybackDeps & { audits: AuditR
     }),
     loadRecording: async () => null,
     readStoredName: async () => null,
+    checkHold: async () => false,
     checkNda: async () => ({ allow: true, reason: 'not_enforced', signed: false }),
     checkMentorship: (discordId) =>
       fetchMentorshipAccess({ baseUrl, token, discordId, allowLocalHttp: true, timeoutMs, retries: 1, sleep: async () => {} }),

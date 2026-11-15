@@ -44,6 +44,17 @@ export interface AuditRow {
   expires_at?: string | null
 }
 
+export interface StreamClaim {
+  userId: string
+  discordId: string
+  streamId: string
+  /** A fresh play may take over from another player; a renewal may not. */
+  isNewPlay: boolean
+  sessionRef: string
+  kind: 'video' | 'recording'
+  itemId: string
+}
+
 export interface PlaybackDeps {
   loadVideo: (id: string) => Promise<LoadedVideo | null>
   loadRecording: (id: string) => Promise<LoadedRecording | null>
@@ -57,6 +68,12 @@ export interface PlaybackDeps {
   /** The admin-entered legal name for this member, or null (also null if it can't be read). */
   readStoredName: (discordId: string) => Promise<string | null>
   signEmbed: (bunnyVideoId: string, expiresAt: number) => Promise<string>
+  /**
+   * One video at a time per account (see streams.ts): records this player as the account's
+   * current stream, or reports that another live player holds it. Only called when the app sent
+   * a stream id.
+   */
+  claimStream: (claim: StreamClaim) => Promise<'ok' | 'elsewhere'>
   audit: (row: AuditRow) => Promise<void>
   newSessionRef: () => string
   now: () => number
@@ -140,6 +157,21 @@ export async function runPlayback(
     return denied(gate.code)
   }
   const { legalName, grant } = gate
+  if (request.streamId) {
+    const stream = await deps.claimStream({
+      userId: auth.userId,
+      discordId: auth.discordId,
+      streamId: request.streamId,
+      isNewPlay: request.renew !== true,
+      sessionRef,
+      kind: request.kind,
+      itemId: request.id
+    })
+    if (stream === 'elsewhere') {
+      await deps.audit({ ...base, ...auditTarget, outcome: 'denied', reason_code: 'stream_elsewhere' })
+      return denied('stream_elsewhere')
+    }
+  }
   const expiresAt = Math.floor(deps.now() / 1000) + grant.embedTtlSeconds
   const embedUrl = await deps.signEmbed(bunnyVideoId, expiresAt)
   await deps.audit({

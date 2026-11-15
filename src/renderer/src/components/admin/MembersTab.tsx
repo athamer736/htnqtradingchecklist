@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useAdmin, type IdentityEntry, type TamperLogEntry } from '../../store/useAdmin'
+import { useAdmin, type IdentityEntry } from '../../store/useAdmin'
 import { useNda } from '../../store/useNda'
+import { useSecurity } from '../../store/useSecurity'
 import NdaSettingsCard from './NdaSettingsCard'
+import { HoldButtons, MemberAlertsPanel, canBePaused, formatWhen } from './ViewerSecurityParts'
 import {
   IDENTITY_DENY_LABELS,
   type AdminMember,
@@ -9,7 +11,6 @@ import {
   type PrimaryRole,
   type VideoLevel
 } from '../../../../shared/video'
-import { TAMPER_LABELS, type TamperEvent } from '../../../../shared/watermarkGuard'
 
 // Members of the mentorship server with their LIVE Discord-derived access. This
 // is read-only for roles: levels and staff roles are granted in Discord, not
@@ -17,7 +18,7 @@ import { TAMPER_LABELS, type TamperEvent } from '../../../../shared/watermarkGua
 // what the bot reports plus the name an admin recorded, and can add, change or
 // remove the recorded one. Lookups and changes are audited server-side.
 
-type Filter = 'all' | 'staff' | 'students' | 'attention' | 'unnamed' | 'tampered'
+type Filter = 'all' | 'staff' | 'students' | 'attention' | 'unnamed' | 'flagged' | 'paused'
 
 const ROLE_CHIP: Record<PrimaryRole, { label: string; className: string }> = {
   owner: { label: 'Owner', className: 'bg-amber-400/15 text-amber-200' },
@@ -174,45 +175,6 @@ function IdentityPanel({ member, entry }: { member: AdminMember; entry: Identity
   )
 }
 
-const ITEM_KIND: Record<NonNullable<TamperEvent['itemKind']>, string> = {
-  video: 'Video',
-  recording: 'Recording',
-  document: 'Document'
-}
-
-function formatWhen(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
-
-/** Watermark tamper reports for one member, newest first. */
-function TamperLogPanel({ entry }: { entry: TamperLogEntry }): JSX.Element {
-  if (entry.state === 'loading') return <span className="text-xs text-muted">Loading tamper log…</span>
-  if (entry.state === 'error') return <span className="text-xs text-rose-300">{entry.message}</span>
-  if (entry.events.length === 0) return <span className="text-xs text-muted">No tamper reports.</span>
-  return (
-    <div>
-      <p className="mb-1.5 text-[11px] leading-relaxed text-muted">
-        Times the watermark was removed, hidden or changed while this member was watching, newest first (up to 100). The
-        video or document was stopped each time. Reports come from the member's own device, so treat them as a lead to
-        look into, not proof on their own.
-      </p>
-      <ul className="flex flex-col gap-1 text-xs">
-        {entry.events.map((e, i) => (
-          <li key={`${e.at}-${e.reason}-${i}`} className="flex flex-wrap gap-x-3 gap-y-0.5">
-            <span className="text-muted">{formatWhen(e.at)}</span>
-            <span className="font-medium text-rose-200">{TAMPER_LABELS[e.reason]}</span>
-            <span className="text-slate-200">
-              {e.itemKind ? `${ITEM_KIND[e.itemKind]}: ${e.itemTitle ?? '(since deleted)'}` : 'Unknown item'}
-            </span>
-            {e.platform && <span className="text-muted">{e.platform === 'desktop' ? 'Windows app' : 'Web'}</span>}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
 export default function MembersTab(): JSX.Element {
   const status = useAdmin((s) => s.status)
   const error = useAdmin((s) => s.error)
@@ -222,9 +184,9 @@ export default function MembersTab(): JSX.Element {
   const loadMembers = useAdmin((s) => s.loadMembers)
   const lookupIdentity = useAdmin((s) => s.lookupIdentity)
   const hideIdentity = useAdmin((s) => s.hideIdentity)
-  const tamperLogs = useAdmin((s) => s.tamperLogs)
-  const loadTamperLog = useAdmin((s) => s.loadTamperLog)
-  const hideTamperLog = useAdmin((s) => s.hideTamperLog)
+  const memberAlerts = useSecurity((s) => s.memberAlerts)
+  const loadMemberAlerts = useSecurity((s) => s.loadMemberAlerts)
+  const hideMemberAlerts = useSecurity((s) => s.hideMemberAlerts)
   const ndaStates = useNda((s) => s.memberStates)
 
   const [query, setQuery] = useState('')
@@ -245,7 +207,8 @@ export default function MembersTab(): JSX.Element {
       if (filter === 'students' && !(m.isStudent && !m.isStaff)) return false
       if (filter === 'attention' && !m.levelWithoutStudent) return false
       if (filter === 'unnamed' && !lacksName(m)) return false
-      if (filter === 'tampered' && !m.tamperCount) return false
+      if (filter === 'flagged' && !m.flagCount) return false
+      if (filter === 'paused' && !m.viewingHeld) return false
       if (!q) return true
       return [m.displayName, m.username, m.discordId].some((v) => v.toLowerCase().includes(q))
     })
@@ -253,14 +216,16 @@ export default function MembersTab(): JSX.Element {
 
   const attention = members.filter((m) => m.levelWithoutStudent).length
   const unnamed = members.filter(lacksName).length
-  const tampered = members.filter((m) => (m.tamperCount ?? 0) > 0).length
+  const flagged = members.filter((m) => (m.flagCount ?? 0) > 0).length
+  const paused = members.filter((m) => m.viewingHeld).length
   const filters: { id: Filter; label: string }[] = [
     { id: 'all', label: `All (${members.length})` },
     { id: 'staff', label: 'Staff' },
     { id: 'students', label: 'Students' },
     { id: 'unnamed', label: `No name added (${unnamed})` },
     { id: 'attention', label: `Needs attention (${attention})` },
-    { id: 'tampered', label: `Watermark tampered (${tampered})` }
+    { id: 'flagged', label: `Flagged (${flagged})` },
+    { id: 'paused', label: `Viewing paused (${paused})` }
   ]
 
   return (
@@ -321,7 +286,7 @@ export default function MembersTab(): JSX.Element {
         {visible.map((m) => {
           const chip = ROLE_CHIP[m.role]
           const entry = identities[m.discordId]
-          const tamperLog = tamperLogs[m.discordId]
+          const alerts = memberAlerts[m.discordId]
           return (
             <div key={m.discordId} className="rounded-xl border border-line bg-bg-card px-4 py-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -349,29 +314,33 @@ export default function MembersTab(): JSX.Element {
                     {!m.isStaff && ndaStates[m.discordId] === 'unknown' && (
                       <span className="chip bg-bg-soft text-muted">NDA unknown</span>
                     )}
-                    {(m.tamperCount ?? 0) > 0 && (
+                    {(m.flagCount ?? 0) > 0 && (
                       <span
                         className="chip bg-rose-400/15 text-rose-200"
-                        title={m.lastTamperAt ? `Latest: ${formatWhen(m.lastTamperAt)}` : undefined}
+                        title={m.lastFlagAt ? `Latest: ${formatWhen(m.lastFlagAt)}` : undefined}
                       >
-                        Watermark tampered ({m.tamperCount})
+                        Flagged ({m.flagCount})
                       </span>
                     )}
+                    {m.viewingHeld && <span className="chip bg-amber-400/15 text-amber-200">Viewing paused</span>}
                   </div>
                   <div className="truncate text-[11px] text-muted">
                     @{m.username} · {m.discordId}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {(m.tamperCount ?? 0) > 0 && (
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                  {((m.flagCount ?? 0) > 0 || m.viewingHeld) && (
                     <button
                       type="button"
                       className="btn-ghost px-2.5 py-1 text-xs text-rose-200"
-                      disabled={tamperLog?.state === 'loading'}
-                      onClick={() => (tamperLog ? hideTamperLog(m.discordId) : void loadTamperLog(m.discordId))}
+                      disabled={alerts?.state === 'loading'}
+                      onClick={() => (alerts ? hideMemberAlerts(m.discordId) : void loadMemberAlerts(m.discordId))}
                     >
-                      {tamperLog && tamperLog.state !== 'loading' ? 'Hide tamper log' : 'Tamper log'}
+                      {alerts && alerts.state !== 'loading' ? 'Hide flags' : 'Flags'}
                     </button>
+                  )}
+                  {canBePaused(m) && (
+                    <HoldButtons discordId={m.discordId} name={m.displayName} held={m.viewingHeld === true} />
                   )}
                   {entry?.state === 'shown' || entry?.state === 'error' ? (
                     <button type="button" className="btn-ghost px-2.5 py-1 text-xs" onClick={() => hideIdentity(m.discordId)}>
@@ -399,9 +368,9 @@ export default function MembersTab(): JSX.Element {
                   <IdentityPanel member={m} entry={entry} />
                 </div>
               )}
-              {tamperLog && (
+              {alerts && (
                 <div className="mt-2 border-t border-line pt-2">
-                  <TamperLogPanel entry={tamperLog} />
+                  <MemberAlertsPanel entry={alerts} />
                 </div>
               )}
             </div>

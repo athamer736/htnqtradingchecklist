@@ -31,34 +31,6 @@ export function isTamperReason(value: unknown): value is TamperReason {
   return typeof value === 'string' && (TAMPER_REASONS as readonly string[]).includes(value)
 }
 
-/** One report as the Admin panel lists it (shaped by the watermark-tamper function). */
-export interface TamperEvent {
-  at: string
-  reason: TamperReason
-  platform: 'desktop' | 'web' | null
-  itemKind: 'video' | 'recording' | 'document' | null
-  itemTitle: string | null
-}
-
-/** Reads the function's `events` list, skipping anything malformed. */
-export function parseTamperEvents(value: unknown): TamperEvent[] {
-  if (!Array.isArray(value)) return []
-  const out: TamperEvent[] = []
-  for (const raw of value) {
-    if (!raw || typeof raw !== 'object') continue
-    const e = raw as Record<string, unknown>
-    if (typeof e.at !== 'string' || !isTamperReason(e.reason)) continue
-    out.push({
-      at: e.at,
-      reason: e.reason,
-      platform: e.platform === 'desktop' || e.platform === 'web' ? e.platform : null,
-      itemKind: e.itemKind === 'video' || e.itemKind === 'recording' || e.itemKind === 'document' ? e.itemKind : null,
-      itemTitle: typeof e.itemTitle === 'string' ? e.itemTitle : null
-    })
-  }
-  return out
-}
-
 // --- Look ---------------------------------------------------------------------------------------
 
 export interface WatermarkLook {
@@ -169,6 +141,21 @@ export function watermarkFontPx(playerWidth: number, viewportWidth: number): num
 /** A new spot inside the player, as percentages, leaving room for the controls. */
 export function pickWatermarkPosition(rand: Rand = Math.random): { x: number; y: number } {
   return { x: Math.round(between(rand, 4, 62) * 10) / 10, y: Math.round(between(rand, 8, 70) * 10) / 10 }
+}
+
+// --- ID flash (videos) --------------------------------------------------------------------------
+
+/** How long the full-player ID flash stays up. */
+export const FLASH_VISIBLE_MS = 700
+
+/** Time to the next flash: the first comes 30-90 s after opening, then one every 1.5-4 minutes. */
+export function nextFlashDelayMs(first: boolean, rand: Rand = Math.random): number {
+  return Math.round(first ? between(rand, 30_000, 90_000) : between(rand, 90_000, 240_000))
+}
+
+/** Text size for the flash: large enough to read in a cropped or low-quality recording. */
+export function flashFontPx(playerWidth: number): number {
+  return Math.round(Math.min(44, Math.max(14, playerWidth * 0.04)))
 }
 
 // --- Tamper rules -------------------------------------------------------------------------------

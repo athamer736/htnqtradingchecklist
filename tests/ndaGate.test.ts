@@ -184,6 +184,7 @@ function playbackDeps(g: Partial<Parameters<typeof gate>[0]> & { storedName?: st
     loadRecording: async () => rec(),
     checkMentorship: async () => ((state.mentorshipCalls += 1), botAllowed),
     readStoredName: async () => g.storedName ?? null,
+    checkHold: async () => false,
     checkNda: ({ discordId, isStaff }) => {
       const h = gate({ ...g, isStaff })
       return evaluateNda({ ...h, discordId, lookup: async (id) => ((state.lookups += 1), h.lookup(id)) })

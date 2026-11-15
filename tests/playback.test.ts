@@ -15,6 +15,7 @@ import {
   type PlaybackDeps
 } from '../supabase/functions/_shared/playback.ts'
 import { DEFAULT_ROLE_IDS as R, resolveCapabilities } from '../supabase/functions/_shared/roles.ts'
+import { EMBED_LINK_SECONDS } from '../supabase/functions/_shared/viewerGate.ts'
 import { seedTab } from './helpers/seedTabs.ts'
 
 const STUDENT_ID = '111111111111111111'
@@ -92,7 +93,9 @@ function deps(over: Partial<PlaybackDeps> = {}): TestDeps {
       return allowed
     },
     readStoredName: async () => null,
+    checkHold: async () => false,
     checkNda: async () => ({ allow: true, reason: 'not_enforced', signed: false }),
+    claimStream: async () => 'ok',
     signEmbed: async (id, exp) => `https://player.mediadelivery.net/embed/1/${id}?token=t&expires=${exp}`,
     audit: async (row) => {
       state.audits.push(row)
@@ -114,7 +117,8 @@ describe('runPlayback', () => {
     assert.equal(out.body.ok, true)
     assert.equal(out.body.accessValidForSeconds, 300)
     assert.equal(out.body.renewAfterSeconds, 210)
-    assert.equal(out.body.expiresAt, 1_700_000_000 + 300 + 90)
+    // The signed embed link itself only has to last long enough for the player to load it.
+    assert.equal(out.body.expiresAt, 1_700_000_000 + 60)
     assert.deepEqual(out.body.watermark, {
       discordId: STUDENT_ID,
       legalName: 'Example Customer',
@@ -444,12 +448,12 @@ describe('runPlayback: member-access decisions', () => {
 
 describe('playbackGrantWindow', () => {
   it('never lets an allowed decision live longer than 300 s', () => {
-    assert.deepEqual(playbackGrantWindow(300, 720, 90), { accessValidForSeconds: 300, renewAfterSeconds: 210, embedTtlSeconds: 390 })
+    assert.deepEqual(playbackGrantWindow(300, 720, 90), { accessValidForSeconds: 300, renewAfterSeconds: 210, embedTtlSeconds: 60 })
     assert.equal(playbackGrantWindow(3600, 1800, 90).accessValidForSeconds, 300)
   })
 
   it('follows a shorter recheck interval from the bot', () => {
-    assert.deepEqual(playbackGrantWindow(60, 720, 90), { accessValidForSeconds: 60, renewAfterSeconds: 30, embedTtlSeconds: 150 })
+    assert.deepEqual(playbackGrantWindow(60, 720, 90), { accessValidForSeconds: 60, renewAfterSeconds: 30, embedTtlSeconds: 60 })
   })
 
   it('has a floor so a 0 s recheck still allows the player to start', () => {
@@ -458,8 +462,10 @@ describe('playbackGrantWindow', () => {
     assert.equal(w.renewAfterSeconds, 15)
   })
 
-  it('respects a lower configured embed TTL', () => {
-    assert.equal(playbackGrantWindow(300, 120, 90).embedTtlSeconds, 120)
+  it('signs the embed link for 60 s at most: a copied link stops loading after a minute', () => {
+    assert.equal(EMBED_LINK_SECONDS, 60)
+    assert.equal(playbackGrantWindow(300, 1800, 90).embedTtlSeconds, 60)
+    assert.equal(playbackGrantWindow(300, 45, 90).embedTtlSeconds, 45)
   })
 })
 
@@ -515,5 +521,85 @@ describe('partial-plan signed playback', () => {
     assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, auth([R.partial, R.level2]), d)).body.ok, false)
     assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, auth([R.student, R.level3]), d)).body.ok, true)
     assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, auth([R.partial, R.level2]), d)).body.ok, false)
+  })
+})
+
+describe('viewing pause and one video at a time', () => {
+  it('a paused member is refused before any lookup, signing or stream claim, and it is audited', async () => {
+    let signed = 0
+    let claims = 0
+    const d = deps({
+      checkHold: async () => true,
+      signEmbed: async () => {
+        signed++
+        return 'must-not-sign'
+      },
+      claimStream: async () => {
+        claims++
+        return 'ok'
+      }
+    })
+    const out = await runPlayback({ kind: 'video', id: VIDEO_ID, streamId: 'a'.repeat(16) }, student(R.level3), d)
+    assert.equal(out.status, 403)
+    assert.equal(out.body.reasonCode, 'viewing_held')
+    assert.equal(signed, 0)
+    assert.equal(claims, 0)
+    assert.equal(d.mentorshipCalls, 0)
+    assert.equal(d.audits.at(-1)?.reason_code, 'viewing_held')
+  })
+
+  it('owners and admins are never paused, and a pause that cannot be read does not lock anyone out', async () => {
+    const owner = auth([R.owner], OTHER_ID)
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, owner, deps({ checkHold: async () => true }))).status, 200)
+    const broken = deps({ checkHold: async () => Promise.reject(new Error('relation does not exist')) })
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), broken)).status, 200)
+  })
+
+  it('claims the stream as a new play, and a renewal as a renewal', async () => {
+    const claims: { isNewPlay: boolean; streamId: string; kind: string; itemId: string }[] = []
+    const d = deps({
+      claimStream: async (c) => {
+        claims.push(c)
+        return 'ok'
+      }
+    })
+    const streamId = 'ab'.repeat(8)
+    await runPlayback({ kind: 'video', id: VIDEO_ID, streamId }, student(R.level3), d)
+    await runPlayback({ kind: 'video', id: VIDEO_ID, streamId, renew: true }, student(R.level3), d)
+    assert.deepEqual(
+      claims.map((c) => [c.isNewPlay, c.streamId, c.kind, c.itemId]),
+      [
+        [true, streamId, 'video', VIDEO_ID],
+        [false, streamId, 'video', VIDEO_ID]
+      ]
+    )
+  })
+
+  it('a renewal from a player that lost its slot is refused with stream_elsewhere and nothing is signed', async () => {
+    let signed = 0
+    const d = deps({
+      claimStream: async () => 'elsewhere',
+      signEmbed: async () => {
+        signed++
+        return 'must-not-sign'
+      }
+    })
+    const out = await runPlayback({ kind: 'video', id: VIDEO_ID, streamId: 'c'.repeat(16), renew: true }, student(R.level3), d)
+    assert.equal(out.status, 409)
+    assert.equal(out.body.reasonCode, 'stream_elsewhere')
+    assert.equal(signed, 0)
+    assert.equal(d.audits.at(-1)?.reason_code, 'stream_elsewhere')
+  })
+
+  it('older apps that send no stream id are not tracked', async () => {
+    let claims = 0
+    const d = deps({
+      claimStream: async () => {
+        claims++
+        return 'elsewhere'
+      }
+    })
+    assert.equal((await runPlayback({ kind: 'video', id: VIDEO_ID }, student(R.level3), d)).status, 200)
+    assert.equal(claims, 0)
   })
 })

@@ -29,6 +29,7 @@ import { deny } from '../_shared/messages.ts'
 import { stampPdf } from '../_shared/pdfStamp.ts'
 import { createWindowLimiter } from '../_shared/rateLimit.ts'
 import { getTab } from '../_shared/tabStore.ts'
+import { checkOpenBurst } from '../_shared/viewerSecurityStore.ts'
 import { playbackAuditWriter, viewerGateDeps } from '../_shared/viewerWiring.ts'
 
 const RENEW_LEAD_SECONDS = 90
@@ -91,6 +92,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (outcome.kind === 'json') {
     const retryAfter = outcome.body.retryAfterSeconds
     return json(outcome.body, outcome.status, typeof retryAfter === 'number' ? { 'Retry-After': String(retryAfter) } : {})
+  }
+
+  if (auth.ok) {
+    await checkOpenBurst(admin, {
+      userId: auth.userId,
+      discordId: auth.discordId,
+      sessionRef: outcome.grant.watermark.sessionRef
+    })
   }
 
   return new Response(outcome.bytes as unknown as BodyInit, {

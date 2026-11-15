@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { isSupabaseConfigured } from '../lib/supabase'
 import type { AdminMember, MemberIdentity } from '../../../shared/video'
-import { parseTamperEvents, type TamperEvent } from '../../../shared/watermarkGuard'
 import { invoke, toFailure, type Failure } from './useMentorship'
 
 // Admin panel state. Everything is in memory only: legal names (from the bot, or
@@ -17,18 +16,12 @@ export type IdentityEntry =
   | { state: 'shown'; identity: MemberIdentity }
   | { state: 'error'; message: string }
 
-export type TamperLogEntry =
-  | { state: 'loading' }
-  | { state: 'shown'; events: TamperEvent[] }
-  | { state: 'error'; message: string }
-
 interface AdminState {
   status: LoadStatus
   error: Failure | null
   members: AdminMember[]
   truncated: boolean
   identities: Record<string, IdentityEntry>
-  tamperLogs: Record<string, TamperLogEntry>
 
   loadMembers: () => Promise<void>
   lookupIdentity: (discordId: string) => Promise<void>
@@ -37,9 +30,8 @@ interface AdminState {
   /** Removes the admin-entered legal name. Resolves to an error message, or null on success. */
   clearName: (discordId: string) => Promise<string | null>
   hideIdentity: (discordId: string) => void
-  /** Watermark tamper reports recorded against one member, newest first. */
-  loadTamperLog: (discordId: string) => Promise<void>
-  hideTamperLog: (discordId: string) => void
+  /** Reflects a pause or reauthorisation made from the Security tools in the list. */
+  setViewingHeld: (discordId: string, held: boolean) => void
   /** Drops members and every fetched legal name (called when the panel closes). */
   reset: () => void
 }
@@ -72,8 +64,7 @@ const initial = {
   error: null,
   members: [],
   truncated: false,
-  identities: {},
-  tamperLogs: {}
+  identities: {}
 }
 
 export const useAdmin = create<AdminState>((set, get) => ({
@@ -140,19 +131,14 @@ export const useAdmin = create<AdminState>((set, get) => ({
     set({ identities: rest })
   },
 
-  loadTamperLog: async (discordId) => {
-    set({ tamperLogs: { ...get().tamperLogs, [discordId]: { state: 'loading' } } })
-    const body = await invoke('watermark-tamper', { action: 'list', memberDiscordId: discordId })
-    const entry: TamperLogEntry =
-      body?.ok === true && Array.isArray(body.events)
-        ? { state: 'shown', events: parseTamperEvents(body.events) }
-        : { state: 'error', message: toFailure(body, 'Could not load the tamper log.').message }
-    set({ tamperLogs: { ...get().tamperLogs, [discordId]: entry } })
-  },
-
-  hideTamperLog: (discordId) => {
-    const { [discordId]: _removed, ...rest } = get().tamperLogs
-    set({ tamperLogs: rest })
+  setViewingHeld: (discordId, held) => {
+    set({
+      members: get().members.map((m) => {
+        if (m.discordId !== discordId) return m
+        const { viewingHeld: _old, ...rest } = m
+        return held ? { ...rest, viewingHeld: true } : rest
+      })
+    })
   },
 
   reset: () => set({ ...initial })

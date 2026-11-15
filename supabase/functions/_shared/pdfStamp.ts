@@ -7,6 +7,9 @@
 //   - as a footer strip on each page, and as a faint diagonal pattern across the page, so
 //     cropping the footer off a screenshot or print still leaves the pattern
 //   - the Discord ID and session reference in the PDF's own metadata
+//   - hidden: a trace code for the session (traceCode.ts) as invisible text on every page and as
+//     the PDF's document ID, so a copy with the visible stamp edited out still traces back to the
+//     viewing it came from (Admin -> Security -> Trace a leak)
 //
 // Names are only ever stamped onto the copy served to that same verified viewer. A stamp
 // that cannot be applied (encrypted, corrupt, too large, too many pages) is a failure: the
@@ -15,7 +18,19 @@
 // `pdf-lib` resolves through each function's deno.json import map (npm:pdf-lib) and through
 // node_modules in unit tests, so tests exercise exactly this code.
 
-import { degrees, PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib'
+import {
+  degrees,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFString,
+  rgb,
+  StandardFonts,
+  type PDFFont,
+  type PDFPage
+} from 'pdf-lib'
+import { encodeTraceCode, encodeTraceId } from './traceCode.ts'
 
 /** Matches the Storage bucket's file_size_limit. */
 export const MAX_PDF_BYTES = 25 * 1024 * 1024
@@ -105,7 +120,34 @@ export function toContent(
   }
 }
 
-function stampPage(page: PDFPage, font: PDFFont, text: StampText): void {
+/**
+ * The hidden trace code: fully transparent text in three places (found by copying or extracting the
+ * text, not by looking), plus one near-white copy in the top margin for re-printed copies that drop
+ * transparent text.
+ */
+function hidePageTrace(
+  page: PDFPage,
+  font: PDFFont,
+  code: string,
+  size: { width: number; height: number },
+  at: (x: number, y: number) => { x: number; y: number },
+  rotation: number
+): void {
+  const { width, height } = size
+  const spots: [number, number][] = [
+    [width * 0.08, height * 0.92],
+    [width * 0.42, height * 0.5],
+    [width * 0.6, height * 0.06]
+  ]
+  for (const [xv, yv] of spots) {
+    const p = at(xv, yv)
+    page.drawText(code, { x: p.x, y: p.y, size: 6, font, color: rgb(1, 1, 1), opacity: 0, rotate: degrees(rotation) })
+  }
+  const m = at(width - font.widthOfTextAtSize(code, 2) - 6, height - 5)
+  page.drawText(code, { x: m.x, y: m.y, size: 2, font, color: rgb(0.985, 0.985, 0.985), rotate: degrees(rotation) })
+}
+
+function stampPage(page: PDFPage, font: PDFFont, text: StampText, traceCode: string | null): void {
   const rotation = ((page.getRotation().angle % 360) + 360) % 360
   const box = page.getCropBox()
   // Visible size: a quarter turn swaps width and height.
@@ -167,6 +209,10 @@ function stampPage(page: PDFPage, font: PDFFont, text: StampText): void {
     opacity: 0.95,
     rotate: degrees(rotation)
   })
+
+  if (traceCode) {
+    hidePageTrace(page, font, traceCode, { width, height }, (x, y) => toContent(box, rotation, x, y), rotation)
+  }
 }
 
 // pdf-lib throws a plain Error for encrypted files, so the message is the only signal.
@@ -192,11 +238,18 @@ export async function stampPdf(source: Uint8Array, identity: StampIdentity): Pro
 
     const font = await doc.embedFont(StandardFonts.Helvetica)
     const text = stampText(identity, font)
-    for (const page of pages) stampPage(page, font, text)
+    const traceCode = encodeTraceCode(identity.sessionRef)
+    for (const page of pages) stampPage(page, font, text, traceCode)
+    const traceId = encodeTraceId(identity.sessionRef)
+    if (traceId) {
+      doc.context.trailerInfo.ID = doc.context.obj([PDFHexString.of(traceId), PDFHexString.of(traceId)])
+    }
     doc.setSubject(`Issued to Discord ID ${identity.discordId}`)
     doc.setKeywords([`ref:${identity.sessionRef}`])
     doc.setProducer('HTNQ Trading Mentorship')
     doc.setCreator('HTNQ Trading Mentorship')
+    const info = doc.context.lookup(doc.context.trailerInfo.Info)
+    if (traceCode && info instanceof PDFDict) info.set(PDFName.of('DocumentControl'), PDFString.of(traceCode))
     const bytes = await doc.save()
     return { ok: true, bytes, pageCount: pages.length }
   } catch {

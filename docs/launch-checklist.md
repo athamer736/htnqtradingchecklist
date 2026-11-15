@@ -48,7 +48,7 @@ Apply in order (all idempotent; all are also appended to `schema.sql`):
    `20261024_mentorship_tabs.sql` (2.0.3 editable tabs; then deploy `manage-tabs` and redeploy `list-content`, `create-upload`, `manage-content`, `set-thumbnail`, `issue-playback-token`, `level-descriptions`),
    `20261025_nda_required.sql` (NDA required to keep access; then deploy `nda` and redeploy `issue-playback-token` and `list-content`),
    `20261102_documents.sql` (watermarked PDFs: `documents` table, private `mentorship-documents` bucket, `playback_audit.document_id`; then deploy `create-document-upload`, `manage-documents`, `issue-document` and redeploy `list-content`, `manage-tabs`, `issue-playback-token`),
-   `20261115_watermark_tamper.sql` (watermark tamper reports; then deploy `watermark-tamper` and redeploy `admin-members`)
+   `20261115_viewer_security.sql` (flags, paused viewing, one video at a time; then deploy `watermark-tamper`, `playback-heartbeat`, `viewer-security` and redeploy `issue-playback-token`, `issue-document`, `admin-members`)
 
 Videos are added through the in-app upload dialog; no manual `videos` inserts are needed.
 
@@ -92,6 +92,8 @@ supabase functions deploy create-document-upload
 supabase functions deploy manage-documents
 supabase functions deploy issue-document
 supabase functions deploy watermark-tamper
+supabase functions deploy playback-heartbeat
+supabase functions deploy viewer-security
 supabase functions delete list-videos
 ```
 
@@ -198,13 +200,26 @@ Do these in order; each step is safe on its own because nothing is enforced unti
    documents (it must refuse).
 8. [ ] Check `playback_audit` rows for opens carry `document_id` and no names.
 
-### Watermark tamper detection (before release)
+### Viewer security (before release)
 
-1. [ ] Run `20261115_watermark_tamper.sql`; deploy `watermark-tamper`; redeploy `admin-members`.
+1. [ ] Run `20261115_viewer_security.sql`; deploy `watermark-tamper`, `playback-heartbeat`, `viewer-security`;
+   redeploy `issue-playback-token`, `issue-document`, `admin-members`.
 2. [ ] As a test student, open a video and, in DevTools, delete the watermark element or set it to
    `display: none` / `opacity: 0`: the video stops within about 2 seconds with a notice, and Reload
    brings it back with a new watermark look. Do the same on a PDF.
 3. [ ] Open the same lesson twice and check the watermark's element name and look change each time.
 4. [ ] Go fullscreen, resize the window and minimise it with a lesson open: nothing is reported.
-5. [ ] As owner/admin: Admin -> Members shows "Watermark tampered (N)" on the test student; the tamper
-   log lists the item, reason, platform and time. `watermark_tamper_events` has the rows.
+5. [ ] As owner/admin: Admin -> Security counts the flags and lists the test student; Members shows
+   "Flagged (N)" and Flags lists the item, reason, platform and time. `viewer_alerts` has the rows.
+6. [ ] Watch a video for a few minutes: the name and Discord ID flash across the player for under a second,
+   first within about 1.5 minutes. Deleting the flash in DevTools while it shows stops the video.
+7. [ ] Play a video on the Windows app, then another on the web with the same account: the first closes
+   within about 20 seconds saying a video started elsewhere, and a "Second device" flag appears.
+   Switching videos in one window never flags.
+8. [ ] Pause the test student from Admin -> Security: an open video or PDF closes within about 20 seconds and
+   nothing opens ("paused while staff review your account"). Reauthorise: it opens again at once.
+   Set Automatic pause to 1, trigger a tamper flag, check the student is paused, then set it back to Off.
+9. [ ] Open a PDF as the student, download nothing; as admin, print it to PDF from another viewer or crop the
+   footer off, then Admin -> Security -> Trace a leak with that file: it names the student, the document
+   and the time. Typing the `ref` from a video frame does the same.
+10. [ ] Copy a fresh embed link from DevTools and open it after 2 minutes: Bunny refuses it.

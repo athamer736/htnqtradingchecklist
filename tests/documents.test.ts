@@ -110,6 +110,7 @@ function harness(s: Setup) {
     newSessionRef: () => 'REF12345',
     now: () => NOW,
     checkMentorship: async () => s.botLookup ?? botAllowed,
+    checkHold: async () => false,
     checkNda: ({ discordId, isStaff }) => {
       const gate: NdaGateDeps = {
         isStaff,

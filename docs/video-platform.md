@@ -21,7 +21,9 @@ Customer app (Windows desktop or https://app.htnq.org)
        admin-members | admin-member-identity | admin-member-name   (owner/admin: Admin panel)
         level-descriptions                                 (text at the top of each Mentorship page)
         issue-playback-token                                (every play and renewal)
-        watermark-tamper                                    (player reports a hidden watermark; owner/admin log)
+        watermark-tamper                                    (player reports a hidden watermark: a viewer flag)
+        playback-heartbeat                                  (open players check in: one video per account, paused viewing)
+        viewer-security                                     (owner/admin: flags, pause/reauthorise, auto-pause, leak trace)
        verify-membership                                  (journal sync gate)
      → Discord API: live guild member + roles on every request
      → Railway mentorship API (POST /api/v1/member-access) on every playback
@@ -194,7 +196,7 @@ failed Bunny delete never leaves a playable but unlisted file.
 | Playback | Live Discord + bot check on every issue and renewal |
 | Allowed decision | Valid for the bot's `recheck_after_seconds`, **capped at 300 s** (floor 30 s) |
 | In-app revalidation | At 210 s by default (300 s minus 90 s); temporary failures retried after 5/10/20 s (or `Retry-After` if longer), never past the 300 s deadline |
-| Bunny embed token TTL | `min(PLAYBACK_TTL_SECONDS, access window + 90 s)`: **390 s** by default |
+| Bunny embed token TTL | `min(PLAYBACK_TTL_SECONDS, 60 s)`: **60 s**. The token only gates loading the player, so a copied link dies after a minute; the open player keeps playing and renews access separately |
 
 The client measures the window from when it received the response (so server
 clock skew can't extend it), checks every 2 s and whenever the tab regains
@@ -307,7 +309,7 @@ BUNNY_STREAM_LIBRARY_ID
 BUNNY_STREAM_TOKEN_KEY           # Token Authentication key (embed + thumbnail signing)
 BUNNY_STREAM_API_KEY             # Library API key (create/delete, TUS signing, status)
 BUNNY_STREAM_CDN_HOSTNAME        # optional, thumbnails
-PLAYBACK_TTL_SECONDS             # optional upper bound, default 720 (capped to access window + 90 s)
+PLAYBACK_TTL_SECONDS             # optional upper bound, default 720 (the embed link is capped at 60 s)
 DISCORD_ROLE_*                   # optional overrides of the built-in role IDs
 JULY_BATCH / SEPT_BATCH / BATCH_5   # batch role IDs (built in; set here too)
 MENTORSHIP_API_ALLOW_HTTP_LOCALHOST=1   # local mock testing only; never in production
