@@ -244,8 +244,14 @@ expires. We do **not** promise instant CDN revocation.
   across the whole picture (drawn once per session with a random angle, size and strength), so a crop
   or a blur of one spot still leaves the ID elsewhere in the frame. The name and ID also flash across
   the player for under a second at random times.
-- Both layers are watched (`src/shared/watermarkGuard.ts`): removing, hiding, restyling, shrinking or
-  covering either stops the video with a notice and files a viewer flag. If that report can't be sent,
+- A licence line sits small at the bottom centre: "© HTNQ Ltd. Licensed to <legal name, else
+  @username, else Discord ID>. Copying or sharing is prohibited." A longer licence notice with the
+  session ref is in the page as screen-reader-only text (not shown, but read by AI tools and anything
+  else that takes the page's text). PDFs carry both in the file (see below). The wording lives in
+  `src/shared/licenceNotice.ts` and its server copy `_shared/licenceNotice.ts`.
+- All three layers (watermark, faint pattern, licence line) are watched (`src/shared/watermarkGuard.ts`):
+  removing, hiding, restyling, shrinking or covering any of them stops the video with a notice and files
+  a viewer flag. If that report can't be sent,
   the app keeps it and sends it with the next check-in; a page that blocks the check-ins but keeps
   renewing is flagged as "Blocked check-ins".
 - Electron `setContentProtection` is best-effort and **not DRM**. The installed app has DevTools off,
@@ -287,7 +293,9 @@ count and marks it ready. Delete removes the stored file first, then soft-delete
 **Opening.** `issue-document` mode `open` re-runs every check, downloads the file with the service
 role and **stamps the viewer onto every page** (`_shared/pdfStamp.ts`): a footer line with legal
 name, `@username`, Discord ID and a session reference, plus a faint tiled diagonal copy of the same
-text. The response is the stamped PDF (`no-store`); the grant (watermark identity and the access
+text; the licence line small at the bottom centre; and the longer licence notice as invisible text
+across the top of the page (also the PDF's Subject, with the line as a custom `Copyright` entry), so
+text extractors and AI tools read it. The response is the stamped PDF (`no-store`); the grant (watermark identity and the access
 window) travels in the `X-Htnq-Grant` header as base64 of UTF-8 JSON. If the stamp cannot be
 applied the request fails: the original is never returned. Opening is limited to 10 per person per
 minute. Mode `recheck` returns only the decision; the viewer calls it on the same schedule as the

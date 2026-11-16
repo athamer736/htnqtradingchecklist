@@ -7,6 +7,7 @@ import {
   inlineStyleIntact,
   inspectTiles,
   inspectWatermark,
+  licenceFontPx,
   nextFlashDelayMs,
   pickTileLook,
   pickWatermarkLook,
@@ -21,6 +22,7 @@ import {
   type WatermarkLook,
   type WatermarkSnapshot
 } from '../../../../shared/watermarkGuard'
+import { licenceLine, licenceNotice } from '../../../../shared/licenceNotice'
 
 export interface WatermarkIdentity {
   /** The viewer's Discord ID (always shown). */
@@ -129,6 +131,47 @@ function flashBoxCss(fontFamily: string, fontPx: number): string {
     'padding:0.5em 0.9em',
     'border-radius:8px',
     'text-shadow:0 2px 4px rgba(0,0,0,0.7)',
+    'overflow-wrap:anywhere',
+    'user-select:none',
+    '-webkit-user-select:none'
+  ].join(';')
+}
+
+function licenceHostCss(zIndex: number): string {
+  const rules: [string, string][] = [
+    ['position', 'absolute'],
+    ['left', '50%'],
+    ['bottom', '4px'],
+    ['z-index', String(zIndex)],
+    ['display', 'block'],
+    ['visibility', 'visible'],
+    ['opacity', '1'],
+    ['width', 'max-content'],
+    ['height', 'auto'],
+    ['max-width', '94%'],
+    ['margin', '0'],
+    ['padding', '0'],
+    ['pointer-events', 'none'],
+    ['user-select', 'none'],
+    ['filter', 'none'],
+    ['clip-path', 'none'],
+    ['mask', 'none'],
+    ['mix-blend-mode', 'normal'],
+    ['transform', 'translateX(-50%)']
+  ]
+  return rules.map(([k, v]) => `${k}:${v}!important`).join(';')
+}
+
+function licenceTextCss(fontFamily: string, fontPx: number): string {
+  return [
+    'all:initial',
+    'display:block',
+    'color:rgba(255,255,255,0.8)',
+    `font-family:${fontFamily}`,
+    `font-size:${fontPx}px`,
+    'line-height:1.3',
+    'text-align:center',
+    'text-shadow:0 1px 2px rgba(0,0,0,0.85)',
     'overflow-wrap:anywhere',
     'user-select:none',
     '-webkit-user-select:none'
@@ -263,7 +306,8 @@ function zOf(el: Element): number | null {
  * a second at random moments, so a screen recording or a cropped clip still shows who it was. The
  * flash is checked the same way while it is up. With `tiles` (videos), a faint pattern of the
  * viewer's ID and the session ref covers the whole picture all the time, so no crop is free of it;
- * it is checked with the watermark.
+ * it is checked with the watermark. With `licence` (videos), the licence line ("© HTNQ Ltd. Licensed
+ * to ...") sits small at the bottom centre and is checked the same way.
  *
  * This is a deterrent and investigation aid, not DRM: code in the viewer's own browser can
  * always be changed, and it does not stop filming the screen.
@@ -275,6 +319,7 @@ export default function WatermarkOverlay({
   resetKey,
   flash = false,
   tiles = false,
+  licence = false,
   onTamper
 }: {
   identity: WatermarkIdentity
@@ -288,6 +333,8 @@ export default function WatermarkOverlay({
   flash?: boolean
   /** Repeat the viewer's ID faintly across the whole picture (videos). */
   tiles?: boolean
+  /** Show the licence line at the bottom centre (videos; PDF pages carry it in the file). */
+  licence?: boolean
   onTamper: (reason: TamperReason) => void
 }): null {
   const identityRef = useRef(identity)
@@ -375,6 +422,31 @@ export default function WatermarkOverlay({
       container.insertBefore(tileHost, host)
     }
 
+    // The licence line, bottom centre (videos).
+    const licenceEl = document.createElement('div')
+    let licenceText = ''
+    let licencePx = licenceFontPx(container.clientWidth)
+    let licenceHost: HTMLElement | null = null
+    let licenceRoot: ShadowRoot | null = null
+    let licenceInline = new Map<string, string>()
+    const writeLicence = (id: WatermarkIdentity): void => {
+      licenceText = licenceLine(id)
+      licenceEl.textContent = licenceText
+    }
+    const writeLicenceStyle = (): void => {
+      licenceEl.setAttribute('style', licenceTextCss(look.fontFamily, licencePx))
+    }
+    if (licence) {
+      licenceHost = document.createElement(randomTagName())
+      licenceRoot = licenceHost.attachShadow({ mode: 'closed' })
+      writeLicence(identityRef.current)
+      writeLicenceStyle()
+      licenceRoot.append(licenceEl)
+      licenceHost.setAttribute('style', licenceHostCss(look.zIndex))
+      licenceInline = inlineOf(licenceHost)
+      container.appendChild(licenceHost)
+    }
+
     const textIntact = (): boolean =>
       box.parentNode === root &&
       idEl.parentNode === box &&
@@ -395,6 +467,22 @@ export default function WatermarkOverlay({
       host: boxOf(host),
       container: boxOf(container),
       hostZ: zOf(host),
+      expectedZ: look.zIndex,
+      frameZ: zOf(frame)
+    })
+
+    const licenceSnapshot = (l: HTMLElement, r: ShadowRoot): WatermarkSnapshot => ({
+      hostAttached: l.isConnected && l.parentNode === container,
+      frameAttached: frame.isConnected && frame.parentNode === container,
+      attributesIntact: attributesAllowed(l.getAttributeNames()) && inlineStyleIntact(licenceInline, inlineOf(l)),
+      hostPseudo: hasPseudoContent(l),
+      textIntact: licenceEl.parentNode === r && licenceEl.textContent === licenceText,
+      layers: [l, licenceEl].map(layerOf),
+      textColorAlpha: colorAlpha(getComputedStyle(licenceEl).color),
+      fontSizePx: Number.parseFloat(getComputedStyle(licenceEl).fontSize),
+      host: boxOf(l),
+      container: boxOf(container),
+      hostZ: zOf(l),
       expectedZ: look.zIndex,
       frameZ: zOf(frame)
     })
@@ -506,7 +594,9 @@ export default function WatermarkOverlay({
       let reason: TamperReason | null
       try {
         reason =
-          inspectWatermark(snapshot()) ?? (tileHost && tileRoot ? inspectTiles(tileSnapshot(tileHost, tileRoot)) : null)
+          inspectWatermark(snapshot()) ??
+          (licenceHost && licenceRoot ? inspectWatermark(licenceSnapshot(licenceHost, licenceRoot)) : null) ??
+          (tileHost && tileRoot ? inspectTiles(tileSnapshot(tileHost, tileRoot)) : null)
       } catch {
         reason = 'removed'
       }
@@ -543,12 +633,21 @@ export default function WatermarkOverlay({
       observer.observe(tileHost, { attributes: true })
       observer.observe(tileRoot, { childList: true, subtree: true, attributes: true })
     }
+    if (licenceHost && licenceRoot) {
+      observer.observe(licenceHost, { attributes: true })
+      observer.observe(licenceRoot, { childList: true, subtree: true, characterData: true, attributes: true })
+    }
 
     const resize = new ResizeObserver(() => {
       const next = watermarkFontPx(container.clientWidth, window.innerWidth)
       if (next !== fontPx) {
         fontPx = next
         writeBox()
+      }
+      const nextLicence = licenceFontPx(container.clientWidth)
+      if (licenceHost && nextLicence !== licencePx) {
+        licencePx = nextLicence
+        writeLicenceStyle()
       }
     })
     resize.observe(container)
@@ -564,6 +663,7 @@ export default function WatermarkOverlay({
       if (stopped) return
       writeText(id)
       if (tileHost) writePattern(id)
+      if (licenceHost) writeLicence(id)
     }
 
     return () => {
@@ -571,8 +671,9 @@ export default function WatermarkOverlay({
       setTextRef.current = null
       host.remove()
       tileHost?.remove()
+      licenceHost?.remove()
     }
-  }, [containerRef, frameRef, resetKey, flash, tiles])
+  }, [containerRef, frameRef, resetKey, flash, tiles, licence])
 
   useEffect(() => {
     identityRef.current = identity
@@ -580,4 +681,16 @@ export default function WatermarkOverlay({
   }, [identity])
 
   return null
+}
+
+/**
+ * The licence notice as page text that is never shown: screen readers, AI tools and anything else
+ * that reads the page's text get it, people looking at the player don't.
+ */
+export function HiddenLicenceNotice({ identity }: { identity: WatermarkIdentity }): JSX.Element {
+  return (
+    <p className="sr-only" translate="no">
+      {licenceNotice(identity, identity.sessionRef ?? identity.discordId)}
+    </p>
+  )
 }

@@ -158,6 +158,11 @@ export function flashFontPx(playerWidth: number): number {
   return Math.round(Math.min(44, Math.max(14, playerWidth * 0.04)))
 }
 
+/** Text size for the licence line at the bottom of the video: small, but readable in a recording. */
+export function licenceFontPx(playerWidth: number): number {
+  return Math.round(Math.min(14, Math.max(8, playerWidth * 0.011)) * 10) / 10
+}
+
 // --- Tiled ID pattern (videos) ------------------------------------------------------------------
 
 /**

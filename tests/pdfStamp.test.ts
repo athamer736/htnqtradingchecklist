@@ -11,6 +11,7 @@ import {
   stampPdf,
   stampText,
   toContent,
+  wrapText,
   type StampIdentity
 } from '../supabase/functions/_shared/pdfStamp.ts'
 import { decodeTrace, encodeTraceCode, encodeTraceId } from '../supabase/functions/_shared/traceCode.ts'
@@ -22,6 +23,11 @@ const VIEWER: StampIdentity = {
   username: 'ada_l',
   sessionRef: 'abcdef0123456789'
 }
+const LINE = '© HTNQ Ltd. Licensed to Ada Lovelace. Copying or sharing is prohibited.'
+const NOTICE =
+  'Licensed copy. This material is protected by copyright and owned by HTNQ Ltd. It is licensed to Ada Lovelace ' +
+  'for personal viewing only (ref abcdef0123456789). Copying, sharing or reselling it is prohibited. Removing or ' +
+  'editing this notice or the watermark is copyright infringement.'
 
 async function fixture(
   pages: number,
@@ -90,8 +96,41 @@ describe('stampPdf', () => {
     assert.notDeepEqual(Buffer.from(res.bytes), Buffer.from(src))
     assert.ok(res.bytes.byteLength > src.byteLength)
     const doc = await PDFDocument.load(res.bytes)
-    assert.equal(doc.getSubject(), 'Issued to Discord ID 123456789012345678')
+    assert.equal(doc.getSubject(), `${NOTICE} Issued to Discord ID 123456789012345678`)
     assert.equal(doc.getKeywords(), 'ref:abcdef0123456789')
+  })
+
+  it('puts the licence line and the hidden licence notice on every page, and the line in the metadata', async () => {
+    for (const opts of [{}, { rotate: 90 }, { cropBox: [40, 40, 500, 700] as [number, number, number, number] }]) {
+      const res = await stampPdf(await fixture(3, opts), VIEWER)
+      assert.ok(res.ok)
+      for (const t of await pageTexts(res.bytes)) {
+        const text = t.replace(/\s+/g, ' ')
+        assert.ok(text.includes(LINE), `licence line ${JSON.stringify(opts)}`)
+        assert.ok(text.includes(NOTICE), `hidden notice ${JSON.stringify(opts)}`)
+      }
+    }
+    // @ts-ignore - no type declarations for the legacy Node build
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const res = await stampPdf(await fixture(1), VIEWER)
+    assert.ok(res.ok)
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(res.bytes), verbosity: 0 }).promise
+    const info = (await pdf.getMetadata()).info as { Subject?: string; Custom?: Record<string, unknown> }
+    await pdf.destroy()
+    assert.equal(info.Custom?.Copyright, LINE)
+    assert.ok(String(info.Subject).startsWith(NOTICE))
+  })
+
+  it('licenses to the @username, then the Discord ID, when there is no legal name', async () => {
+    const byUser = await stampPdf(await fixture(1), { ...VIEWER, legalName: undefined })
+    assert.ok(byUser.ok)
+    const [u] = await pageTexts(byUser.bytes)
+    assert.ok(u.replace(/\s+/g, ' ').includes('© HTNQ Ltd. Licensed to @ada_l. Copying or sharing is prohibited.'))
+    const byId = await stampPdf(await fixture(1), { discordId: '999999999999999999', sessionRef: 'ffff000011112222' })
+    assert.ok(byId.ok)
+    const [d] = await pageTexts(byId.bytes)
+    assert.ok(d.replace(/\s+/g, ' ').includes('Licensed to Discord ID 999999999999999999. Copying'))
+    assert.ok(d.replace(/\s+/g, ' ').includes('licensed to Discord ID 999999999999999999 for personal viewing only (ref ffff000011112222)'))
   })
 
   it('hides a trace code on every page and in the document ID, which still lead back to the viewing', async () => {
@@ -131,6 +170,14 @@ describe('stampPdf', () => {
     assert.ok(t.includes('Bruce'))
     assert.ok(t.includes('Discord ID 123456789012345678'))
     assert.ok(!t.includes('李'))
+    assert.ok(t.replace(/\s+/g, ' ').includes('Licensed to Bruce. Copying'))
+  })
+
+  it('a name the font cannot draw at all is licensed to the @username instead', async () => {
+    const res = await stampPdf(await fixture(1), { ...VIEWER, legalName: '李小龍' })
+    assert.ok(res.ok)
+    const [t] = await pageTexts(res.bytes)
+    assert.ok(t.replace(/\s+/g, ' ').includes('Licensed to @ada_l. Copying'))
   })
 
   it('stamps rotated pages and pages with an offset media box or a crop box', async () => {
@@ -242,6 +289,18 @@ describe('helpers', () => {
     const bare = stampText({ discordId: '5555555', sessionRef: 'r1' }, font)
     assert.equal(bare.footer, 'Discord ID 5555555  |  ref r1')
     assert.equal(bare.tile, 'Discord ID 5555555')
+    assert.equal(full.licence, LINE)
+    assert.equal(full.notice, NOTICE)
+  })
+
+  it('wrapText keeps every word, in order, within the width', async () => {
+    const doc = await PDFDocument.create()
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    const lines = wrapText(NOTICE, font, 5, 200)
+    assert.ok(lines.length > 1)
+    assert.equal(lines.join(' '), NOTICE)
+    for (const line of lines) assert.ok(font.widthOfTextAtSize(line, 5) <= 200, line)
+    assert.deepEqual(wrapText('averyveryverylongword short', font, 5, 10), ['averyveryverylongword', 'short'])
   })
 
   it('toContent maps a visible point to content coordinates for every rotation', () => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TamperReason } from '../../../../shared/watermarkGuard'
 import RichText from './RichText'
 import TamperNotice, { flushTamperReports, reportWatermarkTamper } from './TamperNotice'
-import WatermarkOverlay, { type WatermarkIdentity } from './WatermarkOverlay'
+import WatermarkOverlay, { HiddenLicenceNotice, type WatermarkIdentity } from './WatermarkOverlay'
 
 const ACCESS_TICK_MS = 2_000
 
@@ -181,6 +181,7 @@ export default function VideoPlayer({
           }
           style={{ containerType: 'inline-size' }}
         >
+          <HiddenLicenceNotice identity={watermark} />
           {/*
             allow: no fullscreen / no picture-in-picture — watermark stays with shell.
           */}
@@ -204,6 +205,7 @@ export default function VideoPlayer({
                 resetKey={embedUrl}
                 flash
                 tiles
+                licence
                 onTamper={onTamper}
               />
             </>
@@ -256,8 +258,8 @@ export default function VideoPlayer({
 
       <p className="pb-2 text-[11px] leading-relaxed text-muted">
         Watermark shows your legal name, Discord username and Discord ID, repeats your ID faintly across the picture, and
-        briefly flashes across the player now and then. Hiding or changing it stops the video and is recorded on your
-        account. One video plays at a time per account.
+        briefly flashes across the player now and then; the line at the bottom says this copy is licensed to you. Hiding
+        or changing any of it stops the video and is recorded on your account. One video plays at a time per account.
       </p>
     </div>
   )

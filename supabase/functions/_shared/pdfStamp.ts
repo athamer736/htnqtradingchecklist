@@ -6,6 +6,9 @@
 //     Discord ID (always) plus a short session reference
 //   - as a footer strip on each page, and as a faint diagonal pattern across the page, so
 //     cropping the footer off a screenshot or print still leaves the pattern
+//   - the licence line (licenceNotice.ts) small at the bottom centre of each page, and the longer
+//     licence notice as invisible text on each page and in the PDF's subject, where AI tools and
+//     text extractors read it
 //   - the Discord ID and session reference in the PDF's own metadata
 //   - hidden: a trace code for the session (traceCode.ts) as invisible text on every page and as
 //     the PDF's document ID, so a copy with the visible stamp edited out still traces back to the
@@ -30,6 +33,7 @@ import {
   type PDFFont,
   type PDFPage
 } from 'pdf-lib'
+import { licenceLine, licenceNotice } from './licenceNotice.ts'
 import { encodeTraceCode, encodeTraceId } from './traceCode.ts'
 
 /** Matches the Storage bucket's file_size_limit. */
@@ -82,6 +86,10 @@ export interface StampText {
   footer: string
   /** A shorter line repeated diagonally across the page. */
   tile: string
+  /** The visible licence line, bottom centre. */
+  licence: string
+  /** The hidden licence notice. */
+  notice: string
 }
 
 export function stampText(identity: StampIdentity, font: Pick<PDFFont, 'getCharacterSet'>): StampText {
@@ -93,7 +101,39 @@ export function stampText(identity: StampIdentity, font: Pick<PDFFont, 'getChara
   const tile = [name && name !== '?' ? name : user && user !== '?' ? user : '', id]
     .filter(Boolean)
     .join('  ')
-  return { footer, tile }
+  // A word the font can't draw at all becomes a lone "?": leave it out of the licence name.
+  const clean = (text: string): string =>
+    printable(text, font)
+      .replace(/(^|\s)\?(?=\s|$)/g, ' ')
+      .trim()
+  return {
+    footer,
+    tile,
+    licence: printable(licenceLine(identity, clean), font),
+    notice: printable(licenceNotice(identity, identity.sessionRef, clean), font)
+  }
+}
+
+/** Splits text at spaces into lines no wider than `maxWidth`; one over-long word keeps a line to itself. */
+export function wrapText(
+  text: string,
+  font: Pick<PDFFont, 'widthOfTextAtSize'>,
+  size: number,
+  maxWidth: number
+): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word
+    if (line && font.widthOfTextAtSize(next, size) > maxWidth) {
+      lines.push(line)
+      line = word
+    } else {
+      line = next
+    }
+  }
+  if (line) lines.push(line)
+  return lines
 }
 
 /**
@@ -147,6 +187,32 @@ function hidePageTrace(
   page.drawText(code, { x: m.x, y: m.y, size: 2, font, color: rgb(0.985, 0.985, 0.985), rotate: degrees(rotation) })
 }
 
+/** The size `text` is drawn at: `size`, shrunk to fit `maxWidth`, but never below `min`. */
+function fitSize(font: PDFFont, text: string, size: number, maxWidth: number, min: number): number {
+  const fit = Math.min(1, maxWidth / Math.max(1, font.widthOfTextAtSize(text, size)))
+  return Math.max(min, size * fit)
+}
+
+/**
+ * The licence notice as fully transparent text across the top of the page: not seen, but part of the
+ * page's text for anything that reads it (copying the text, AI tools, extractors).
+ */
+function hidePageNotice(
+  page: PDFPage,
+  font: PDFFont,
+  notice: string,
+  size: { width: number; height: number },
+  at: (x: number, y: number) => { x: number; y: number },
+  rotation: number
+): void {
+  const textSize = 5
+  const lines = wrapText(notice, font, textSize, Math.max(40, size.width - 40))
+  lines.forEach((line, i) => {
+    const p = at(20, size.height - 14 - i * textSize * 1.3)
+    page.drawText(line, { x: p.x, y: p.y, size: textSize, font, color: rgb(1, 1, 1), opacity: 0, rotate: degrees(rotation) })
+  })
+}
+
 function stampPage(page: PDFPage, font: PDFFont, text: StampText, traceCode: string | null): void {
   const rotation = ((page.getRotation().angle % 360) + 360) % 360
   const box = page.getCropBox()
@@ -182,14 +248,38 @@ function stampPage(page: PDFPage, font: PDFFont, text: StampText, traceCode: str
     }
   }
 
+  // --- Licence line, bottom centre -------------------------------------------------------
+  const licenceSize = fitSize(font, text.licence, Math.max(5, Math.min(7.5, width / 80)), width - 28, 3.5)
+  const licenceWidth = font.widthOfTextAtSize(text.licence, licenceSize)
+  const licenceX = (width - licenceWidth) / 2
+  const licenceCorner = toContent(box, rotation, licenceX - 4, 2)
+  page.drawRectangle({
+    x: licenceCorner.x,
+    y: licenceCorner.y,
+    width: licenceWidth + 8,
+    height: licenceSize + 4,
+    rotate: degrees(rotation),
+    color: rgb(1, 1, 1),
+    opacity: 0.75
+  })
+  const licenceAt = toContent(box, rotation, licenceX, 3.5)
+  page.drawText(text.licence, {
+    x: licenceAt.x,
+    y: licenceAt.y,
+    size: licenceSize,
+    font,
+    color: rgb(0.3, 0.3, 0.34),
+    opacity: 0.95,
+    rotate: degrees(rotation)
+  })
+  // The footer strip sits just above the licence line.
+  const above = licenceSize + 6
+
   // --- Footer strip --------------------------------------------------------------------
-  const size = Math.max(6, Math.min(9, width / 70))
-  const footerWidth = Math.min(width - 16, font.widthOfTextAtSize(text.footer, size) + 12)
-  // Shrink the text if the line would not fit the page width.
-  const fit = Math.min(1, (width - 28) / Math.max(1, font.widthOfTextAtSize(text.footer, size)))
-  const finalSize = Math.max(4, size * fit)
+  const finalSize = fitSize(font, text.footer, Math.max(6, Math.min(9, width / 70)), width - 28, 4)
+  const footerWidth = Math.min(width - 16, font.widthOfTextAtSize(text.footer, finalSize) + 12)
   const stripHeight = finalSize + 8
-  const corner = toContent(box, rotation, 8, 4)
+  const corner = toContent(box, rotation, 8, 4 + above)
   page.drawRectangle({
     x: corner.x,
     y: corner.y,
@@ -199,7 +289,7 @@ function stampPage(page: PDFPage, font: PDFFont, text: StampText, traceCode: str
     color: rgb(1, 1, 1),
     opacity: 0.82
   })
-  const textAt = toContent(box, rotation, 14, 8)
+  const textAt = toContent(box, rotation, 14, 8 + above)
   page.drawText(text.footer, {
     x: textAt.x,
     y: textAt.y,
@@ -210,6 +300,7 @@ function stampPage(page: PDFPage, font: PDFFont, text: StampText, traceCode: str
     rotate: degrees(rotation)
   })
 
+  hidePageNotice(page, font, text.notice, { width, height }, (x, y) => toContent(box, rotation, x, y), rotation)
   if (traceCode) {
     hidePageTrace(page, font, traceCode, { width, height }, (x, y) => toContent(box, rotation, x, y), rotation)
   }
@@ -244,12 +335,15 @@ export async function stampPdf(source: Uint8Array, identity: StampIdentity): Pro
     if (traceId) {
       doc.context.trailerInfo.ID = doc.context.obj([PDFHexString.of(traceId), PDFHexString.of(traceId)])
     }
-    doc.setSubject(`Issued to Discord ID ${identity.discordId}`)
+    doc.setSubject(`${licenceNotice(identity, identity.sessionRef)} Issued to Discord ID ${identity.discordId}`)
     doc.setKeywords([`ref:${identity.sessionRef}`])
     doc.setProducer('HTNQ Trading Mentorship')
     doc.setCreator('HTNQ Trading Mentorship')
     const info = doc.context.lookup(doc.context.trailerInfo.Info)
-    if (traceCode && info instanceof PDFDict) info.set(PDFName.of('DocumentControl'), PDFString.of(traceCode))
+    if (info instanceof PDFDict) {
+      info.set(PDFName.of('Copyright'), PDFHexString.fromText(licenceLine(identity)))
+      if (traceCode) info.set(PDFName.of('DocumentControl'), PDFString.of(traceCode))
+    }
     const bytes = await doc.save()
     return { ok: true, bytes, pageCount: pages.length }
   } catch {

@@ -3,7 +3,7 @@ import type { TamperReason } from '../../../../shared/watermarkGuard'
 import type { PDFDocumentProxy, RenderTask } from '../../lib/pdfjs'
 import RichText from './RichText'
 import TamperNotice, { flushTamperReports, reportWatermarkTamper } from './TamperNotice'
-import WatermarkOverlay, { type WatermarkIdentity } from './WatermarkOverlay'
+import WatermarkOverlay, { HiddenLicenceNotice, type WatermarkIdentity } from './WatermarkOverlay'
 
 const ACCESS_TICK_MS = 2_000
 const MIN_ZOOM = 0.5
@@ -275,6 +275,7 @@ export default function PdfViewer({
           onContextMenu={(e) => e.preventDefault()}
           onDragStart={(e) => e.preventDefault()}
         >
+          <HiddenLicenceNotice identity={watermark} />
           {tamper ? (
             <TamperNotice reason={tamper} item="document" onClose={onClose} />
           ) : (
@@ -359,8 +360,9 @@ export default function PdfViewer({
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted">
-        Every page is marked with your name, Discord username and Discord ID. This copy is for you only. Hiding or
-        changing the on-screen watermark closes the document and is recorded on your account.
+        Every page is marked with your name, Discord username and Discord ID, and a line at the bottom says this copy is
+        licensed to you. This copy is for you only. Hiding or changing the on-screen watermark closes the document and is
+        recorded on your account.
       </p>
     </div>
   )
